@@ -1327,62 +1327,66 @@ function ScreenPerf({ kpis, flights, finData }) {
   });
 
   // Mini SVG line chart component
-  const LineChart = ({data, color, target, maxVal, minVal, title, unit}) => {
-    const W=300, H=80, padL=28, padR=8, padT=8, padB=20;
+  const LineChart = ({data, color, target, maxVal, minVal, unit}) => {
+    const W=300, H=90, padL=28, padR=8, padT=10, padB=20;
     const cW=W-padL-padR, cH=H-padT-padB;
     const pts = data.filter(d=>d.val!==null);
     if(pts.length<2) return (
       <div style={{textAlign:"center",padding:"20px",color:C.slateL,fontSize:12}}>
-        Donnees insuffisantes (min. 2 vols)
+        Donnees insuffisantes (min. 2 jours)
       </div>
     );
     const vals = pts.map(p=>p.val);
+    const avg  = Math.round(vals.reduce((s,v)=>s+v,0)/vals.length);
     const lo = minVal!==undefined ? minVal : Math.max(0,Math.min(...vals)-10);
     const hi = maxVal!==undefined ? maxVal : Math.max(...vals)+10;
     const range = hi-lo||1;
-    const xScale = i => padL + (i/(pts.length-1))*cW;
-    const yScale = v => padT + cH - ((v-lo)/range)*cH;
-    // Build path
-    const pathD = pts.map((p,i)=>(i===0?"M":"L")+xScale(i).toFixed(1)+","+yScale(p.val).toFixed(1)).join(" ");
-    // Area fill
-    const areaD = pathD+" L"+xScale(pts.length-1).toFixed(1)+","+(padT+cH)+" L"+padL.toFixed(1)+","+(padT+cH)+" Z";
-    // Target line
-    const ty = target!==undefined ? yScale(Math.min(hi,Math.max(lo,target))) : null;
+    const xS = i => padL + (i/(pts.length-1))*cW;
+    const yS = v => padT + cH - ((v-lo)/range)*cH;
+    const pathD = pts.map((p,i)=>(i===0?"M":"L")+xS(i).toFixed(1)+","+yS(p.val).toFixed(1)).join(" ");
+    const areaD = pathD+" L"+xS(pts.length-1).toFixed(1)+","+(padT+cH)+" L"+padL.toFixed(1)+","+(padT+cH)+" Z";
+    const ty  = target!==undefined ? yS(Math.min(hi,Math.max(lo,target))) : null;
+    const ay  = yS(Math.min(hi,Math.max(lo,avg)));
+    const lastPt = pts[pts.length-1];
     return (
       <svg width="100%" viewBox={"0 0 "+W+" "+H} style={{display:"block",overflow:"visible"}}>
-        {/* Grid lines */}
+        {/* Grid */}
         {[0,0.5,1].map((t,i)=>{
-          const yy = padT + cH*t;
-          const lv = Math.round(hi - t*(hi-lo));
+          const yy=padT+cH*t, lv=Math.round(hi-t*(hi-lo));
           return <g key={i}>
             <line x1={padL} y1={yy} x2={W-padR} y2={yy} stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3"/>
             <text x={padL-3} y={yy+3} textAnchor="end" fontSize={7} fill={C.slateL}>{lv}</text>
           </g>;
         })}
         {/* Target line */}
-        {ty!==null && ty!==undefined && (
-          <g>
-            <line x1={padL} y1={ty} x2={W-padR} y2={ty} stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={0.5}/>
-            <text x={W-padR+2} y={ty+3} fontSize={6.5} fill={color} opacity={0.7}>Obj</text>
-          </g>
-        )}
+        {ty!=null && <g>
+          <line x1={padL} y1={ty} x2={W-padR} y2={ty} stroke={color} strokeWidth={0.8} strokeDasharray="3,2" opacity={0.45}/>
+          <text x={W-padR+2} y={ty+3} fontSize={6} fill={color} opacity={0.6}>Obj</text>
+        </g>}
+        {/* Average line */}
+        <line x1={padL} y1={ay} x2={W-padR} y2={ay} stroke="#94A3B8" strokeWidth={0.8} strokeDasharray="4,2"/>
+        <text x={padL-3} y={ay+3} textAnchor="end" fontSize={6.5} fill="#94A3B8">moy</text>
         {/* Area */}
-        <path d={areaD} fill={color} fillOpacity={0.08}/>
+        <path d={areaD} fill={color} fillOpacity={0.07}/>
         {/* Line */}
         <path d={pathD} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
         {/* Points */}
-        {pts.map((p,i)=>(
-          <circle key={i} cx={xScale(i)} cy={yScale(p.val)} r={3} fill={color} stroke="white" strokeWidth={1.5}/>
-        ))}
-        {/* Last value label */}
-        <text x={xScale(pts.length-1)} y={yScale(pts[pts.length-1].val)-7}
-          textAnchor="middle" fontSize={8} fontWeight="700" fill={color}>
-          {pts[pts.length-1].val}{unit}
-        </text>
-        {/* X axis labels */}
         {pts.map((p,i)=>{
-          if(pts.length<=7||i%Math.ceil(pts.length/5)===0||i===pts.length-1)
-            return <text key={i} x={xScale(i)} y={H-4} textAnchor="middle" fontSize={7} fill={C.slateL}>{p.label}</text>;
+          const isLast = i===pts.length-1;
+          return <g key={i}>
+            <circle cx={xS(i)} cy={yS(p.val)} r={isLast?4:2.5}
+              fill={isLast?color:"white"} stroke={color} strokeWidth={isLast?0:1.5}/>
+            {isLast && <text x={xS(i)} y={yS(p.val)-8} textAnchor="middle"
+              fontSize={8} fontWeight="700" fill={color}>{p.val}{unit}</text>}
+          </g>;
+        })}
+        {/* Average label on line */}
+        <rect x={W-padR-22} y={ay-8} width={22} height={10} rx={3} fill="#F1F5F9"/>
+        <text x={W-padR-11} y={ay-1} textAnchor="middle" fontSize={7} fontWeight="700" fill="#64748B">{avg}{unit}</text>
+        {/* X labels */}
+        {pts.map((p,i)=>{
+          if(pts.length<=7||i===0||i===pts.length-1||i%Math.ceil(pts.length/5)===0)
+            return <text key={i} x={xS(i)} y={H-3} textAnchor="middle" fontSize={7} fill={C.slateL}>{p.label}</text>;
           return null;
         })}
       </svg>
@@ -1412,7 +1416,7 @@ function ScreenPerf({ kpis, flights, finData }) {
         <KpiTile title="Load Factor" value={kpis.loadFactor} unit="%" accent={C.emerald} icon="👥"/>
         <KpiTile title="Retards" value={kpis.delayMin} unit="min" accent={kpis.delayMin>15?C.warn:C.emerald} icon="⚠"/>
         {(()=>{
-          return <KpiTile title="NPS moyen" value={npsVal} unit="/100" accent={npsVal>=70?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}/>;
+          return <KpiTile title="NPS moyen" value={npsVal} unit="%" accent={npsVal>=70?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}/>;
         })()}
       </div>
 
@@ -1426,7 +1430,7 @@ function ScreenPerf({ kpis, flights, finData }) {
           <ChartCard title="Conso. carburant moyenne" icon="⛽"
             data={consoData} color={C.gold} target={900} maxVal={1100} minVal={600} unit="kg/h" current={consoMoy} currentLabel={consoLabel}/>
           <ChartCard title="NPS passagers" icon="⭐"
-            data={npsData} color="#7C3AED" target={70} maxVal={100} minVal={40} unit="/100" current={npsVal} currentLabel={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}/>
+            data={npsData} color="#7C3AED" target={70} maxVal={100} minVal={40} unit="%" current={npsVal} currentLabel={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}/>
         </>
       ) : (
         <Card>
@@ -1992,7 +1996,7 @@ function App() {
                   drawChart(otpData,"Ponctualite OTP",[0,147,106],90,60,100,"%");
                   drawChart(lfData,"Load Factor",[15,31,61],80,50,100,"%");
                   drawChart(consoData,"Consommation carburant moyenne",[160,114,10],900,600,1100," kg/h");
-                  drawChart(npsData2,"NPS passagers",[124,58,237],70,40,100,"/100");
+                  drawChart(npsData2,"NPS passagers",[124,58,237],70,40,100,"%");
                   y+=4;
                 }
 
