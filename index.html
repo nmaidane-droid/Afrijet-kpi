@@ -244,10 +244,11 @@ function FSubmit({ label, color="#0F1F3D", onClick }) {
 }
 
 function FHeader({ icon, title, subtitle, color }) {
+  const isJSX = typeof icon === "object" && icon !== null;
   return (
     <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16,
                   paddingBottom:14, borderBottom:"1px solid #EEF2F8" }}>
-      <div style={{ width:46, height:46, borderRadius:12, background:color, flexShrink:0,
+      <div style={{ width:46, height:46, borderRadius:12, background:isJSX?"transparent":color, flexShrink:0,
                     display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>
         {icon}
       </div>
@@ -1309,7 +1310,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights
     {id:"vol",   icon:"✈",  label:"Vol",         color:"#0F1F3D"},
     {id:"maint", icon:"🔧", label:"Maintenance",  color:"#00936A"},
     {id:"fin",   icon:"💰", label:"Finances",     color:"#7C3AED"},
-    {id:"crew",  icon:"👥", label:"Equipage",     color:"#0369A1"},
+    {id:"crew",  icon:"👨‍✈️", label:"Equipage",     color:"#0369A1"},
   ];
   const f=FORMS.find(x=>x.id===active);
   return (
