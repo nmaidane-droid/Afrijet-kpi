@@ -729,10 +729,18 @@ function FormVol({ onSubmit, crew }) {
 
   const submit=()=>{
     if(!num.trim()||!dep||!arr){alert("N vol, depart et arrivee requis");return;}
+    // Pre-calculate planned duration
+    let planDuree=0;
+    if(dep&&arr){
+      const [dh,dm]=dep.split(":").map(Number);
+      const [ah,am]=arr.split(":").map(Number);
+      const diff=(ah*60+am)-(dh*60+dm);
+      if(diff>0) planDuree=diff;
+    }
     onSubmit({num:num.trim().toUpperCase(),from:from_,to,dep,arr,depReal:"",arrReal:"",
       status:"Planifie",pax:pn,load,date,
       carbDep:Number(carbDep)||0,carbArr:0,consomme:0,consoH:0,fuelPct:fPct||0,delayMin:0,
-      cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0});
+      cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0,dureeMin:planDuree});
     setNum("");setDep("");setArr("");setPax("18");setCDep("");
     setCm1("");setCm2("");setCc("");
   };
@@ -1101,7 +1109,16 @@ function ScreenOps({ flights, onUpdateFlight }) {
         if(h>0)consoH=Math.round(consomme/h);
       }
     }
-    return{delayMin,consomme,consoH,fuelPct,nps:ef.nps||0};
+    // Duration
+    let dureeMin=0;
+    const dep2=ef.depReal||ef.dep, arr2=ef.arrReal||ef.arr;
+    if(dep2&&arr2){
+      const [dh,dm]=dep2.split(":").map(Number);
+      const [ah,am]=arr2.split(":").map(Number);
+      const diff=(ah*60+am)-(dh*60+dm);
+      if(diff>0) dureeMin=diff;
+    }
+    return{delayMin,consomme,consoH,fuelPct,nps:ef.nps||0,dureeMin};
   };
 
   const doUpdate=()=>{
@@ -1190,9 +1207,19 @@ function ScreenOps({ flights, onUpdateFlight }) {
                         <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Conso/h</div>
                         <div style={{fontSize:15,fontWeight:800,color:C.navy}}>{c.consoH||"--"} kg</div>
                       </div>
-                      <div style={{background:c.delayMin>15?"#FEF3C7":"#D1FAE5",borderRadius:9,padding:"8px",textAlign:"center",border:"1px solid "+(c.delayMin>15?"#D97706":"#00936A")}}>
+                      <div style={{background:C.bg,borderRadius:9,padding:"8px",textAlign:"center"}}>
+                        <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Duree</div>
+                        <div style={{fontSize:15,fontWeight:800,color:C.navy}}>{c.dureeMin>0?Math.floor(c.dureeMin/60)+"h"+String(c.dureeMin%60).padStart(2,"0"):"--"}</div>
+                      </div>
+                      <div style={{
+                        background:c.delayMin<=0?"#D1FAE5":c.delayMin<=15?"#D1FAE5":c.delayMin<=30?"#FEF3C7":"#FEE2E2",
+                        borderRadius:9,padding:"8px",textAlign:"center",
+                        border:"1px solid "+(c.delayMin<=0?"#00936A":c.delayMin<=15?"#00936A":c.delayMin<=30?"#D97706":"#DC2626")}}>
                         <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Retard</div>
-                        <div style={{fontSize:15,fontWeight:800,color:c.delayMin>15?"#D97706":"#00936A"}}>{c.delayMin>0?c.delayMin+" min":"OK"}</div>
+                        <div style={{fontSize:15,fontWeight:800,
+                          color:c.delayMin<=0?"#065F46":c.delayMin<=15?"#065F46":c.delayMin<=30?"#92400E":"#991B1B"}}>
+                          {c.delayMin<=0?"Ponctuel":"+"+c.delayMin+" min"}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1239,11 +1266,21 @@ function ScreenOps({ flights, onUpdateFlight }) {
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:13,color:C.text}}>{f.num} — {f.from} vers {f.to}</div>
-              <div style={{fontSize:11,color:C.textSub}}>{f.dep} - {f.arr} · {f.pax} pax · {f.load}%</div>
+              <div style={{fontSize:11,color:C.textSub}}>
+                {f.dep} - {f.arr} · {f.pax} pax · {f.load}%
+                {f.dureeMin>0&&<span style={{color:C.slateL}}> · {Math.floor(f.dureeMin/60)}h{String(f.dureeMin%60).padStart(2,"0")}</span>}
+              </div>
               {(f.cm1||f.cm2||f.cc)&&<div style={{fontSize:10,color:C.slateL,marginTop:1,fontStyle:"italic"}}>{[f.cm1,f.cm2,f.cc].filter(Boolean).join(" · ")}</div>}
             </div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
               <span style={{fontSize:10,fontWeight:700,color:sTx(f.status),background:sBg(f.status),padding:"2px 8px",borderRadius:8}}>{f.status}</span>
+              {f.status==="Termine"&&(
+                <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:8,
+                  background:f.delayMin<=0?"#D1FAE5":f.delayMin<=15?"#D1FAE5":f.delayMin<=30?"#FEF3C7":"#FEE2E2",
+                  color:f.delayMin<=0?"#065F46":f.delayMin<=15?"#065F46":f.delayMin<=30?"#92400E":"#991B1B"}}>
+                  {f.delayMin<=0?"Ponctuel":"+"+f.delayMin+" min"}
+                </span>
+              )}
               <span style={{fontSize:10,color:C.slateL}}>✏</span>
             </div>
           </div>
@@ -1610,6 +1647,18 @@ function App() {
 
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),30000);return()=>clearInterval(t);},[]);
 
+  // Auto-save every 15 minutes
+  useEffect(()=>{
+    const t=setInterval(async()=>{
+      if(window.storage){
+        const data={flights,kpis,maintData,finData,dismissed,icao24};
+        await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
+      }
+      setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
+    }, 15*60*1000);
+    return()=>clearInterval(t);
+  },[flights,kpis,maintData,finData,dismissed,icao24]);
+
   const refresh = async () => {
     setLoading(true);
     try {
@@ -1674,6 +1723,7 @@ function App() {
           </div>
           <span style={{fontSize:12,fontWeight:700,color:C.navy}}>{timeStr}</span>
           <button onClick={doSave}
+            title="Sauvegarde auto: 15 min"
             style={{width:36,height:36,background:saveOk?C.emerald:C.navy,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
             {saveOk?"✓":"💾"}
           </button>
