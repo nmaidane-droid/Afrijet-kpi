@@ -2002,8 +2002,12 @@ function App() {
                   doc.setFontSize(7.5);
                   doc.setFont("helvetica","normal");
                   doc.text(f.dep+"-"+f.arr,M+65,y);
-                  const dur=f.dureeMin>0?(Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0")):"--";
-                  doc.text(dur,M+97,y);
+                  if(f.status==="Termine"&&f.dureeMin>0){
+                    const dur=Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0");
+                    doc.setTextColor(0,147,106);
+                    doc.text(dur,M+97,y);
+                    doc.setTextColor(100,116,139);
+                  }
                   doc.text(f.pax+" pax",M+113,y);
                   if(f.cm1){doc.setFontSize(6.5);doc.text(f.cm1,M+130,y);}
                   y+=9;
