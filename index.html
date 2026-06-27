@@ -626,6 +626,11 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
       .setLngLat([acData.lon, acData.lat])
       .setPopup(popup)
       .addTo(map);
+    // Center map on CN-KTA on first placement
+    if (!markRef._centered) {
+      map.flyTo({center:[acData.lon, acData.lat], zoom:7, speed:1.2});
+      markRef._centered = true;
+    }
   };
 
   // Update CN-KTA marker when ac changes
@@ -667,6 +672,16 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
             <div style={{fontWeight:700,fontSize:12,color:C.navy}}>CN-KTA — {ac.simulated?"Simulation":"ADS-B Live"}</div>
             <div style={{fontSize:10,color:C.slate}}>{ac.lat.toFixed(4)}N {Math.abs(ac.lon).toFixed(4)}W {ac.alt_ft?(" · "+ac.alt_ft.toLocaleString()+" ft"):""} {ac.speed_kt?(" · "+ac.speed_kt+" kt"):""} {ac.heading?(" · Cap "+Math.round(ac.heading)):""}</div>
           </div>
+          <button onClick={()=>{
+            if(mapRef.current&&ac?.lat){
+              mapRef.current.flyTo({center:[ac.lon,ac.lat],zoom:8,speed:1.5});
+            }
+          }}
+            style={{background:C.gold,border:"none",borderRadius:8,padding:"6px 10px",
+                    color:"white",fontSize:12,fontWeight:700,cursor:"pointer",
+                    WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+            &#x2708; Centrer
+          </button>
           <div style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,
             background:ac.simulated?"#FEF3C7":"#D1FAE5",
             color:ac.simulated?"#A0720A":"#007A4D"}}>
@@ -1344,7 +1359,7 @@ function ScreenOps({ flights, onUpdateFlight }) {
 function ScreenCarte({ flights, ac, moroccoTraffic, icao24 }) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <Card><SectionTitle>Carte ADS-B — Maroc</SectionTitle><MapMarocSVG ac={ac} moroccoTraffic={moroccoTraffic} icao24={icao24}/></Card>
+      <Card><SectionTitle>Position ADS-B</SectionTitle><MapMarocSVG ac={ac} moroccoTraffic={moroccoTraffic} icao24={icao24}/></Card>
     </div>
   );
 }
