@@ -1,0 +1,14 @@
+{
+  "name": "Afrijet Sahara KPI",
+  "short_name": "AJS KPI",
+  "description": "Dashboard KPI Afrijet Sahara - EMB 145 CN-KTA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4F7FB",
+  "theme_color": "#0F1F3D",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/2708.png", "sizes": "72x72", "type": "image/png" },
+    { "src": "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/2708.png", "sizes": "192x192", "type": "image/png" }
+  ]
+}
