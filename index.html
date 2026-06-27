@@ -1,0 +1,1638 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="theme-color" content="#0F1F3D"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <title>Afrijet Sahara KPI</title>
+  <link rel="manifest" href="/manifest.json"/>
+</head>
+<body style="margin:0;background:#F4F7FB;">
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.6/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+// React hooks available globally via Babel standalone
+const { useState, useEffect, useRef } = React;
+
+const C = {
+  bg:"#F4F7FB", border:"#DDE3ED", card:"#FFFFFF",
+  navy:"#0F1F3D", navyMid:"#1D3461",
+  emerald:"#00936A", emeraldL:"#D1FAE5", emeraldD:"#006B4D",
+  gold:"#A0720A", goldL:"#FEF3C7",
+  slate:"#64748B", slateL:"#94A3B8",
+  text:"#1E293B", textSub:"#64748B",
+  danger:"#DC2626", dangerL:"#FEE2E2",
+  warn:"#D97706", warnL:"#FEF3C7",
+  white:"#FFFFFF",
+};
+const TOP=60, BOT=58, PFX="ajs145_";
+
+const lsGet = k => { try { return localStorage.getItem(k); } catch(_e) { return null; } };
+const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch(_e) {} };
+
+function usePersist(key, init) {
+  const fk = PFX+key;
+  const [val, setVal] = useState(() => {
+    const s = lsGet(fk);
+    if (!s) return init;
+    try { return JSON.parse(s); } catch(_e) { return init; }
+  });
+  useEffect(() => {
+    if (window.storage) {
+      window.storage.get(fk).then(r => {
+        if (r && r.value) {
+          try { const p=JSON.parse(r.value); setVal(p); lsSet(fk,r.value); } catch(_e) {}
+        }
+      }).catch(()=>{});
+    }
+  }, [fk]);
+  const set = v => {
+    setVal(prev => {
+      const next = typeof v === "function" ? v(prev) : v;
+      const s = JSON.stringify(next);
+      lsSet(fk, s);
+      if (window.storage) window.storage.set(fk, s).catch(()=>{});
+      return next;
+    });
+  };
+  return [val, set];
+}
+
+function clearStorage() {
+  try {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(PFX));
+    keys.forEach(k => localStorage.removeItem(k));
+  } catch(_e) {}
+  if (window.storage) {
+    window.storage.list(PFX).then(r => {
+      (r && r.keys || []).forEach(k => window.storage.delete(k));
+    }).catch(()=>{});
+  }
+}
+
+function PlaneIcon({ size=32, color="#A0720A", heading=0 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none"
+      style={{ transform:"rotate("+heading+"deg)", transition:"transform 1s ease", display:"block" }}>
+      <path d="M8 32 L24 28 L40 16 L44 18 L32 30 L52 28 L54 31 L32 36 L36 46 L32 47 L26 37 L14 40 Z" fill={color}/>
+    </svg>
+  );
+}
+
+function Card({ children, accent }) {
+  return (
+    <div style={{ background:C.card, borderRadius:14, border:"1px solid "+C.border,
+                  padding:16, boxShadow:"0 1px 4px rgba(0,0,0,.05)",
+                  borderTop:accent?"3px solid "+accent:undefined }}>
+      {children}
+    </div>
+  );
+}
+
+function KpiTile({ title, value, unit, sub, accent, icon }) {
+  return (
+    <div style={{ background:C.card, borderRadius:12, padding:14,
+                  border:"1px solid "+C.border, borderTop:"3px solid "+(accent||C.slate) }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+        <span style={{ fontSize:10, fontWeight:700, color:C.slate,
+                       textTransform:"uppercase", letterSpacing:"0.09em" }}>{title}</span>
+        <span style={{ fontSize:18 }}>{icon}</span>
+      </div>
+      <div style={{ fontSize:26, fontWeight:800, color:accent||C.navy, lineHeight:1 }}>
+        {value}<span style={{ fontSize:13, color:C.slate }}> {unit}</span>
+      </div>
+      {sub && <div style={{ fontSize:10, color:C.slateL, marginTop:4 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function Bar({ label, value, max, unit, color, sub }) {
+  const pct = Math.min(100, Math.round(value/max*100));
+  return (
+    <div style={{ marginBottom:10 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+        <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{label}</span>
+        <span style={{ fontSize:13, fontWeight:700, color }}>{value}{unit||""}</span>
+      </div>
+      <div style={{ background:C.border, borderRadius:6, height:8, overflow:"hidden" }}>
+        <div style={{ width:pct+"%", background:color, height:"100%", borderRadius:6, transition:"width .8s ease" }}/>
+      </div>
+      {sub && <div style={{ fontSize:11, color:C.slate, marginTop:3 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <div style={{ fontSize:10, fontWeight:700, color:C.slate,
+                  textTransform:"uppercase", letterSpacing:"0.1em",
+                  marginBottom:10, paddingBottom:6, borderBottom:"1px solid "+C.border }}>
+      {children}
+    </div>
+  );
+}
+
+function FLabel({ children }) {
+  return (
+    <label style={{ fontSize:10, fontWeight:700, color:C.slate,
+                    textTransform:"uppercase", letterSpacing:"0.09em",
+                    display:"block", marginBottom:5 }}>
+      {children}
+    </label>
+  );
+}
+
+function FField({ label, value, onChange, type="text", min, max, placeholder }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div>
+      <FLabel>{label}</FLabel>
+      <input type={type} value={value} min={min} max={max} placeholder={placeholder}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        style={{ width:"100%", height:48, boxSizing:"border-box",
+                 background:focused?"#FFF":C.bg, border:"1.5px solid "+(focused?C.gold:C.border),
+                 borderRadius:10, padding:"0 14px", color:C.text, fontSize:14, outline:"none" }}/>
+    </div>
+  );
+}
+
+function FSelect({ label, value, onChange, options }) {
+  return (
+    <div>
+      <FLabel>{label}</FLabel>
+      <select value={value} onChange={e=>onChange(e.target.value)}
+        style={{ width:"100%", height:48, boxSizing:"border-box", background:C.bg,
+                 border:"1.5px solid "+C.border, borderRadius:10, padding:"0 14px",
+                 color:C.text, fontSize:14, outline:"none", appearance:"none" }}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function FGrid({ children }) {
+  return <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{children}</div>;
+}
+
+function FCalc({ label, value, sub, color="#00936A", wide }) {
+  return (
+    <div style={{ gridColumn:wide?"1 / -1":"auto" }}>
+      <FLabel>{label}</FLabel>
+      <div style={{ height:48, background:"#F0FDF4", border:"1.5px solid "+color,
+                    borderRadius:10, display:"flex", alignItems:"center",
+                    justifyContent:"center", gap:8 }}>
+        <span style={{ fontSize:20, fontWeight:800, color }}>{value}</span>
+        {sub && <span style={{ fontSize:9, color:C.slate }}>{sub}</span>}
+      </div>
+    </div>
+  );
+}
+
+function FSection({ title, color="#64748B" }) {
+  return (
+    <div style={{ fontSize:10, fontWeight:700, color, textTransform:"uppercase",
+                  letterSpacing:"0.09em", borderBottom:"1.5px solid "+color+"40",
+                  paddingBottom:4, marginTop:4 }}>
+      {title}
+    </div>
+  );
+}
+
+function FSubmit({ label, color="#0F1F3D", onClick }) {
+  return (
+    <button onClick={onClick}
+      style={{ width:"100%", height:52, background:color, border:"none", borderRadius:12,
+               cursor:"pointer", color:"white", fontSize:15, fontWeight:700,
+               WebkitTapHighlightColor:"transparent", boxShadow:"0 2px 12px "+color+"55" }}>
+      {label}
+    </button>
+  );
+}
+
+function FHeader({ icon, title, subtitle, color }) {
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16,
+                  paddingBottom:14, borderBottom:"1px solid #EEF2F8" }}>
+      <div style={{ width:46, height:46, borderRadius:12, background:color, flexShrink:0,
+                    display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontWeight:800, fontSize:15, color:C.navy }}>{title}</div>
+        <div style={{ fontSize:11, color:C.slateL, marginTop:1 }}>{subtitle}</div>
+      </div>
+    </div>
+  );
+}
+// World airports (500+ major airports, all regions)
+const WORLD_AIRPORTS = [
+  // MAROC
+  {c:"CMN",n:"Casablanca Mohammed V"},{c:"RAK",n:"Marrakech Menara"},{c:"AGA",n:"Agadir Al Massira"},
+  {c:"TNG",n:"Tanger Ibn Batouta"},{c:"FEZ",n:"Fes Saiss"},{c:"OUD",n:"Oujda Angads"},
+  {c:"RBA",n:"Rabat Sale"},{c:"NDR",n:"Nador El Aroui"},{c:"AHU",n:"Al Hoceima Cherif Al Idrissi"},
+  {c:"TTU",n:"Tetouan Saniat Rmel"},{c:"ESU",n:"Essaouira"},{c:"OZZ",n:"Ouarzazate"},
+  {c:"ERH",n:"Er Rachidia"},{c:"ZGR",n:"Zagora"},{c:"TTA",n:"Tan Tan"},
+  {c:"EUN",n:"Laayoune Hassan I"},{c:"VIL",n:"Dakhla"},{c:"SMW",n:"Smara"},
+  {c:"GLN",n:"Guelmim"},{c:"SII",n:"Sidi Ifni"},
+  // AFRIQUE
+  {c:"ALG",n:"Alger Houari Boumediene"},{c:"ORN",n:"Oran Ahmed Ben Bella"},{c:"CZL",n:"Constantine Mohamed Boudiaf"},
+  {c:"TUN",n:"Tunis Carthage"},{c:"SFA",n:"Sfax Thyna"},{c:"DJE",n:"Djerba Zarzis"},
+  {c:"TIP",n:"Tripoli Mitiga"},{c:"CAI",n:"Cairo International"},{c:"HRG",n:"Hurghada"},
+  {c:"SSH",n:"Sharm El Sheikh"},{c:"LXR",n:"Luxor"},{c:"ABV",n:"Abuja Nnamdi Azikiwe"},
+  {c:"LOS",n:"Lagos Murtala Muhammed"},{c:"ACC",n:"Accra Kotoka"},{c:"ABJ",n:"Abidjan Felix Houphouet-Boigny"},
+  {c:"DKR",n:"Dakar Blaise Diagne"},{c:"NBO",n:"Nairobi Jomo Kenyatta"},
+  {c:"MBA",n:"Mombasa Moi"},{c:"DAR",n:"Dar es Salaam Julius Nyerere"},
+  {c:"JNB",n:"Johannesburg O.R. Tambo"},{c:"CPT",n:"Cape Town"},{c:"DUR",n:"Durban King Shaka"},
+  {c:"ADD",n:"Addis Abeba Bole"},{c:"CMN",n:"Casablanca"},{c:"HRE",n:"Harare"},
+  {c:"LUN",n:"Lusaka Kenneth Kaunda"},{c:"NIM",n:"Niamey Diori Hamani"},
+  {c:"BKO",n:"Bamako Senou"},{c:"OUA",n:"Ouagadougou"},{c:"COO",n:"Cotonou Cadjehoun"},
+  {c:"MLW",n:"Monrovia Spriggs Payne"},{c:"FNA",n:"Freetown Lungi"},{c:"CKY",n:"Conakry Gbessia"},
+  {c:"BJL",n:"Banjul Yundum"},{c:"ASM",n:"Asmara"},{c:"JIB",n:"Djibouti Ambouli"},
+  {c:"MGQ",n:"Mogadiscio Adan Abdulle"},{c:"KIS",n:"Kisumu"},{c:"EBB",n:"Entebbe"},
+  {c:"KGL",n:"Kigali"},{c:"BZV",n:"Brazzaville Maya-Maya"},{c:"FIH",n:"Kinshasa N Djili"},
+  {c:"LBV",n:"Libreville Leon Mba"},{c:"DLA",n:"Douala"},{c:"NSI",n:"Yaounde Nsimalen"},
+  {c:"ANR",n:"Antananarivo Ivato"},{c:"TNR",n:"Antananarivo"},{c:"SEZ",n:"Mahe Seychelles"},
+  {c:"MRU",n:"Maurice Sir Seewoosagur Ramgoolam"},{c:"RUN",n:"La Reunion Roland Garros"},
+  // EUROPE
+  {c:"CDG",n:"Paris Charles de Gaulle"},{c:"ORY",n:"Paris Orly"},{c:"LYS",n:"Lyon Saint Exupery"},
+  {c:"NCE",n:"Nice Cote d Azur"},{c:"MRS",n:"Marseille Provence"},{c:"TLS",n:"Toulouse Blagnac"},
+  {c:"BOD",n:"Bordeaux Merignac"},{c:"NTE",n:"Nantes Atlantique"},{c:"SXB",n:"Strasbourg Entzheim"},
+  {c:"LHR",n:"London Heathrow"},{c:"LGW",n:"London Gatwick"},{c:"STN",n:"London Stansted"},
+  {c:"MAN",n:"Manchester"},{c:"BHX",n:"Birmingham"},{c:"EDI",n:"Edinburgh"},
+  {c:"GLA",n:"Glasgow"},{c:"BRS",n:"Bristol"},{c:"LTN",n:"London Luton"},
+  {c:"AMS",n:"Amsterdam Schiphol"},{c:"BRU",n:"Bruxelles Zaventem"},{c:"LGG",n:"Liege"},
+  {c:"FRA",n:"Frankfurt"},{c:"MUC",n:"Munich"},{c:"DUS",n:"Dusseldorf"},
+  {c:"HAM",n:"Hamburg"},{c:"BER",n:"Berlin Brandenburg"},{c:"CGN",n:"Cologne Bonn"},
+  {c:"STR",n:"Stuttgart"},{c:"HAJ",n:"Hanovre"},{c:"NUE",n:"Nuremberg"},
+  {c:"VIE",n:"Vienne Schwechat"},{c:"ZRH",n:"Zurich"},{c:"GVA",n:"Geneve Cointrin"},
+  {c:"FCO",n:"Rome Fiumicino"},{c:"MXP",n:"Milan Malpensa"},{c:"LIN",n:"Milan Linate"},
+  {c:"VCE",n:"Venise Marco Polo"},{c:"NAP",n:"Naples"},{c:"PMO",n:"Palerme Punta Raisi"},
+  {c:"MAD",n:"Madrid Barajas"},{c:"BCN",n:"Barcelone El Prat"},{c:"AGP",n:"Malaga"},
+  {c:"PMI",n:"Palma de Majorque"},{c:"VLC",n:"Valence"},{c:"BIO",n:"Bilbao"},
+  {c:"SVQ",n:"Seville"},{c:"ACE",n:"Lanzarote"},{c:"TFN",n:"Tenerife Nord"},
+  {c:"TFS",n:"Tenerife Sud"},{c:"LPA",n:"Gran Canaria"},{c:"FUE",n:"Fuerteventura"},
+  {c:"LIS",n:"Lisbonne Humberto Delgado"},{c:"OPO",n:"Porto"},{c:"FAO",n:"Faro"},
+  {c:"ATH",n:"Athenes Eleftherios Venizelos"},{c:"SKG",n:"Thessalonique"},
+  {c:"HER",n:"Heraklion Crete"},{c:"RHO",n:"Rhodes"},{c:"CFU",n:"Corfou"},
+  {c:"IST",n:"Istanbul"},{c:"SAW",n:"Istanbul Sabiha Gokcen"},{c:"ESB",n:"Ankara Esenboga"},
+  {c:"AYT",n:"Antalya"},{c:"DLM",n:"Dalaman"},{c:"BJV",n:"Bodrum"},
+  {c:"CPH",n:"Copenhague Kastrup"},{c:"ARN",n:"Stockholm Arlanda"},{c:"GOT",n:"Gothenburg"},
+  {c:"OSL",n:"Oslo Gardermoen"},{c:"BGO",n:"Bergen"},{c:"HEL",n:"Helsinki Vantaa"},
+  {c:"WAW",n:"Varsovie Chopin"},{c:"KRK",n:"Cracovie"},{c:"PRG",n:"Prague Vaclav Havel"},
+  {c:"BTS",n:"Bratislava"},{c:"BUD",n:"Budapest"},{c:"OTP",n:"Bucarest Otopeni"},
+  {c:"SOF",n:"Sofia"},{c:"BEG",n:"Belgrade"},{c:"LJU",n:"Ljubljana"},
+  {c:"DBV",n:"Dubrovnik"},{c:"SPU",n:"Split"},{c:"ZAG",n:"Zagreb"},
+  {c:"SVO",n:"Moscou Sheremetyevo"},{c:"DME",n:"Moscou Domodedovo"},{c:"LED",n:"Saint-Petersbourg"},
+  {c:"KBP",n:"Kiev Boryspil"},{c:"RIX",n:"Riga"},{c:"TLL",n:"Tallinn"},
+  {c:"VNO",n:"Vilnius"},{c:"HKT",n:"Phuket"},
+  // MOYEN-ORIENT
+  {c:"DXB",n:"Dubai International"},{c:"AUH",n:"Abu Dhabi"},{c:"SHJ",n:"Sharjah"},
+  {c:"DOH",n:"Doha Hamad"},{c:"KWI",n:"Koweit"},{c:"BAH",n:"Bahrein"},
+  {c:"MCT",n:"Mascate Muscat"},{c:"AMM",n:"Amman Queen Alia"},{c:"BEY",n:"Beyrouth"},
+  {c:"TLV",n:"Tel Aviv Ben Gourion"},{c:"BGW",n:"Bagdad"},{c:"IKA",n:"Teheran Imam Khomeyni"},
+  {c:"THR",n:"Teheran Mehrabad"},{c:"JED",n:"Djeddah King Abdulaziz"},
+  {c:"RUH",n:"Riyad King Khalid"},{c:"MED",n:"Medine"},{c:"DMM",n:"Dammam"},
+  {c:"SAH",n:"Sanaa"},{c:"MHD",n:"Mashhad"},
+  // ASIE
+  {c:"DEL",n:"Delhi Indira Gandhi"},{c:"BOM",n:"Mumbai Chhatrapati Shivaji"},
+  {c:"MAA",n:"Chennai"},{c:"CCU",n:"Calcutta"},{c:"BLR",n:"Bangalore"},
+  {c:"HYD",n:"Hyderabad Rajiv Gandhi"},{c:"PNQ",n:"Pune"},{c:"GOI",n:"Goa Dabolim"},
+  {c:"CMB",n:"Colombo Bandaranaike"},{c:"DAC",n:"Dacca Shahjalal"},
+  {c:"KTM",n:"Katmandou Tribhuvan"},{c:"KHI",n:"Karachi Jinnah"},
+  {c:"ISB",n:"Islamabad"},{c:"LHE",n:"Lahore Allama Iqbal"},
+  {c:"PEK",n:"Pekin Capital"},{c:"PKX",n:"Pekin Daxing"},{c:"PVG",n:"Shanghai Pudong"},
+  {c:"SHA",n:"Shanghai Hongqiao"},{c:"CAN",n:"Guangzhou Baiyun"},{c:"SZX",n:"Shenzhen"},
+  {c:"CTU",n:"Chengdu Shuangliu"},{c:"HGH",n:"Hangzhou"},{c:"NKG",n:"Nanjing"},
+  {c:"XIY",n:"Xian Xianyang"},{c:"KMG",n:"Kunming"},{c:"CKG",n:"Chongqing"},
+  {c:"HKG",n:"Hong Kong"},{c:"TPE",n:"Taipei Taoyuan"},{c:"KHH",n:"Kaohsiung"},
+  {c:"ICN",n:"Seoul Incheon"},{c:"GMP",n:"Seoul Gimpo"},{c:"PUS",n:"Busan"},
+  {c:"NRT",n:"Tokyo Narita"},{c:"HND",n:"Tokyo Haneda"},{c:"KIX",n:"Osaka Kansai"},
+  {c:"ITM",n:"Osaka Itami"},{c:"NGO",n:"Nagoya"},{c:"CTS",n:"Sapporo"},
+  {c:"SIN",n:"Singapour Changi"},{c:"KUL",n:"Kuala Lumpur"},{c:"BKK",n:"Bangkok Suvarnabhumi"},
+  {c:"DMK",n:"Bangkok Don Mueang"},{c:"HKT",n:"Phuket"},{c:"CNX",n:"Chiang Mai"},
+  {c:"CGK",n:"Jakarta Soekarno Hatta"},{c:"DPS",n:"Bali Ngurah Rai"},{c:"SUB",n:"Surabaya"},
+  {c:"MNL",n:"Manille Ninoy Aquino"},{c:"CEB",n:"Cebu"},{c:"SGN",n:"Ho Chi Minh Tan Son Nhat"},
+  {c:"HAN",n:"Hanoi Noi Bai"},{c:"DAD",n:"Da Nang"},{c:"REP",n:"Siem Reap"},
+  {c:"PNH",n:"Phnom Penh"},{c:"RGN",n:"Rangoun Yangon"},{c:"ULN",n:"Oulan-Bator"},
+  // AMERIQUE DU NORD
+  {c:"JFK",n:"New York Kennedy"},{c:"LGA",n:"New York La Guardia"},{c:"EWR",n:"Newark Liberty"},
+  {c:"BOS",n:"Boston Logan"},{c:"PHL",n:"Philadelphia"},{c:"DCA",n:"Washington Reagan"},
+  {c:"IAD",n:"Washington Dulles"},{c:"BWI",n:"Baltimore Washington"},
+  {c:"ATL",n:"Atlanta Hartsfield Jackson"},{c:"MIA",n:"Miami"},{c:"FLL",n:"Fort Lauderdale"},
+  {c:"MCO",n:"Orlando"},{c:"TPA",n:"Tampa"},{c:"CLT",n:"Charlotte Douglas"},
+  {c:"ORD",n:"Chicago O Hare"},{c:"MDW",n:"Chicago Midway"},{c:"DTW",n:"Detroit Metropolitan"},
+  {c:"MSP",n:"Minneapolis Saint Paul"},{c:"STL",n:"Saint Louis Lambert"},
+  {c:"DFW",n:"Dallas Fort Worth"},{c:"IAH",n:"Houston George Bush"},
+  {c:"HOU",n:"Houston Hobby"},{c:"PHX",n:"Phoenix Sky Harbor"},
+  {c:"LAX",n:"Los Angeles International"},{c:"SFO",n:"San Francisco"},
+  {c:"SJC",n:"San Jose"},{c:"OAK",n:"Oakland"},{c:"SEA",n:"Seattle Tacoma"},
+  {c:"PDX",n:"Portland"},{c:"LAS",n:"Las Vegas McCarran"},{c:"DEN",n:"Denver"},
+  {c:"SLC",n:"Salt Lake City"},{c:"SAN",n:"San Diego"},
+  {c:"YYZ",n:"Toronto Pearson"},{c:"YUL",n:"Montreal Trudeau"},{c:"YVR",n:"Vancouver"},
+  {c:"YYC",n:"Calgary"},{c:"YEG",n:"Edmonton"},{c:"YOW",n:"Ottawa"},
+  {c:"MEX",n:"Mexico Benito Juarez"},{c:"CUN",n:"Cancun"},{c:"GDL",n:"Guadalajara"},
+  {c:"MTY",n:"Monterrey"},{c:"PTY",n:"Panama City Tocumen"},
+  {c:"BOG",n:"Bogota El Dorado"},{c:"MDE",n:"Medellin"},{c:"LIM",n:"Lima Jorge Chavez"},
+  {c:"GRU",n:"Sao Paulo Guarulhos"},{c:"CGH",n:"Sao Paulo Congonhas"},
+  {c:"GIG",n:"Rio de Janeiro Galeao"},{c:"SDU",n:"Rio de Janeiro Santos Dumont"},
+  {c:"BSB",n:"Brasilia"},{c:"SSA",n:"Salvador Bahia"},{c:"REC",n:"Recife"},
+  {c:"FOR",n:"Fortaleza"},{c:"CWB",n:"Curitiba"},{c:"EZE",n:"Buenos Aires Ezeiza"},
+  {c:"AEP",n:"Buenos Aires Aeroparque"},{c:"SCL",n:"Santiago de Chili"},
+  {c:"GYE",n:"Guayaquil"},{c:"UIO",n:"Quito"},{c:"CCS",n:"Caracas"},
+  {c:"HAV",n:"La Havane Jose Marti"},
+  // OCEANIE
+  {c:"SYD",n:"Sydney Kingsford Smith"},{c:"MEL",n:"Melbourne"},{c:"BNE",n:"Brisbane"},
+  {c:"PER",n:"Perth"},{c:"ADL",n:"Adelaide"},{c:"CNS",n:"Cairns"},
+  {c:"AKL",n:"Auckland"},{c:"CHC",n:"Christchurch"},{c:"WLG",n:"Wellington"},
+  {c:"NAN",n:"Nadi Fidji"},{c:"PPT",n:"Papeete Tahiti"},
+];
+
+
+function FAirport({ label, value, onChange }) {
+  const [q, setQ]   = useState(value||"");
+  const [open,setO] = useState(false);
+  const res = q.length>=2
+    ? WORLD_AIRPORTS.filter(a=>a.c.toUpperCase().startsWith(q.toUpperCase())||a.n.toLowerCase().includes(q.toLowerCase())).slice(0,8)
+    : [];
+  const pick = c => { onChange(c); setQ(c); setO(false); };
+  return (
+    <div style={{ position:"relative" }}>
+      <FLabel>{label}</FLabel>
+      <input value={q}
+        onChange={e=>{setQ(e.target.value);setO(true);onChange(e.target.value.toUpperCase());}}
+        onFocus={()=>setO(true)} onBlur={()=>setTimeout(()=>setO(false),150)}
+        placeholder="ex: CMN"
+        style={{ width:"100%", height:48, boxSizing:"border-box", background:C.bg,
+                 border:"1.5px solid "+C.border, borderRadius:10, padding:"0 14px",
+                 color:C.text, fontSize:14, outline:"none", textTransform:"uppercase" }}/>
+      {open&&res.length>0&&(
+        <div style={{ position:"absolute", top:76, left:0, right:0, zIndex:999,
+                      background:"white", border:"1.5px solid "+C.gold, borderRadius:10,
+                      boxShadow:"0 4px 20px rgba(0,0,0,.15)", maxHeight:220, overflowY:"auto" }}>
+          {res.map(a=>(
+            <button key={a.c} onMouseDown={()=>pick(a.c)}
+              style={{ width:"100%", background:"none", border:"none", padding:"10px 14px",
+                       cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center",
+                       gap:10, borderBottom:"1px solid "+C.bg, WebkitTapHighlightColor:"transparent" }}>
+              <span style={{ fontWeight:800, fontSize:14, color:C.navy, fontFamily:"monospace", minWidth:36 }}>{a.c}</span>
+              <span style={{ fontSize:12, color:C.slate }}>{a.n}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function geoToSvg(lat,lon,W,H) {
+  const x=(lon+13.5)/(13.5-0.8)*W;
+  const y=(36.1-lat)/(36.1-27.5)*H;
+  return {x:Math.max(0,Math.min(W,x)),y:Math.max(0,Math.min(H,y))};
+}
+const MOROCCO_PATH = "M 214.8,11.1 L 221.3,6.2 L 230.8,5.6 L 238.1,7.9 L 250.8,8.3 L 260.3,30.5 L 269.2,27.2 L 278.3,23.0 L 289.4,28.0 L 298.5,34.3 L 312.9,31.3 L 319.8,36.6 L 325.2,33.1 L 328.4,39.9 L 330.9,67.5 L 332.1,80.7 L 333.5,93.8 L 334.7,107.1 L 335.9,130.3 L 334.9,148.5 L 333.6,165.9 L 325.4,178.3 L 321.3,190.7 L 311.8,202.8 L 302.6,220.9 L 287.7,230.3 L 269.6,245.1 L 253.4,257.2 L 240.3,267.5 L 218.3,273.5 L 189.9,280 L 155.9,280 L 136.9,280 L 11.3,280 L 9.4,269.6 L 8.8,262.4 L 10.0,254.1 L 13.6,246.8 L 24.9,236.0 L 33.5,231.4 L 40.5,231.1 L 50.7,224.6 L 60.2,218.1 L 68.0,213.3 L 73.8,208.5 L 81.6,204.5 L 85.2,201.9 L 90.7,205.7 L 97.8,206.7 L 99.7,191.9 L 100.6,187.5 L 105.0,184.5 L 107.4,178.5 L 110.5,169.0 L 105.2,163.1 L 104.3,156.4 L 104.1,142.6 L 106.6,135.8 L 109.1,130.2 L 113.1,125.3 L 120.2,123.7 L 128.1,114.3 L 130.0,108.9 L 136.9,101.5 L 141.6,100.8 L 147.9,94.7 L 151.3,88.0 L 161.0,84.6 L 167.6,82.3 L 176.3,78.8 L 187.4,68.0 L 188.8,67.7 L 198.4,57.3 L 211.1,53.7 L 213.7,43.0 L 214.8,31.0 L 214.8,11.1 Z";
+
+const AIRPORTS_DATA = [
+  // Grands aeroports internationaux
+  { code:"CMN", lat:33.3675, lon:-7.5900,  city:"Casablanca",  type:"intl" },
+  { code:"RAK", lat:31.6069, lon:-8.0363,  city:"Marrakech",   type:"intl" },
+  { code:"AGA", lat:30.3250, lon:-9.4130,  city:"Agadir",      type:"intl" },
+  { code:"TNG", lat:35.7269, lon:-5.9168,  city:"Tanger",      type:"intl" },
+  { code:"FEZ", lat:33.9273, lon:-4.9778,  city:"Fes",         type:"intl" },
+  { code:"OUD", lat:34.7872, lon:-1.9240,  city:"Oujda",       type:"intl" },
+  { code:"RBA", lat:34.0514, lon:-6.7515,  city:"Rabat",       type:"intl" },
+  { code:"NDR", lat:34.9889, lon:-3.0282,  city:"Nador",       type:"intl" },
+  { code:"AHU", lat:35.1771, lon:-3.8395,  city:"Al Hoceima",  type:"intl" },
+  { code:"TTU", lat:35.5943, lon:-5.3200,  city:"Tetouan",     type:"reg"  },
+  // Aeroports regionaux
+  { code:"ESU", lat:31.3975, lon:-9.6817,  city:"Essaouira",   type:"reg"  },
+  { code:"OZZ", lat:30.9391, lon:-6.9094,  city:"Ouarzazate",  type:"reg"  },
+  { code:"ERH", lat:31.9475, lon:-4.3983,  city:"Er-Rachidia", type:"reg"  },
+  { code:"ZGR", lat:30.3203, lon:-5.8668,  city:"Zagora",      type:"reg"  },
+  { code:"TTA", lat:28.4484, lon:-11.1613, city:"Tan Tan",     type:"reg"  },
+  // Provinces du sud
+  { code:"EUN", lat:27.1517, lon:-13.2192, city:"Laayoune",    type:"intl" },
+  { code:"VIL", lat:23.7183, lon:-15.9320, city:"Dakhla",      type:"intl" },
+  { code:"SMW", lat:26.7458, lon:-11.6847, city:"Smara",       type:"reg"  },
+  { code:"SII", lat:29.3661, lon:-10.0708, city:"Sidi Ifni",   type:"reg"  },
+  { code:"GLN", lat:29.0267, lon:-10.0564, city:"Guelmim",     type:"reg"  },
+];
+
+
+function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
+  const W=360,H=280;
+  const [zoom,setZ] = useState(1);
+  const [pan,setP]  = useState({x:0,y:0});
+  const [drag,setD] = useState(false);
+  const [ds,setDS]  = useState(null);
+  const MZ=6;
+  const cl=(x,y,z)=>{const m=(W*z-W)/2,n=(H*z-H)/2;return{x:Math.max(-m,Math.min(m,x)),y:Math.max(-n,Math.min(n,y))};};
+  const zI=()=>setZ(z=>{const n=Math.min(z+.5,MZ);setP(p=>cl(p.x,p.y,n));return n;});
+  const zO=()=>setZ(z=>{const n=Math.max(z-.5,1);if(n===1)setP({x:0,y:0});else setP(p=>cl(p.x,p.y,n));return n;});
+  const ap=ac&&ac.lat?geoToSvg(ac.lat,ac.lon,W,H):null;
+  const cA=()=>{if(!ap)return;const n=Math.min(zoom+1,MZ);setP(cl((W/2-ap.x)*(n-1),(H/2-ap.y)*(n-1),n));setZ(n);};
+  const onPD=e=>{e.preventDefault();setD(true);setDS({x:e.clientX-pan.x,y:e.clientY-pan.y});};
+  const onPM=e=>{if(!drag||!ds)return;setP(cl(e.clientX-ds.x,e.clientY-ds.y,zoom));};
+  const onPU=()=>{setD(false);setDS(null);};
+  const onW=e=>{e.preventDefault();const d=e.deltaY>0?-.25:.25;setZ(z=>{const n=Math.max(1,Math.min(MZ,z+d));if(n===1)setP({x:0,y:0});else setP(p=>cl(p.x,p.y,n));return n;});};
+  const tr=(moroccoTraffic||[]).map(s=>{
+    if(!s||s[6]==null||s[5]==null)return null;
+    const lt=s[6],ln=s[5];
+    if(lt<27.5||lt>36.1||ln<-13.5||ln>-0.8)return null;
+    if(s[0]===(icao24||"").toLowerCase())return null;
+    return{...geoToSvg(lt,ln,W,H),h:s[10]||0};
+  }).filter(Boolean);
+  const z=zoom;
+  return (
+    <div style={{borderRadius:12,overflow:"hidden",border:"1px solid "+C.border,position:"relative",userSelect:"none"}}>
+      <div style={{overflow:"hidden",cursor:drag?"grabbing":z>1?"grab":"default",touchAction:"none"}}
+        onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerLeave={onPU} onWheel={onW}>
+        <svg viewBox={"0 0 "+W+" "+H} width="100%"
+          style={{display:"block",transform:"scale("+z+") translate("+pan.x/z+"px,"+pan.y/z+"px)",transformOrigin:"center center",transition:drag?"none":"transform 0.2s"}}>
+          <rect width={W} height={H} fill="#5B9EC9"/>
+          <path d="M 214.8,11.1 L 360,0 L 360,45 L 298.5,34.3 L 278.3,23.0 L 260.3,30.5 L 250.8,8.3 L 230.8,5.6 Z" fill="#6EB5D8"/>
+          <path d={MOROCCO_PATH} fill="#C5D49A" stroke="#4A7A30" strokeWidth={1.3/z} strokeLinejoin="round"/>
+          <path d="M 113.1,125.3 Q 150,112 185,115 Q 222,108 258,122 Q 244,136 210,132 Q 172,130 138,136 Z" fill="#9A7850" fillOpacity={0.4}/>
+          {[28,30,32,34].map(lt=>{
+            const a=geoToSvg(lt,-13.5,W,H),b=geoToSvg(lt,-0.8,W,H);
+            return <g key={lt}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="white" strokeOpacity={0.3} strokeWidth={0.5/z} strokeDasharray="3,6"/></g>;
+          })}
+          {AIRPORTS_DATA.map(({code,lat,lon,type})=>{
+            if(type!=="intl"&&z<2)return null;
+            const p=geoToSvg(lat,lon,W,H),s=Math.max(.6,1/z);
+            return (
+              <g key={code} transform={"translate("+p.x+","+p.y+")"}>
+                {type==="intl"
+                  ?<rect x={-4*s} y={-4*s} width={8*s} height={8*s} rx={1.5*s} fill="white" stroke="#2E5A18" strokeWidth={s}/>
+                  :<circle r={3*s} fill="#C5D49A" stroke="#2E5A18" strokeWidth={s}/>}
+                <text y={-7*s} textAnchor="middle" fontSize={8*s} fill="#0F1F3D" fontWeight="700" stroke="white" strokeWidth={2.5*s} paintOrder="stroke">{code}</text>
+              </g>
+            );
+          })}
+          {tr.map((t,i)=><polygon key={i} points="0,-4 2.5,3.5 0,2 -2.5,3.5" fill="#1E3A5F" opacity={0.55} transform={"translate("+t.x+","+t.y+") rotate("+t.h+")"}/>)}
+          {ap&&(
+            <g transform={"translate("+ap.x+","+ap.y+")"}>
+              <circle r={18/z} fill="none" stroke={ac.simulated?"#C9A84C":"#00A86B"} strokeWidth={1.5/z} opacity={0.4}/>
+              <polygon points={"0,"+(-11/z)+" "+(6/z)+","+(9/z)+" 0,"+(6/z)+" "+(-6/z)+","+(9/z)} fill={ac.simulated?"#A0720A":"#007A4D"} stroke="white" strokeWidth={2/z} transform={"rotate("+(ac.heading||0)+")"} style={{filter:"drop-shadow(0 1px 3px rgba(0,0,0,.4))"}}/>
+              <text y={26/z} textAnchor="middle" fontSize={9/z} fontWeight="700" fill={ac.simulated?"#7A5000":"#005A35"} stroke="white" strokeWidth={3/z} paintOrder="stroke">CN-KTA</text>
+            </g>
+          )}
+          {!ap&&<text x={W/2} y={H/2} textAnchor="middle" fontSize={11} fill="#475569">En attente ADS-B...</text>}
+          <g transform={"translate("+(W-18)+",18) scale("+(1/z)+")"}>
+            <circle r={10} fill="white" fillOpacity={0.85}/>
+            <text textAnchor="middle" y={-1} fontSize={7} fill="#0F1F3D" fontWeight="800">N</text>
+            <polygon points="0,-7 1.5,-2 -1.5,-2" fill="#0F1F3D"/>
+          </g>
+        </svg>
+      </div>
+      <div style={{position:"absolute",right:10,top:10,display:"flex",flexDirection:"column",gap:4,zIndex:10}}>
+        <button onClick={zI} style={{width:36,height:36,background:"white",border:"1px solid "+C.border,borderRadius:8,fontSize:20,fontWeight:"700",cursor:"pointer",color:C.navy,WebkitTapHighlightColor:"transparent",opacity:z>=MZ?.4:1}}>+</button>
+        <button onClick={zO} style={{width:36,height:36,background:"white",border:"1px solid "+C.border,borderRadius:8,fontSize:20,fontWeight:"700",cursor:"pointer",color:C.navy,WebkitTapHighlightColor:"transparent",opacity:z<=1?.4:1}}>-</button>
+        {ap&&<button onClick={cA} style={{width:36,height:36,background:C.gold,border:"none",borderRadius:8,fontSize:14,cursor:"pointer",color:"white",WebkitTapHighlightColor:"transparent"}}>&#x2708;</button>}
+      </div>
+      {ac&&ac.lat&&(
+        <div style={{padding:"8px 14px",background:"white",borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,background:ac.simulated?"linear-gradient(135deg,#A0720A,#C9A84C)":"linear-gradient(135deg,#007A4D,#00A86B)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"white",transform:"rotate("+(ac.heading||0)+"deg)",transition:"transform 1s"}}>&#x2708;</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:12,color:C.navy}}>CN-KTA {ac.simulated?"SIM":"LIVE"}</div>
+            <div style={{fontSize:10,color:C.slate}}>{ac.lat.toFixed(3)}N {Math.abs(ac.lon).toFixed(3)}W {ac.alt_ft?("· "+ac.alt_ft.toLocaleString()+" ft"):""}  {ac.speed_kt?("· "+ac.speed_kt+" kt"):""}</div>
+          </div>
+          <div style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:ac.simulated?"#FEF3C7":"#D1FAE5",color:ac.simulated?"#A0720A":"#007A4D"}}>{ac.simulated?"SIM":"LIVE"}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function simulateFlightState(icao24) {
+  const now       = Date.now();
+  const seed      = Math.sin(now / 8000);   // slow oscillation
+  const seed2     = Math.cos(now / 6000);
+  const seed3     = Math.sin(now / 4000);
+
+  // Progress 0->1 on a 55-min loop
+  const elapsed   = (now % (55 * 60 * 1000)) / (55 * 60 * 1000);
+
+  // Interpolate lat/lon along CMN->FEZ great circle
+  const lat = 33.3675 + (33.9273 - 33.3675) * elapsed;
+  const lon = -7.5900 + (-4.9778 - (-7.5900)) * elapsed;
+
+  // Realistic EMB 145 cruise: FL280, 440-460 kt
+  const cruiseAlt  = 8534;  // meters ~ FL280
+  // Climb/cruise/descend profile
+  let altM;
+  if (elapsed < 0.15)       altM = cruiseAlt * (elapsed / 0.15);
+  else if (elapsed > 0.85)  altM = cruiseAlt * ((1 - elapsed) / 0.15);
+  else                      altM = cruiseAlt + seed * 80;
+
+  const speed_ms   = 225 + seed2 * 8;          // ~440-460 kt in m/s
+  const heading    = 72 + seed3 * 3;            // ENE toward FEZ, slight wobble
+  const vertRate   = elapsed < 0.15 ? 8.5
+                   : elapsed > 0.85 ? -7.2
+                   : seed * 0.5;
+
+  return {
+    icao24:      icao24 || "020035",
+    callsign:    "AJS03",
+    country:     "Morocco",
+    lat,
+    lon,
+    onGround:    false,
+    heading,
+    vertRate_ms: vertRate,
+    squawk:      "2341",
+    lastContact: Math.floor(now / 1000),
+    speed_kt:    Math.round(speed_ms * 1.94384),
+    alt_ft:      Math.round(altM * 3.28084),
+    flightLevel: Math.round(altM * 3.28084 / 100),
+    simulated:   true,
+  };
+}
+
+// Generate ~12 simulated Morocco traffic blips
+function simulateMoroccoTraffic() {
+  const t = Date.now();
+  return Array.from({ length: 12 }, (_, i) => {
+    const angle = (t / 20000 + i * 0.52) % (Math.PI * 2);
+    const lat   = 31.5 + Math.sin(angle + i) * 3.2;
+    const lon   = -6.5 + Math.cos(angle + i * 0.7) * 5.1;
+    return [
+      `02${(1000 + i * 37).toString(16).slice(-4)}`,
+      `RAM${100 + i * 7}`,
+      "Morocco",
+      Math.floor(t/1000), Math.floor(t/1000),
+      lon, lat, 8000 + i * 200,
+      false,
+      220 + i * 5, (angle * 57.3) % 360, 0,
+      null, 8100 + i * 200, "2100", false, 0
+    ];
+  });
+}
+
+// Try real OpenSky first, fall back to simulation
+async function fetchByIcao24(icao24) {
+  try {
+    const r = await Promise.race([
+      fetch(`https://opensky-network.org/api/states/all?icao24=${icao24.toLowerCase()}`),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
+    ]);
+    if (r.ok) {
+      const j = await r.json();
+      if (j.states?.[0]) return j.states[0];
+    }
+  } catch(_e) {}
+  // Fallback: simulation
+  return null; // signal to use simulation in fetchOpenSky
+}
+
+async function fetchMorocco() {
+  try {
+    const r = await Promise.race([
+      fetch("https://opensky-network.org/api/states/all?lamin=27.7&lomin=-13.2&lamax=35.9&lomax=-0.9"),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
+    ]);
+    if (r.ok) {
+      const j = await r.json();
+      return j.states ?? [];
+    }
+  } catch(_e) {}
+  return simulateMoroccoTraffic();
+}
+async function fetchMorocco() {
+  try {
+    const r=await Promise.race([fetch("https://opensky-network.org/api/states/all?lamin=27.5&lomin=-13.5&lamax=36.1&lomax=-0.8"),new Promise((_,rj)=>setTimeout(()=>rj(new Error("t")),8000))]);
+    if(!r.ok)return[];
+    const j=await r.json();
+    return j.states||[];
+  } catch(_e){return[];}
+}
+
+function parseState(s) {
+  if(!s)return null;
+  return {icao24:s[0],callsign:(s[1]||"").trim(),country:s[2],lon:s[5],lat:s[6],alt_m:s[7],onGround:s[8],speed_ms:s[9],heading:s[10],alt_m_geo:s[13]};
+}
+
+// ── Alerts ───────────────────────────────────────────────────────────────────
+function computeAlerts(kpis, flights) {
+  const a=[];
+  if(kpis.otp<85)a.push({id:"otp",sev:"danger",msg:"OTP critique: "+kpis.otp+"% (seuil 85%)",icon:"⏰"});
+  else if(kpis.otp<90)a.push({id:"otp",sev:"warn",msg:"OTP en baisse: "+kpis.otp+"%",icon:"⏰"});
+  if(kpis.melCount>=3)a.push({id:"mel",sev:"danger",msg:kpis.melCount+" MEL actifs",icon:"🔧"});
+  if(kpis.delayMin>30)a.push({id:"del",sev:"danger",msg:"Retards: "+kpis.delayMin+" min",icon:"⚠"});
+  else if(kpis.delayMin>15)a.push({id:"del",sev:"warn",msg:"Retards: "+kpis.delayMin+" min",icon:"⚠"});
+  if(kpis.loadFactor<70)a.push({id:"lf",sev:"warn",msg:"Load Factor: "+kpis.loadFactor+"%",icon:"💺"});
+  if((kpis.nextCheckH||999)<50)a.push({id:"chk",sev:"danger",msg:"A-Check dans "+(kpis.nextCheckH||0)+"h",icon:"🔧"});
+  return a;
+}
+
+const TABS = [
+  {id:"forms",   icon:"📝", label:"Formulaires"},
+  {id:"live",    icon:"📡", label:"Live"      },
+  {id:"carte",   icon:"🗺", label:"Carte"     },
+  {id:"alertes", icon:"🔔", label:"Alertes"   },
+  {id:"ops",     icon:"✈",    label:"Ops."      },
+  {id:"perf",    icon:"📊", label:"Perf."     },
+  {id:"maint",   icon:"🔧", label:"Maint."    },
+  {id:"fin",     icon:"💰", label:"Finances"  },
+];
+
+
+const INIT_CREW = [
+  {id:1, nom:"Alami",    prenom:"Karim",   role:"CM1", licence:"ATPL-A 12345"},
+  {id:2, nom:"Rahimi",   prenom:"Hassan",  role:"CM1", licence:"ATPL-A 67890"},
+  {id:3, nom:"Tazi",     prenom:"Youssef", role:"CM2", licence:"CPL-A 11111"},
+  {id:4, nom:"Idrissi",  prenom:"Omar",    role:"CM2", licence:"CPL-A 22222"},
+  {id:5, nom:"Bennani",  prenom:"Sara",    role:"CC",  licence:"CC-001"},
+  {id:6, nom:"Chraibi",  prenom:"Nadia",   role:"CC",  licence:"CC-002"},
+  {id:7, nom:"Fassi",    prenom:"Amine",   role:"CM2", licence:"CPL-A 33333"},
+  {id:8, nom:"Sebti",    prenom:"Leila",   role:"CC",  licence:"CC-003"},
+];
+
+const INIT_FLIGHTS = [
+  {num:"AJS01",from:"CMN",to:"AGA",dep:"06:45",arr:"08:05",status:"Termine", pax:18,load:100,date:"2026-06-26",cm1:"Alami Karim",cm2:"Tazi Youssef",cc:"Bennani Sara",carbDep:4500,carbArr:2800,consomme:1700,consoH:850,fuelPct:49,delayMin:0,nps:85,depReal:"06:45",arrReal:"08:05"},
+  {num:"AJS02",from:"AGA",to:"CMN",dep:"09:00",arr:"10:20",status:"Termine", pax:16,load:89, date:"2026-06-26",cm1:"Alami Karim",cm2:"Tazi Youssef",cc:"Bennani Sara",carbDep:4200,carbArr:2600,consomme:1600,consoH:820,fuelPct:46,delayMin:0,nps:78,depReal:"09:00",arrReal:"10:20"},
+  {num:"AJS03",from:"CMN",to:"FEZ",cm1:"Rahimi Hassan",cm2:"Idrissi Omar",cc:"Chraibi Nadia",dep:"12:30",arr:"13:25",status:"En vol",  pax:17,load:94, date:"2026-06-26"},
+  {num:"AJS04",cm1:"Rahimi Hassan",cm2:"Idrissi Omar",cc:"Chraibi Nadia",from:"FEZ",to:"CMN",dep:"14:45",arr:"15:40",status:"Planifie",pax:15,load:83, date:"2026-06-26"},
+  {num:"AJS05",cm1:"Alami Karim",cm2:"Tazi Youssef",cc:"Bennani Sara",from:"CMN",to:"OUD",dep:"17:00",arr:"18:10",status:"Planifie",pax:14,load:78, date:"2026-06-26"},
+  {num:"AJS06",cm1:"Rahimi Hassan",cm2:"Idrissi Omar",cc:"Chraibi Nadia",from:"OUD",to:"CMN",dep:"19:30",arr:"20:40",status:"Planifie",pax:13,load:72, date:"2026-06-26"},
+];
+
+const INIT_KPIS = {
+  otp:92, loadFactor:89, delayMin:18, fuelPct:65,
+  melCount:2, nextCheckH:182, nps:72, utilisation:7.5,
+  askK:152, rpkK:135,
+  consoH:850, consomme:6375,
+};
+
+const INIT_MAINT = {
+  melCount:2, nextCheckH:182, ttaf:4218,
+  fiabMoteurs:99.8, techDelay:0.4, aog:0,
+  mels:[
+    {sys:"Passenger Address System", mel:"MEL 23-61", exp:"30/06/26", sev:"B"},
+    {sys:"No. 2 VHF Nav - ILS",      mel:"MEL 34-01", exp:"03/07/26", sev:"B"},
+  ],
+};
+
+const INIT_FIN = [
+  {mois:"Janvier",  revenus:850000,  couts:720000,  revenuVol:24000, coutCarbu:4000, billetMoyen:1150},
+  {mois:"Fevrier",  revenus:920000,  couts:760000,  revenuVol:25000, coutCarbu:4100, billetMoyen:1200},
+  {mois:"Mars",     revenus:980000,  couts:790000,  revenuVol:26000, coutCarbu:4050, billetMoyen:1220},
+  {mois:"Avril",    revenus:1050000, couts:820000,  revenuVol:27000, coutCarbu:4200, billetMoyen:1250},
+  {mois:"Mai",      revenus:1140000, couts:870000,  revenuVol:28000, coutCarbu:4150, billetMoyen:1270},
+  {mois:"Juin",     revenus:1240000, couts:910000,  revenuVol:28500, coutCarbu:4200, billetMoyen:1285},
+];
+
+// ── Forms ────────────────────────────────────────────────────────────────────
+function FormVol({ onSubmit, crew }) {
+  const today=new Date().toISOString().slice(0,10);
+  const CAPA=5700;
+  const [num,setNum]=useState("");
+  const [from_,setFrom]=useState("CMN");
+  const [to,setTo]=useState("AGA");
+  const [dep,setDep]=useState("");
+  const [arr,setArr]=useState("");
+  const [pax,setPax]=useState("18");
+  const [date,setDate]=useState(today);
+  const [carbDep,setCDep]=useState("");
+  const [cm1,setCm1]=useState("");
+  const [cm2,setCm2]=useState("");
+  const [cc,setCc]=useState("");
+
+  const pn=Math.min(18,Math.max(0,Number(pax)||0));
+  const load=Math.round(pn/18*100);
+  const fPct=carbDep?Math.round(Number(carbDep)/CAPA*100):null;
+  const fClr=fPct>=40?"#00936A":fPct>=25?"#D97706":"#DC2626";
+
+  const submit=()=>{
+    if(!num.trim()||!dep||!arr){alert("N vol, depart et arrivee requis");return;}
+    onSubmit({num:num.trim().toUpperCase(),from:from_,to,dep,arr,depReal:"",arrReal:"",
+      status:"Planifie",pax:pn,load,date,
+      carbDep:Number(carbDep)||0,carbArr:0,consomme:0,consoH:0,fuelPct:fPct||0,delayMin:0,
+      cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0});
+    setNum("");setDep("");setArr("");setPax("18");setCDep("");
+    setCm1("");setCm2("");setCc("");
+  };
+  return (
+    <Card accent="#0F1F3D">
+      <FHeader icon="✈" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0F1F3D"/>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <FGrid><FField label="N Vol *" value={num} onChange={setNum} placeholder="AJS07"/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
+        <FSection title="Route" color="#0F1F3D"/>
+        <FGrid><FAirport label="Depart" value={from_} onChange={setFrom}/><FAirport label="Arrivee" value={to} onChange={setTo}/></FGrid>
+        <FSection title="Horaires planifies" color="#0F1F3D"/>
+        <FGrid><FField label="Depart prevu *" value={dep} onChange={setDep} type="time"/><FField label="Arrivee prevue *" value={arr} onChange={setArr} type="time"/></FGrid>
+        <FSection title="Passagers prevus" color="#0F1F3D"/>
+        <FGrid>
+          <FField label="PAX (0-18)" value={pax} onChange={v=>setPax(String(Math.min(18,Math.max(0,Number(v)||0))))} type="number" min={0} max={18}/>
+          <FCalc label="Remplissage" value={load+"%"} color={load>=80?"#00936A":load>=60?"#D97706":"#DC2626"}/>
+        </FGrid>
+        <FSection title={"Carburant embarque — Capacite "+CAPA+" kg"} color="#0F1F3D"/>
+        <FGrid>
+          <FField label="Fuel depart (kg)" value={carbDep} onChange={setCDep} type="number" min={0} max={CAPA} placeholder="ex: 4500"/>
+          <FCalc label="Niveau depart" value={fPct!==null?fPct+"%":"--"} sub={carbDep?carbDep+" kg":""} color={fPct!==null?fClr:"#94A3B8"}/>
+        </FGrid>
+        <FSection title="Equipage" color="#0F1F3D"/>
+        <FGrid>
+          <div>
+            <FLabel>CM1 — Commandant</FLabel>
+            <select value={cm1} onChange={e=>setCm1(e.target.value)}
+              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:cm1?C.text:C.slateL,fontSize:13,outline:"none",appearance:"none"}}>
+              <option value="">-- Choisir --</option>
+              {(crew||[]).filter(m=>m.role==="CM1").map(m=>(
+                <option key={m.id} value={m.prenom+" "+m.nom}>{m.prenom} {m.nom}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <FLabel>CM2 — Copilote</FLabel>
+            <select value={cm2} onChange={e=>setCm2(e.target.value)}
+              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:cm2?C.text:C.slateL,fontSize:13,outline:"none",appearance:"none"}}>
+              <option value="">-- Choisir --</option>
+              {(crew||[]).filter(m=>m.role==="CM1"||m.role==="CM2").map(m=>(
+                <option key={m.id} value={m.prenom+" "+m.nom}>{m.prenom} {m.nom}</option>
+              ))}
+            </select>
+          </div>
+        </FGrid>
+        <div>
+          <FLabel>CC — Hotesse / Steward</FLabel>
+          <select value={cc} onChange={e=>setCc(e.target.value)}
+            style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:cc?C.text:C.slateL,fontSize:13,outline:"none",appearance:"none"}}>
+            <option value="">-- Choisir --</option>
+            {(crew||[]).filter(m=>m.role==="CC").map(m=>(
+              <option key={m.id} value={m.prenom+" "+m.nom}>{m.prenom} {m.nom}</option>
+            ))}
+          </select>
+        </div>
+        <FSubmit label="Planifier le vol" color="#0F1F3D" onClick={submit}/>
+      </div>
+    </Card>
+  );
+}
+
+
+// ── Registre Equipage ────────────────────────────────────────────────────────
+function FormEquipage({ crew, setCrew }) {
+  const ROLES = ["CM1","CM2","CC"];
+  const [nom,setNom]       = useState("");
+  const [prenom,setPrenom] = useState("");
+  const [role,setRole]     = useState("CM1");
+  const [licence,setLic]   = useState("");
+  const [editing,setEditing] = useState(null); // id en cours d edition
+
+  const addOrUpdate = () => {
+    if (!nom.trim()||!prenom.trim()) { alert("Nom et prenom requis"); return; }
+    if (editing !== null) {
+      setCrew(c => c.map(m => m.id===editing
+        ? {...m,nom:nom.trim(),prenom:prenom.trim(),role,licence:licence.trim()}
+        : m));
+      setEditing(null);
+    } else {
+      const newId = Math.max(0,...(crew||[]).map(m=>m.id))+1;
+      setCrew(c => [...c, {id:newId,nom:nom.trim(),prenom:prenom.trim(),role,licence:licence.trim()}]);
+    }
+    setNom("");setPrenom("");setRole("CM1");setLic("");
+  };
+
+  const startEdit = m => {
+    setEditing(m.id); setNom(m.nom); setPrenom(m.prenom);
+    setRole(m.role); setLic(m.licence||"");
+  };
+
+  const remove = id => setCrew(c => c.filter(m => m.id!==id));
+  const cancel = () => { setEditing(null);setNom("");setPrenom("");setRole("CM1");setLic(""); };
+
+  const roleColor = r => r==="CM1"?"#0F1F3D":r==="CM2"?"#0369A1":"#00936A";
+  const roleBg    = r => r==="CM1"?"#E0E7FF":r==="CM2"?"#E0F2FE":"#D1FAE5";
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Card accent="#0369A1">
+        <FHeader icon="👨‍✈️" title={editing!==null?"Modifier membre":"Ajouter membre"} subtitle="Registre equipage CN-KTA" color="#0369A1"/>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <FGrid>
+            <FField label="Nom *" value={nom} onChange={setNom} placeholder="Alami"/>
+            <FField label="Prenom *" value={prenom} onChange={setPrenom} placeholder="Karim"/>
+          </FGrid>
+          <FGrid>
+            <FSelect label="Role" value={role} onChange={setRole}
+              options={ROLES.map(r=>({value:r,label:r==="CM1"?"CM1 — Commandant":r==="CM2"?"CM2 — Copilote":"CC — Hotesse"}))}/>
+            <FField label="Licence / Matricule" value={licence} onChange={setLic} placeholder="ATPL-A 12345"/>
+          </FGrid>
+          <div style={{display:"flex",gap:10}}>
+            {editing!==null && (
+              <button onClick={cancel}
+                style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                Annuler
+              </button>
+            )}
+            <button onClick={addOrUpdate}
+              style={{flex:2,height:48,background:"#0369A1",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              {editing!==null?"Enregistrer modifications":"+ Ajouter"}
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,overflow:"hidden"}}>
+        <div style={{padding:"9px 14px",background:C.bg,borderBottom:"1px solid "+C.border,fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase"}}>
+          {(crew||[]).length} membres enregistres
+        </div>
+        {(crew||[]).length===0 && (
+          <div style={{padding:20,textAlign:"center",color:C.slateL,fontSize:13}}>Aucun membre enregistre</div>
+        )}
+        {ROLES.map(r => {
+          const members = (crew||[]).filter(m=>m.role===r);
+          if (members.length===0) return null;
+          return (
+            <div key={r}>
+              <div style={{padding:"6px 14px",background:roleBg(r),fontSize:9,fontWeight:800,color:roleColor(r),textTransform:"uppercase",letterSpacing:"0.1em"}}>
+                {r==="CM1"?"Commandants de bord":r==="CM2"?"Officiers Pilotes de Ligne":"Hotesses / Stewards"}
+              </div>
+              {members.map((m,i)=>(
+                <div key={m.id} style={{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid "+C.border,gap:10}}>
+                  <div style={{width:34,height:34,borderRadius:"50%",background:roleBg(r),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:13,color:roleColor(r)}}>
+                    {m.prenom[0]}{m.nom[0]}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13,color:C.text}}>{m.prenom} {m.nom}</div>
+                    <div style={{fontSize:10,color:C.slate}}>{m.licence||"—"}</div>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>startEdit(m)}
+                      style={{background:C.bg,border:"1px solid "+C.border,borderRadius:7,padding:"5px 10px",fontSize:11,color:C.slate,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                      ✏
+                    </button>
+                    <button onClick={()=>remove(m.id)}
+                      style={{background:"#FEE2E2",border:"1px solid #DC2626",borderRadius:7,padding:"5px 10px",fontSize:11,color:"#DC2626",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FormMaint({ onSubmit }) {
+  const [ttaf,setTtaf]=useState("4218");
+  const [mel,setMel]=useState("2");
+  const [nextH,setNextH]=useState("182");
+  const [fiab,setFiab]=useState("99.8");
+  const [techD,setTechD]=useState("0.4");
+  const [aog,setAog]=useState("0");
+
+  const melNum=Number(mel)||0;
+  const nextNum=Number(nextH)||0;
+
+  const submit=()=>{
+    onSubmit({ttaf:Number(ttaf)||0,melCount:melNum,nextCheckH:nextNum,
+      fiabMoteurs:Number(fiab)||0,techDelay:Number(techD)||0,aog:Number(aog)||0,mels:[]});
+  };
+  return (
+    <Card accent="#00936A">
+      <FHeader icon="🔧" title="Maintenance CAMO" subtitle="Rapport hebdomadaire CAMO" color="#00936A"/>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <FSection title="Cellule" color="#00936A"/>
+        <FGrid>
+          <FField label="TTAF (heures)" value={ttaf} onChange={setTtaf} type="number" min={0}/>
+          <FCalc label="Prochain A-Check" value={nextNum+"h"} color={nextNum<50?"#DC2626":nextNum<100?"#D97706":"#00936A"}/>
+        </FGrid>
+        <FSection title="Fiabilite" color="#00936A"/>
+        <FGrid>
+          <FField label="Fiabilite moteurs (%)" value={fiab} onChange={setFiab} type="number" min={0} max={100}/>
+          <FField label="Tech delay (%)" value={techD} onChange={setTechD} type="number" min={0} max={100}/>
+        </FGrid>
+        <FSection title="MEL / AOG" color="#00936A"/>
+        <FGrid>
+          <FField label="MEL actifs" value={mel} onChange={setMel} type="number" min={0}/>
+          <FField label="Prochain check (h)" value={nextH} onChange={setNextH} type="number" min={0}/>
+        </FGrid>
+        <FGrid>
+          <FField label="AOG (jours)" value={aog} onChange={setAog} type="number" min={0}/>
+          <FCalc label="Statut MEL" value={melNum===0?"OK":melNum<=2?"Surveille":"CRITIQUE"} color={melNum===0?"#00936A":melNum<=2?"#D97706":"#DC2626"}/>
+        </FGrid>
+        <FSubmit label="Enregistrer Maintenance" color="#00936A" onClick={submit}/>
+      </div>
+    </Card>
+  );
+}
+
+function FormFin({ onSubmit }) {
+  const MOIS=["Janvier","Fevrier","Mars","Avril","Mai","Juin","Juillet","Aout","Septembre","Octobre","Novembre","Decembre"];
+  const [mois,setMois]=useState("Juin");
+  const [rev,setRev]=useState("");
+  const [cout,setCout]=useState("");
+  const [cCarbu,setCCarbu]=useState("");
+
+  const revN=Number(rev)||0;const coutN=Number(cout)||0;
+  const marge=revN>0?Math.round((1-coutN/revN)*100):null;
+
+  const submit=()=>{
+    if(!rev||!cout){alert("Revenus et couts requis");return;}
+    onSubmit({mois,revenus:revN,couts:coutN,coutCarbu:Number(cCarbu)||0,
+      revenuVol:revN>0?Math.round(revN/35):0,billetMoyen:revN>0?Math.round(revN/(35*18)):0,marge:marge||0});
+  };
+  return (
+    <Card accent="#7C3AED">
+      <FHeader icon="💰" title="Finances" subtitle="Rapport mensuel Comptabilite" color="#7C3AED"/>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <FSelect label="Mois" value={mois} onChange={setMois} options={MOIS.map(m=>({value:m,label:m}))}/>
+        <FSection title="Revenus et couts (MAD)" color="#7C3AED"/>
+        <FGrid>
+          <FField label="Revenus (MAD)" value={rev} onChange={setRev} type="number" min={0} placeholder="1240000"/>
+          <FField label="Couts totaux (MAD)" value={cout} onChange={setCout} type="number" min={0} placeholder="910000"/>
+        </FGrid>
+        <FGrid>
+          <FField label="Cout carburant (MAD)" value={cCarbu} onChange={setCCarbu} type="number" min={0}/>
+          <FCalc label="Marge brute" value={marge!==null?marge+"%":"--"} color={marge!==null?marge>=20?"#00936A":marge>=10?"#D97706":"#DC2626":"#94A3B8"}/>
+        </FGrid>
+        <FSubmit label="Enregistrer Finances" color="#7C3AED" onClick={submit}/>
+      </div>
+    </Card>
+  );
+}
+
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights, crew, setCrew }) {
+  const FORMS=[
+    {id:"vol",  icon:"✈", label:"Vol",      color:"#0F1F3D"},
+    {id:"crew", icon:"👨‍✈️", label:"Equipage", color:"#0369A1"},
+    {id:"maint",icon:"🔧",label:"Maint.",    color:"#00936A"},
+    {id:"fin",  icon:"💰",label:"Finances",  color:"#7C3AED"},
+  ];
+  const [active,setActive]=useState("vol");
+  const [saved,setSaved]=useState(null);
+  const ok=fn=>data=>{fn(data);setSaved("ok");setTimeout(()=>setSaved(null),2500);};
+  const f=FORMS.find(x=>x.id===active);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Card accent="#0F1F3D">
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:44,height:44,borderRadius:10,background:"#0F1F3D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>📝</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:800,fontSize:15,color:C.navy}}>Formulaires de saisie</div>
+            <div style={{fontSize:11,color:C.slate}}>Saisie par departement</div>
+          </div>
+          <button onClick={onReset}
+            style={{background:"#FEE2E2",border:"1.5px solid #DC2626",borderRadius:8,padding:"7px 10px",color:"#DC2626",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            Reset
+          </button>
+        </div>
+      </Card>
+      {saved&&(
+        <div style={{padding:"12px 16px",borderRadius:10,fontSize:13,fontWeight:700,textAlign:"center",background:"#D1FAE5",color:"#00936A",border:"1px solid #00936A"}}>
+          Donnees enregistrees
+        </div>
+      )}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+        {FORMS.map(fm=>(
+          <button key={fm.id} onClick={()=>setActive(fm.id)}
+            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:active===fm.id?fm.color:C.border,background:active===fm.id?fm.color+"15":"white",color:active===fm.id?fm.color:C.slate}}>
+            <div style={{fontSize:16,marginBottom:2}}>{fm.icon}</div>
+            <div>{fm.label}</div>
+          </button>
+        ))}
+      </div>
+      {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew}/>}
+      {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew}/>}
+      {active==="maint" && <FormMaint onSubmit={ok(onSubmitMaint)}/>}
+      {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)}/>}
+    </div>
+  );
+}
+
+// ── Screens ──────────────────────────────────────────────────────────────────
+function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Card>
+        <SectionTitle>Code ICAO24 — CN-KTA</SectionTitle>
+        <div style={{display:"flex",gap:8}}>
+          <input value={icao24} onChange={e=>setIcao24(e.target.value.toLowerCase())}
+            placeholder="020035"
+            style={{flex:1,height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",fontSize:14,color:C.text,outline:"none"}}/>
+          <button onClick={onRefresh} disabled={loading}
+            style={{height:46,padding:"0 16px",background:loading?C.border:C.navy,border:"none",borderRadius:10,color:"white",fontSize:13,fontWeight:700,cursor:loading?"not-allowed":"pointer",WebkitTapHighlightColor:"transparent"}}>
+            {loading?"...":"Rafraichir"}
+          </button>
+        </div>
+        <div style={{fontSize:11,color:C.slate,marginTop:8}}>
+          Code de simulation actuel: 020035 (remplacer avec le vrai code ICAO24 de CN-KTA)
+        </div>
+      </Card>
+      {ac&&ac.lat&&(
+        <Card>
+          <SectionTitle>Position actuelle</SectionTitle>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
+            {[["Altitude",ac.alt_ft?ac.alt_ft.toLocaleString()+" ft":"--",C.navy],
+              ["Vitesse",ac.speed_kt?ac.speed_kt+" kt":"--",C.navy],
+              ["Cap",ac.heading?Math.round(ac.heading)+"":"--",C.navy],
+              ["Statut",ac.onGround?"Sol":"En vol",ac.onGround?C.slate:C.emerald]
+            ].map(([l,v,c])=>(
+              <div key={l} style={{background:C.bg,borderRadius:10,padding:"10px 12px"}}>
+                <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{l}</div>
+                <div style={{fontSize:18,fontWeight:800,color:c}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+      <Card>
+        <SectionTitle>Trafic regional Maroc</SectionTitle>
+        <div style={{fontSize:13,color:C.slate,textAlign:"center",padding:"8px 0"}}>
+          {(moroccoTraffic||[]).length>0?(moroccoTraffic.length+" appareils detectes"):"Aucun trafic detecte"}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ScreenOps({ flights, onUpdateFlight }) {
+  const [edit,setEdit]=useState(null);
+  const sBg=s=>s==="Termine"?C.emeraldL:s==="En vol"?C.goldL:s==="Annule"?C.dangerL:C.bg;
+  const sTx=s=>s==="Termine"?C.emeraldD:s==="En vol"?C.gold:s==="Annule"?C.danger:C.slate;
+  const sIc=s=>s==="Termine"?"✓":s==="En vol"?"✈":s==="Annule"?"✗":"○";
+
+  const calcEdit=ef=>{
+    if(!ef)return{};
+    let delayMin=0;
+    if(ef.arr&&ef.arrReal){
+      const [ph,pm]=ef.arr.split(":").map(Number);
+      const [rh,rm]=ef.arrReal.split(":").map(Number);
+      const diff=(rh*60+rm)-(ph*60+pm);
+      if(diff>15)delayMin=diff;
+    }
+    let consomme=0,consoH=0,fuelPct=ef.fuelPct||0;
+    if(ef.carbDep>0&&ef.carbArr>0){
+      consomme=ef.carbDep-ef.carbArr;
+      fuelPct=Math.round(ef.carbArr/5700*100);
+      if(ef.depReal&&ef.arrReal){
+        const [dh,dm]=ef.depReal.split(":").map(Number);
+        const [ah,am]=ef.arrReal.split(":").map(Number);
+        const h=((ah*60+am)-(dh*60+dm))/60;
+        if(h>0)consoH=Math.round(consomme/h);
+      }
+    }
+    return{delayMin,consomme,consoH,fuelPct,nps:ef.nps||0};
+  };
+
+  const doUpdate=()=>{
+    if(!edit)return;
+    const c=calcEdit(edit);
+    onUpdateFlight({...edit,load:Math.round(edit.pax/18*100),...c});
+    setEdit(null);
+  };
+
+  const enVol=flights.filter(f=>f.status==="En vol");
+  const done=flights.filter(f=>f.status==="Termine");
+  const planned=flights.filter(f=>f.status==="Planifie");
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {edit&&(
+        <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end"}}>
+          <div style={{background:"white",width:"100%",borderRadius:"20px 20px 0 0",padding:"20px 16px 36px",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+              <div>
+                <div style={{fontWeight:800,fontSize:17,color:C.navy}}>{edit.num}</div>
+                <div style={{fontSize:12,color:C.slate}}>{edit.from} vers {edit.to} | {edit.dep} - {edit.arr}</div>
+              </div>
+              <button onClick={()=>setEdit(null)} style={{background:"none",border:"none",fontSize:22,color:C.slate,cursor:"pointer"}}>x</button>
+            </div>
+            <div style={{marginBottom:16}}>
+              <FLabel>Statut</FLabel>
+              <div style={{display:"flex",gap:8}}>
+                {["Planifie","En vol","Termine","Annule"].map(s=>(
+                  <button key={s} onClick={()=>setEdit({...edit,status:s})}
+                    style={{flex:1,padding:"9px 4px",borderRadius:9,border:"1.5px solid",fontSize:10,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:edit.status===s?sTx(s):C.border,background:edit.status===s?sBg(s):"white",color:edit.status===s?sTx(s):C.slate}}>
+                    {sIc(s)} {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {(edit.status==="En vol"||edit.status==="Termine")&&(
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:C.gold,textTransform:"uppercase",marginBottom:8}}>Au decollage</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                  <div>
+                    <FLabel>Decollage reel</FLabel>
+                    <input type="time" value={edit.depReal||""} onChange={e=>setEdit({...edit,depReal:e.target.value})}
+                      style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                  </div>
+                  <div>
+                    <FLabel>PAX reels</FLabel>
+                    <input type="number" min={0} max={18} value={edit.pax}
+                      onChange={e=>setEdit({...edit,pax:Math.min(18,Math.max(0,Number(e.target.value)||0))})}
+                      style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                  </div>
+                </div>
+              </div>
+            )}
+            {edit.status==="Termine"&&(
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:C.emerald,textTransform:"uppercase",marginBottom:8}}>A l atterrissage</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                  <div>
+                    <FLabel>Atterrissage reel</FLabel>
+                    <input type="time" value={edit.arrReal||""} onChange={e=>setEdit({...edit,arrReal:e.target.value})}
+                      style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                  </div>
+                  <div>
+                    <FLabel>Fuel arrivee (kg)</FLabel>
+                    <input type="number" min={0} max={5700} value={edit.carbArr||""} placeholder="ex: 2800"
+                      onChange={e=>setEdit({...edit,carbArr:Math.max(0,Number(e.target.value)||0)})}
+                      style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                  </div>
+                  <div style={{gridColumn:"1 / -1"}}>
+                    <FLabel>NPS passagers (0-100)</FLabel>
+                    <input type="number" min={0} max={100} value={edit.nps||""} placeholder="ex: 72"
+                      onChange={e=>setEdit({...edit,nps:Math.min(100,Math.max(0,Number(e.target.value)||0))})}
+                      style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                  </div>
+                </div>
+                {edit.carbDep>0&&edit.carbArr>0&&(()=>{
+                  const c=calcEdit(edit);
+                  return (
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                      <div style={{background:"#D1FAE5",borderRadius:9,padding:"8px",textAlign:"center",border:"1px solid #00936A"}}>
+                        <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Consomme</div>
+                        <div style={{fontSize:15,fontWeight:800,color:"#00936A"}}>{c.consomme} kg</div>
+                      </div>
+                      <div style={{background:C.bg,borderRadius:9,padding:"8px",textAlign:"center"}}>
+                        <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Conso/h</div>
+                        <div style={{fontSize:15,fontWeight:800,color:C.navy}}>{c.consoH||"--"} kg</div>
+                      </div>
+                      <div style={{background:c.delayMin>15?"#FEF3C7":"#D1FAE5",borderRadius:9,padding:"8px",textAlign:"center",border:"1px solid "+(c.delayMin>15?"#D97706":"#00936A")}}>
+                        <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Retard</div>
+                        <div style={{fontSize:15,fontWeight:800,color:c.delayMin>15?"#D97706":"#00936A"}}>{c.delayMin>0?c.delayMin+" min":"OK"}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setEdit(null)} style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Annuler</button>
+              <button onClick={doUpdate} style={{flex:2,height:48,background:C.navy,border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+        {[["○",planned.length,"Planifies",C.slate],["✈",enVol.length,"En vol",C.gold],["✓",done.length,"Termines",C.emerald],["👥",flights.reduce((s,f)=>s+f.pax,0),"PAX",C.navy]].map(([ic,v,l,c])=>(
+          <div key={l} style={{background:"white",borderRadius:10,border:"1px solid "+C.border,textAlign:"center",padding:"10px 4px"}}>
+            <div style={{fontSize:16}}>{ic}</div>
+            <div style={{fontSize:20,fontWeight:800,color:c}}>{v}</div>
+            <div style={{fontSize:8,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>{l}</div>
+          </div>
+        ))}
+      </div>
+      {enVol.length>0&&(
+        <div style={{background:"linear-gradient(135deg,#0F1F3D,#1D3461)",borderRadius:12,padding:"14px 16px"}}>
+          <div style={{color:C.gold,fontSize:10,fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Vol en cours</div>
+          <div style={{color:"white",fontWeight:800,fontSize:15}}>{enVol[0].num} — {enVol[0].from} vers {enVol[0].to}</div>
+          <div style={{color:"#94A3B8",fontSize:11,marginTop:3}}>{enVol[0].dep} - {enVol[0].arr} · {enVol[0].pax} pax</div>
+          <button onClick={()=>setEdit({...enVol[0]})}
+            style={{marginTop:10,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,padding:"8px 16px",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            Mettre a jour
+          </button>
+        </div>
+      )}
+      <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,overflow:"hidden"}}>
+        <div style={{padding:"9px 14px",background:C.bg,borderBottom:"1px solid "+C.border,fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase"}}>
+          Rotations — appuyez pour modifier
+        </div>
+        {flights.length===0&&<div style={{padding:20,textAlign:"center",color:C.slateL,fontSize:13}}>Aucun vol planifie</div>}
+        {flights.map((f,i)=>(
+          <div key={i} onClick={()=>setEdit({...f})}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<flights.length-1?"1px solid "+C.border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            <div style={{width:34,height:34,borderRadius:9,background:sBg(f.status),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontWeight:800,fontSize:14,color:sTx(f.status)}}>{sIc(f.status)}</span>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13,color:C.text}}>{f.num} — {f.from} vers {f.to}</div>
+              <div style={{fontSize:11,color:C.textSub}}>{f.dep} - {f.arr} · {f.pax} pax · {f.load}%</div>
+              {(f.cm1||f.cm2||f.cc)&&<div style={{fontSize:10,color:C.slateL,marginTop:1,fontStyle:"italic"}}>{[f.cm1,f.cm2,f.cc].filter(Boolean).join(" · ")}</div>}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+              <span style={{fontSize:10,fontWeight:700,color:sTx(f.status),background:sBg(f.status),padding:"2px 8px",borderRadius:8}}>{f.status}</span>
+              <span style={{fontSize:10,color:C.slateL}}>✏</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScreenCarte({ flights, ac, moroccoTraffic, icao24 }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Card><SectionTitle>Carte ADS-B — Maroc</SectionTitle><MapMarocSVG ac={ac} moroccoTraffic={moroccoTraffic} icao24={icao24}/></Card>
+    </div>
+  );
+}
+
+function ScreenAlertes({ kpis, flights, dismissed, setDismissed }) {
+  const all=computeAlerts(kpis,flights);
+  const active=all.filter(a=>!dismissed.includes(a.id));
+  const colors={danger:{bg:"#FEE2E2",border:"#DC2626",text:"#DC2626"},warn:{bg:"#FEF3C7",border:"#D97706",text:"#D97706"}};
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:14,textAlign:"center"}}>
+          <div style={{fontSize:28,fontWeight:800,color:active.length>0?C.danger:C.emerald}}>{active.length}</div>
+          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Alertes actives</div>
+        </div>
+        <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:14,textAlign:"center"}}>
+          <div style={{fontSize:28,fontWeight:800,color:C.slate}}>{dismissed.length}</div>
+          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Ignores</div>
+        </div>
+      </div>
+      {active.length===0&&(
+        <div style={{background:"#D1FAE5",border:"1px solid #00936A",borderRadius:12,padding:20,textAlign:"center"}}>
+          <div style={{fontSize:32,marginBottom:8}}>✅</div>
+          <div style={{fontWeight:700,color:"#065F46"}}>Aucune alerte active</div>
+        </div>
+      )}
+      {active.map(a=>{
+        const cl=colors[a.sev]||colors.warn;
+        return (
+          <div key={a.id} style={{background:cl.bg,border:"1.5px solid "+cl.border,borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:24}}>{a.icon}</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:13,color:cl.text}}>{a.msg}</div>
+              <div style={{fontSize:10,color:C.slate,marginTop:2}}>{a.sev==="danger"?"CRITIQUE":"ATTENTION"}</div>
+            </div>
+            <button onClick={()=>setDismissed(d=>[...d,a.id])}
+              style={{background:"none",border:"none",color:cl.text,fontSize:18,cursor:"pointer",padding:4,WebkitTapHighlightColor:"transparent"}}>x</button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ScreenPerf({ kpis, flights }) {
+  const vols=flights.filter(f=>f.status==="Termine"&&f.consoH>0);
+  const consoMoy=vols.length>0?Math.round(vols.reduce((s,f)=>s+f.consoH,0)/vols.length):kpis.consoH||0;
+  const consoLabel=vols.length>0?"Moy. "+vols.length+" vol(s)":"Depuis KPI";
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <KpiTile title="OTP" value={kpis.otp} unit="%" accent={kpis.otp>=90?C.emerald:C.warn} icon="⏰"/>
+        <KpiTile title="Load Factor" value={kpis.loadFactor} unit="%" accent={C.emerald} icon="👥"/>
+        <KpiTile title="Retards" value={kpis.delayMin} unit="min" accent={kpis.delayMin>15?C.warn:C.emerald} icon="⚠"/>
+        {(()=>{
+          const volsNps=flights.filter(f=>f.status==="Termine"&&f.nps>0);
+          const npsVal=volsNps.length>0?Math.round(volsNps.reduce((s,f)=>s+f.nps,0)/volsNps.length):kpis.nps||0;
+          return <KpiTile title="NPS moyen" value={npsVal} unit="/100" accent={npsVal>=70?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"Depuis KPI"}/>;
+        })()}
+      </div>
+      <Card>
+        <SectionTitle>Tendances</SectionTitle>
+        <Bar label="OTP" value={kpis.otp} max={100} unit="%" color={kpis.otp>=90?C.emerald:C.warn} sub="Objectif: 90%"/>
+        <Bar label="Load Factor" value={kpis.loadFactor} max={100} unit="%" color={kpis.loadFactor>=80?C.emerald:C.warn} sub="Objectif: 80%"/>
+        <Bar label="Retards" value={kpis.delayMin} max={60} unit=" min" color={kpis.delayMin<=15?C.emerald:C.danger} sub="Seuil: 15 min"/>
+        <Bar label="Conso. carburant moyenne" value={consoMoy} max={1000} unit=" kg/h" color={consoMoy<900?C.emerald:C.danger} sub={consoLabel+" · Seuil 900 kg/h"}/>
+      </Card>
+    </div>
+  );
+}
+
+function ScreenMaint({ kpis, maintData }) {
+  const md=maintData||{};
+  const mels=md.mels||[];
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
+        <KpiTile title="A-Check dans" value={md.nextCheckH||kpis.nextCheckH||0} unit="h" accent={(md.nextCheckH||kpis.nextCheckH||999)<50?C.danger:C.emerald} icon="🔧"/>
+        <KpiTile title="MEL actifs" value={kpis.melCount} unit="" accent={kpis.melCount>0?C.warn:C.emerald} icon="⚠"/>
+        <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||0} unit="%" accent={(md.fiabMoteurs||0)>=99.5?C.emerald:C.warn} icon="✈"/>
+      </div>
+      {mels.length>0&&(
+        <Card>
+          <SectionTitle>MEL actifs ({mels.length})</SectionTitle>
+          {mels.map((m,i)=>(
+            <div key={i} style={{padding:"8px 0",borderBottom:i<mels.length-1?"1px solid "+C.border:"none",display:"flex",gap:10,alignItems:"center"}}>
+              <span style={{background:"#FEF3C7",color:"#A0720A",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}}>Cat.{m.sev}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,fontWeight:600,color:C.text}}>{m.sys}</div>
+                <div style={{fontSize:10,color:C.slate}}>{m.mel} · Exp: {m.exp}</div>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+      <Card>
+        <SectionTitle>Indicateurs CAMO</SectionTitle>
+        <Bar label="Fiabilite moteurs" value={md.fiabMoteurs||0} max={100} unit="%" color={(md.fiabMoteurs||0)>=99.5?C.emerald:C.warn} sub="Objectif: 99.5%"/>
+        <Bar label="Tech delay" value={md.techDelay||0} max={5} unit="%" color={(md.techDelay||0)<2?C.emerald:C.danger} sub="Seuil: 2%"/>
+      </Card>
+    </div>
+  );
+}
+
+function ScreenFin({ finData }) {
+  const fd=finData||[];
+  const tRev=fd.reduce((s,f)=>s+f.revenus,0);
+  const tCout=fd.reduce((s,f)=>s+f.couts,0);
+  const marge=tRev>0?Math.round((1-tCout/tRev)*100):0;
+  const fmt=n=>Math.round(n/1000)+"K";
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <KpiTile title="Revenus cumul. 2026" value={fmt(tRev)} unit="MAD" accent={C.emerald} icon="💰"/>
+        <KpiTile title="Marge brute" value={marge} unit="%" accent={marge>=20?C.emerald:C.warn} icon="📊"/>
+      </div>
+      {fd.length>0&&(
+        <Card>
+          <SectionTitle>Historique mensuel</SectionTitle>
+          {fd.map((f,i)=>{
+            const m=f.revenus>0?Math.round((1-f.couts/f.revenus)*100):0;
+            return (
+              <div key={i} style={{display:"flex",alignItems:"center",padding:"8px 0",borderBottom:i<fd.length-1?"1px solid "+C.border:"none",gap:10}}>
+                <div style={{fontWeight:600,fontSize:13,color:C.text,minWidth:70}}>{f.mois}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,color:C.slate}}>Rev: {Math.round(f.revenus/1000)}K MAD</div>
+                  <div style={{fontSize:11,color:C.slate}}>Cout: {Math.round(f.couts/1000)}K MAD</div>
+                </div>
+                <div style={{fontWeight:800,fontSize:14,color:m>=20?C.emerald:m>=10?C.warn:C.danger}}>{m}%</div>
+              </div>
+            );
+          })}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Report ───────────────────────────────────────────────────────────────────
+function buildReport(flights, kpis, now, finData, maintData) {
+  const ds=now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
+  const G="#00936A",O="#D97706",N="#0F1F3D";
+  const done=flights.filter(f=>f.status==="Termine").length;
+  const tPax=flights.reduce((s,f)=>s+f.pax,0);
+  const md=maintData||{};
+  const mels=(md.mels||[]);
+  const fd=finData||[];
+  const tRev=fd.reduce((s,f)=>s+f.revenus,0);
+  const tCout=fd.reduce((s,f)=>s+f.couts,0);
+  const marge=tRev>0?Math.round((1-tCout/tRev)*1000)/10:0;
+
+  const row=(v1,l1,c1,v2,l2,c2,v3,l3,c3)=>
+    "<div style='display:grid;grid-template-columns:1fr 1fr 1fr'>"+
+    "<div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c1+"'>"+v1+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l1+"</div></div>"+
+    "<div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c2+"'>"+v2+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l2+"</div></div>"+
+    "<div style='text-align:center;padding:10px 4px'><div style='font-size:20px;font-weight:800;color:"+c3+"'>"+v3+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l3+"</div></div></div>";
+
+  const kpiLine=(l,v,o,ok)=>
+    "<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'>"+
+    "<div style='flex:1;font-size:12px;color:#475569'>"+l+"<div style='font-size:10px;color:#94A3B8'>Objectif: "+o+"</div></div>"+
+    "<div style='font-weight:800;font-size:13px;color:"+N+";padding-right:8px'>"+v+"</div>"+
+    "<span style='background:"+(ok?"#D1FAE5":"#FEF3C7")+";color:"+(ok?"#065F46":"#92400E")+";padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700'>"+(ok?"OK":"Att.")+"</span>"+
+    "</div>";
+
+  const sec=(t,c)=>"<div style='background:"+c+";color:white;padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em'>"+t+"</div>";
+  const card=c=>"<div style='background:white;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;margin:10px 12px'>"+c+"</div>";
+
+  const fRows=flights.map((f,i)=>{
+    const sc=f.status==="Termine"?"#D1FAE5":f.status==="En vol"?"#FEF3C7":"#F1F5F9";
+    const tc=f.status==="Termine"?"#065F46":f.status==="En vol"?"#92400E":"#475569";
+    return "<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'>"+
+      "<div style='font-weight:800;font-size:12px;color:"+N+";min-width:52px'>"+f.num+"</div>"+
+      "<div style='flex:1;font-size:12px'>"+f.from+" - "+f.to+
+        "<div style='font-size:10px;color:#94A3B8'>"+f.dep+" - "+f.arr+"</div></div>"+
+      "<div style='text-align:right'>"+
+        "<div style='font-size:11px'>"+f.pax+" pax</div>"+
+        "<span style='background:"+sc+";color:"+tc+";padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700'>"+f.status+"</span>"+
+      "</div></div>";
+  }).join("");
+
+  const melRows=mels.map(m=>
+    "<div style='padding:6px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center'>"+
+    "<span style='background:#FEF3C7;color:#A0720A;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700'>Cat."+m.sev+"</span>"+
+    "<div style='flex:1;font-size:11px'>"+m.sys+"</div>"+
+    "<div style='font-size:10px;color:#64748B'>"+m.exp+"</div></div>"
+  ).join("");
+
+  const finRows=fd.map((f,i)=>{
+    const m=f.revenus>0?Math.round((1-f.couts/f.revenus)*100):0;
+    return "<div style='display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'>"+
+      "<div style='flex:1;font-size:12px;font-weight:600'>"+f.mois+"</div>"+
+      "<div style='font-size:11px;color:#1E293B'>"+Math.round(f.revenus/1000)+"K MAD</div>"+
+      "<div style='font-size:11px;color:#64748B;min-width:40px;text-align:right'>"+m+"%</div></div>";
+  }).join("");
+
+  return (
+    "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'>"+
+    "<div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px'>"+
+      "<div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div>"+
+      "<div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Journalier</div>"+
+      "<div style='color:#94A3B8;font-size:11px'>EMB 145 CN-KTA · 18 sieges Business · "+ds+"</div>"+
+    "</div>"+
+    card(row(done,"Termines",G,flights.filter(f=>f.status==="En vol").length,"En vol",O,tPax,"PAX total",N))+
+    card(sec("Performance","#0F1F3D")+
+      kpiLine("OTP (ponctualite)",kpis.otp+"%","90%",kpis.otp>=90)+
+      kpiLine("Load Factor",kpis.loadFactor+"%","80%",kpis.loadFactor>=80)+
+      kpiLine("Retards",kpis.delayMin+" min","15 min",kpis.delayMin<=15)+
+      kpiLine("Conso. carburant",(kpis.consoH||"--")+" kg/h","900 kg/h",!kpis.consoH||kpis.consoH<900)+
+      kpiLine("NPS passagers",(kpis.nps||"--"),"70",(kpis.nps||0)>=70)
+    )+
+    card(sec("Operations — "+flights.length+" rotations","#0F1F3D")+fRows)+
+    card(sec("Maintenance CAMO","#00936A")+
+      row((md.ttaf||0)+"h","TTAF",N,(md.nextCheckH||kpis.nextCheckH||0)+"h","A-Check dans",(md.nextCheckH||kpis.nextCheckH||999)<50?"#DC2626":G,kpis.melCount,"MEL actifs",kpis.melCount>0?O:G)+
+      melRows
+    )+
+    (fd.length>0?card(sec("Finances Cumul 2026","#7C3AED")+
+      row(Math.round(tRev/1000)+"K","Revenus (MAD)",G,Math.round(tCout/1000)+"K","Couts (MAD)",N,marge+"%","Marge brute",marge>=20?G:O)+
+      finRows
+    ):"")+
+    "<div style='text-align:center;padding:12px;font-size:9px;color:#94A3B8'>Afrijet Sahara · EMB 145 CN-KTA · DGAC Maroc · Confidentiel</div>"+
+    "</div>"
+  );
+}
+
+// ── App ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [now,setNow]         = useState(new Date());
+  const [tab,setTab]         = usePersist("tab","forms");
+  const [flights,setFlights] = usePersist("flights",INIT_FLIGHTS);
+  const [kpis,setKpis]       = usePersist("kpis",INIT_KPIS);
+  const [maintData,setMaint] = usePersist("maint",INIT_MAINT);
+  const [finData,setFin]     = usePersist("fin",INIT_FIN);
+  const [crew,setCrew]       = usePersist("crew",INIT_CREW);
+  const [dismissed,setDism]  = usePersist("dismissed",[]);
+  const [icao24,setIcao24]   = usePersist("icao24","020035");
+  const [ac,setAc]           = useState(null);
+  const [mTraffic,setMTraff] = useState([]);
+  const [loading,setLoading] = useState(false);
+  const [showReset,setReset] = useState(false);
+  const [report,setReport]   = useState(null);
+  const [saveOk,setSaveOk]   = useState(false);
+
+  useEffect(()=>{const t=setInterval(()=>setNow(new Date()),30000);return()=>clearInterval(t);},[]);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const [st,tr] = await Promise.all([fetchByIcao24(icao24),fetchMorocco()]);
+      if(st){const p=parseState(st);if(p){setAc({...p,simulated:false,alt_ft:p.alt_m?Math.round(p.alt_m*3.281):null,speed_kt:p.speed_ms?Math.round(p.speed_ms*1.944):null});}}
+      else{setAc(simulateFlightState(icao24));}
+      setMTraff(tr);
+    } catch(_e){setAc(simulateFlightState(icao24));}
+    setLoading(false);
+  };
+
+  useEffect(()=>{refresh();},[]);
+
+  const doSave = async () => {
+    if(window.storage){
+      const data={flights,kpis,maintData,finData,dismissed,icao24};
+      await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
+    }
+    setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
+  };
+
+  const doReset = async () => {
+    clearStorage();
+    setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);
+    setDism([]);setReport(null);setReset(false);setTab("forms");
+  };
+
+  const allAlerts  = computeAlerts(kpis,flights);
+  const critCount  = allAlerts.filter(a=>!dismissed.includes(a.id)).length;
+  const timeStr    = now.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+
+  const TABS=[
+    {id:"forms",icon:"📝",label:"Formulaires"},
+    {id:"live", icon:"📡",label:"Live"},
+    {id:"carte",icon:"🗺",label:"Carte"},
+    {id:"alertes",icon:"🔔",label:"Alertes"},
+    {id:"ops",  icon:"✈", label:"Ops."},
+    {id:"perf", icon:"📊",label:"Perf."},
+    {id:"maint",icon:"🔧",label:"Maint."},
+    {id:"fin",  icon:"💰",label:"Finances"},
+  ];
+
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"Inter,-apple-system,system-ui,sans-serif",display:"flex",flexDirection:"column",position:"relative"}}>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0;}@keyframes dot-pulse{0%,100%{opacity:1}50%{opacity:.5}}input,select,button{-webkit-tap-highlight-color:transparent;font-family:inherit;}::-webkit-scrollbar{display:none;}`}</style>
+
+      {/* TOP BAR */}
+      <div style={{background:C.white,borderBottom:"1px solid "+C.border,padding:"0 12px",height:TOP,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 6px rgba(0,0,0,.06)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+          <div style={{width:34,height:34,borderRadius:9,flexShrink:0,background:"linear-gradient(135deg,#A0720A,#00936A)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <PlaneIcon size={20} color="#FFFFFF" heading={ac?ac.heading||0:0}/>
+          </div>
+          <div style={{minWidth:0}}>
+            <div style={{fontWeight:800,fontSize:13,color:C.navy,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>AFRIJET SAHARA</div>
+            <div style={{fontSize:9,color:C.gold,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em"}}>EMB 145 · CN-KTA</div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <div style={{width:7,height:7,borderRadius:"50%",background:ac&&!ac.simulated?C.emerald:ac?C.warn:C.border,flexShrink:0}}/>
+            <span style={{fontSize:11,color:C.slate,fontWeight:600}}>{ac&&!ac.simulated?"LIVE":"SIM"}</span>
+          </div>
+          <span style={{fontSize:12,fontWeight:700,color:C.navy}}>{timeStr}</span>
+          <button onClick={doSave}
+            style={{width:36,height:36,background:saveOk?C.emerald:C.navy,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
+            {saveOk?"✓":"💾"}
+          </button>
+          <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData))}
+            style={{width:36,height:36,background:C.emerald,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
+            ⬇
+          </button>
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
+        {tab==="forms"   && <ScreenForms onSubmitVol={d=>{setFlights(f=>[...f,d]);}} onSubmitMaint={setMaint} onSubmitFin={d=>setFin(f=>[...f,d])} onReset={()=>setReset(true)} flights={flights} crew={crew} setCrew={setCrew}/>}
+        {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading}/>}
+        {tab==="carte"   && <ScreenCarte flights={flights} ac={ac} moroccoTraffic={mTraffic} icao24={icao24}/>}
+        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism}/>}
+        {tab==="ops"     && <ScreenOps flights={flights} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
+        {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights}/>}
+        {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData}/>}
+        {tab==="fin"     && <ScreenFin finData={finData}/>}
+      </div>
+
+      {/* RESET MODAL */}
+      {showReset&&(
+        <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
+            <div style={{fontSize:32,textAlign:"center",marginBottom:12}}>🗑</div>
+            <div style={{fontWeight:800,fontSize:16,color:C.navy,textAlign:"center",marginBottom:8}}>Reinitialiser l application</div>
+            <div style={{fontSize:13,color:C.slate,textAlign:"center",lineHeight:1.6,marginBottom:20}}>Toutes les donnees demo seront effacees. Vous pourrez saisir vos vraies donnees.</div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setReset(false)}
+                style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                Annuler
+              </button>
+              <button onClick={doReset}
+                style={{flex:1,height:48,background:"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                Reinitialiser
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RAPPORT MODAL */}
+      {report&&(
+        <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",flexDirection:"column",background:"#0F1F3D"}}>
+          <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"2px solid #A0720A"}}>
+            <div>
+              <div style={{color:"white",fontWeight:800,fontSize:14}}>Rapport KPI</div>
+              <div style={{color:"#A0720A",fontSize:10}}>Afrijet Sahara · EMB 145 CN-KTA</div>
+            </div>
+            <button onClick={()=>setReport(null)}
+              style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"8px 16px",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              Fermer
+            </button>
+          </div>
+          <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+            <div dangerouslySetInnerHTML={{__html:report}}/>
+          </div>
+        </div>
+      )}
+
+      {/* BOTTOM NAV */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",height:BOT,background:C.white,borderTop:"1px solid "+C.border,display:"flex",alignItems:"stretch",boxShadow:"0 -2px 12px rgba(0,0,0,.08)",zIndex:200}}>
+        {TABS.map(t=>{
+          const active=tab===t.id;
+          const badge=t.id==="alertes"&&critCount>0?critCount:null;
+          return (
+            <button key={t.id} onClick={()=>setTab(t.id)}
+              style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:"6px 2px",position:"relative",WebkitTapHighlightColor:"transparent",borderTop:active?"2.5px solid "+C.gold:"2.5px solid transparent"}}>
+              <span style={{fontSize:17,lineHeight:1}}>{t.icon}</span>
+              <span style={{fontSize:8,fontWeight:active?700:500,color:active?C.gold:C.slate}}>{t.label}</span>
+              {badge&&(
+                <div style={{position:"absolute",top:4,right:"50%",transform:"translateX(10px)",background:C.danger,color:"white",borderRadius:10,minWidth:16,height:16,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>
+                  {badge}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(App));
+  </script>
+</body>
+</html>
