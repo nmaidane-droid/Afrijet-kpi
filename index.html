@@ -2121,47 +2121,43 @@ function App() {
 
                 // ── Graphiques evolution ──
                 if(days.length>=2){
-                  if(y>200){doc.addPage();y=20;}
-                  drawSection("  GRAPHIQUES D EVOLUTION (14 derniers jours)",15,31,61);
+                  drawSection("  GRAPHIQUES D EVOLUTION",15,31,61);
+                  y+=2;
 
                   const drawChart=(chartData,title,color,target,minV,maxV,unitLabel)=>{
-                    if(y>230){doc.addPage();y=20;}
+                    if(y>255){doc.addPage();y=15;}
                     const pts=chartData.filter(d=>d.val!==null);
                     if(pts.length<2)return;
-                    const cX=M, cY=y, cW2=CW, cH2=28;
+                    const cX=M, cY=y, cW2=CW, cH2=22;
                     const lo=minV!==undefined?minV:Math.max(0,Math.min(...pts.map(p=>p.val))-5);
                     const hi=maxV!==undefined?maxV:Math.max(...pts.map(p=>p.val))+5;
                     const range=hi-lo||1;
                     const xS=i=>cX+(i/(pts.length-1))*cW2;
                     const yS=v=>cY+cH2-((v-lo)/range)*cH2;
 
-                    // Chart title with average
                     const avgVal=Math.round(pts.reduce((s,p)=>s+p.val,0)/pts.length);
                     doc.setTextColor(71,85,105);
-                    doc.setFontSize(7.5);
+                    doc.setFontSize(7);
                     doc.setFont("helvetica","bold");
-                    doc.text(title,cX,cY-2);
+                    doc.text(title,cX,cY-1);
                     const r=color[0],g=color[1],b=color[2];
                     doc.setTextColor(r,g,b);
-                    doc.text("Moy: "+String(avgVal)+unitLabel,cX+CW,cY-2,"right");
+                    doc.text("Moy: "+String(avgVal)+unitLabel,cX+CW,cY-1,"right");
 
-                    // Background
                     doc.setFillColor(248,250,252);
                     doc.roundedRect(cX,cY,cW2,cH2,1,1,"F");
 
-                    // Grid
                     doc.setDrawColor(226,232,240);
                     doc.setLineWidth(0.2);
                     [0,0.5,1].forEach(t=>{
                       const yy=cY+cH2*t;
                       doc.line(cX,yy,cX+cW2,yy);
                       doc.setTextColor(148,163,184);
-                      doc.setFontSize(6);
+                      doc.setFontSize(5.5);
                       doc.setFont("helvetica","normal");
                       doc.text(String(Math.round(hi-t*(hi-lo))),cX-1,yy+1,"right");
                     });
 
-                    // Target line
                     if(target!==undefined){
                       const ty2=yS(Math.min(hi,Math.max(lo,target)));
                       doc.setDrawColor(r,g,b);
@@ -2171,52 +2167,29 @@ function App() {
                       doc.setLineDashPattern([],0);
                     }
 
-                    // Line
                     doc.setDrawColor(r,g,b);
                     doc.setLineWidth(1.2);
                     for(let i=1;i<pts.length;i++){
                       doc.line(xS(i-1),yS(pts[i-1].val),xS(i),yS(pts[i].val));
                     }
-
-                    // Points
                     pts.forEach((p,i)=>{
                       doc.setFillColor(r,g,b);
-                      doc.circle(xS(i),yS(p.val),0.8,"F");
+                      doc.circle(xS(i),yS(p.val),0.7,"F");
                     });
-
-                    // X labels
                     pts.forEach((p,i)=>{
                       if(pts.length<=7||i===0||i===pts.length-1||i%Math.ceil(pts.length/5)===0){
                         doc.setTextColor(148,163,184);
-                        doc.setFontSize(5.5);
+                        doc.setFontSize(5);
                         doc.setFont("helvetica","normal");
-                        doc.text(p.label,xS(i),cY+cH2+4,"center");
+                        doc.text(p.label,xS(i),cY+cH2+3.5,"center");
                       }
                     });
-                    y+=cH2+10;
+                    y+=cH2+9;
                   };
 
-                  drawChart(otpData,"Ponctualite OTP",[0,147,106],90,60,100,"%");
-                  drawChart(lfData,"Load Factor",[15,31,61],80,50,100,"%");
-                  drawChart(consoData,"Consommation carburant moyenne",[160,114,10],900,600,1100," kg/h");
+                  drawChart(otpData,"Ponctualite OTP",[0,147,106],90,60,100,"%");                  drawChart(lfData,"Load Factor",[15,31,61],80,50,100,"%");
+                  drawChart(consoData,"Consommation carburant",[160,114,10],900,600,1100," kg/h");
                   drawChart(npsData2,"NPS passagers",[124,58,237],70,40,100,"%");
-                  y+=4;
-                }
-
-                // ── Footer ──
-                const totalPages=doc.internal.getNumberOfPages();
-                for(let p=1;p<=totalPages;p++){
-                  doc.setPage(p);
-                  doc.setFillColor(15,31,61);
-                  doc.rect(0,PH-12,PW,12,"F");
-                  doc.setFillColor(160,114,10);
-                  doc.rect(0,PH-13,PW,1,"F");
-                  doc.setTextColor(148,163,184);
-                  doc.setFontSize(7);
-                  doc.setFont("helvetica","normal");
-                  doc.text("AFRIJET SAHARA  |  EMB 145 CN-KTA  |  DGAC MAROC  |  CONFIDENTIEL",PW/2,PH-6,"center");
-                  doc.setTextColor(160,114,10);
-                  doc.text("Page "+p+"/"+totalPages,PW-M,PH-6,"right");
                 }
 
                 // ── Footer on all pages ──
