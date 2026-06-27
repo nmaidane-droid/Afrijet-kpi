@@ -445,189 +445,138 @@ const AIRPORTS_DATA = [
 
 
 function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
-  const W=360,H=280;
-  const [zoom,setZ] = useState(1);
-  const [pan,setP]  = useState({x:0,y:0});
-  const [drag,setD] = useState(false);
-  const [ds,setDS]  = useState(null);
-  const MZ=6;
-  const cl=(x,y,z)=>{const m=(W*z-W)/2,n=(H*z-H)/2;return{x:Math.max(-m,Math.min(m,x)),y:Math.max(-n,Math.min(n,y))};};
-  const zI=()=>setZ(z=>{const n=Math.min(z+.5,MZ);setP(p=>cl(p.x,p.y,n));return n;});
-  const zO=()=>setZ(z=>{const n=Math.max(z-.5,1);if(n===1)setP({x:0,y:0});else setP(p=>cl(p.x,p.y,n));return n;});
-  const ap=ac&&ac.lat?geoToSvg(ac.lat,ac.lon,W,H):null;
-  const cA=()=>{if(!ap)return;const n=Math.min(zoom+1,MZ);setP(cl((W/2-ap.x)*(n-1),(H/2-ap.y)*(n-1),n));setZ(n);};
-  const onPD=e=>{e.preventDefault();setD(true);setDS({x:e.clientX-pan.x,y:e.clientY-pan.y});};
-  const onPM=e=>{if(!drag||!ds)return;setP(cl(e.clientX-ds.x,e.clientY-ds.y,zoom));};
-  const onPU=()=>{setD(false);setDS(null);};
-  const onW=e=>{e.preventDefault();const d=e.deltaY>0?-.25:.25;setZ(z=>{const n=Math.max(1,Math.min(MZ,z+d));if(n===1)setP({x:0,y:0});else setP(p=>cl(p.x,p.y,n));return n;});};
-  const tr=(moroccoTraffic||[]).map(s=>{
-    if(!s||s[6]==null||s[5]==null)return null;
-    const lt=s[6],ln=s[5];
-    if(lt<27.5||lt>36.1||ln<-13.5||ln>-0.8)return null;
-    if(s[0]===(icao24||"").toLowerCase())return null;
-    return{...geoToSvg(lt,ln,W,H),h:s[10]||0};
-  }).filter(Boolean);
-  const z=zoom;
+  const mapDiv  = useRef(null);
+  const mapRef  = useRef(null);
+  const markRef = useRef(null);
+  const popRef  = useRef(null);
+  const [status, setStatus] = useState("loading");
+
+  const TOKEN = "pk.eyJ1Ijoibm1haWRhbmUiLCJhIjoiY21xd2dwZm9lMTNicjJzcjQ0Z2thNmJtdiJ9.x1S5ogXqsfjCbgmm9-9vtQ";
+
+  const AIRPORTS = [
+    {code:"CMN",lat:33.368,lon:-7.590,name:"Casablanca Mohammed V"},
+    {code:"AGA",lat:30.325,lon:-9.413,name:"Agadir Al Massira"},
+    {code:"RAK",lat:31.607,lon:-8.036,name:"Marrakech Menara"},
+    {code:"FEZ",lat:33.927,lon:-4.978,name:"Fes Saiss"},
+    {code:"TNG",lat:35.727,lon:-5.916,name:"Tanger Ibn Batouta"},
+    {code:"OUD",lat:34.787,lon:-1.924,name:"Oujda Angads"},
+    {code:"RBA",lat:34.051,lon:-6.752,name:"Rabat Sale"},
+    {code:"NDR",lat:34.988,lon:-3.028,name:"Nador El Aroui"},
+    {code:"EUN",lat:27.151,lon:-13.219,name:"Laayoune Hassan I"},
+    {code:"VIL",lat:23.718,lon:-15.932,name:"Dakhla"},
+    {code:"GLN",lat:28.982,lon:-10.057,name:"Guelmim"},
+    {code:"ERH",lat:31.975,lon:-4.398,name:"Er Rachidia"},
+  ];
+
+  useEffect(() => {
+    // Load Mapbox CSS
+    if (!document.getElementById("mb-css")) {
+      const link = document.createElement("link");
+      link.id   = "mb-css";
+      link.rel  = "stylesheet";
+      link.href = "https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css";
+      document.head.appendChild(link);
+    }
+    // Load Mapbox JS
+    const initMap = () => {
+      if (!mapDiv.current || mapRef.current) return;
+      try {
+        window.mapboxgl.accessToken = TOKEN;
+        const map = new window.mapboxgl.Map({
+          container: mapDiv.current,
+          style: "mapbox://styles/mapbox/streets-v12",
+          center: [-6.0, 32.0],
+          zoom: 5.2,
+          attributionControl: false,
+        });
+        map.addControl(new window.mapboxgl.NavigationControl(), "top-right");
+        map.addControl(new window.mapboxgl.AttributionControl({compact:true}));
+        map.on("load", () => {
+          setStatus("ready");
+          // Add airports
+          AIRPORTS.forEach(a => {
+            const el = document.createElement("div");
+            el.style.cssText = "background:#0F1F3D;color:white;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;font-family:Arial;border:1.5px solid #A0720A;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:pointer;white-space:nowrap";
+            el.textContent = a.code;
+            new window.mapboxgl.Marker({element:el})
+              .setLngLat([a.lon, a.lat])
+              .setPopup(new window.mapboxgl.Popup({offset:12}).setHTML("<b>"+a.code+"</b><br>"+a.name))
+              .addTo(map);
+          });
+        });
+        map.on("error", () => setStatus("error"));
+        mapRef.current = map;
+      } catch(e) { setStatus("error"); }
+    };
+
+    if (window.mapboxgl) { initMap(); }
+    else {
+      const s = document.createElement("script");
+      s.src = "https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js";
+      s.onload  = initMap;
+      s.onerror = () => setStatus("error");
+      document.head.appendChild(s);
+    }
+    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
+  }, []);
+
+  // Update CN-KTA marker
+  useEffect(() => {
+    if (!mapRef.current || !window.mapboxgl || !ac?.lat) return;
+    const color = ac.simulated ? "#A0720A" : "#00936A";
+    const el = document.createElement("div");
+    el.style.cssText = "font-size:26px;color:"+color+";filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));transform:rotate("+(ac.heading||0)+"deg);line-height:1;cursor:pointer";
+    el.textContent = "✈";
+    const popup = new window.mapboxgl.Popup({offset:20}).setHTML(
+      "<div style='font-family:Arial;padding:4px'><b style='font-size:13px'>CN-KTA</b><br><span style='color:#64748B;font-size:11px'>"+(ac.simulated?"Simulation":"ADS-B Live")+"</span><br><hr style='margin:4px 0;border-color:#EEF2F8'><span style='font-size:11px'>Alt: <b>"+(ac.alt_ft?ac.alt_ft.toLocaleString():"--")+" ft</b><br>Vitesse: <b>"+(ac.speed_kt||"--")+" kt</b><br>Cap: <b>"+Math.round(ac.heading||0)+"</b></span></div>"
+    );
+    if (markRef.current) markRef.current.remove();
+    markRef.current = new window.mapboxgl.Marker({element:el})
+      .setLngLat([ac.lon, ac.lat])
+      .setPopup(popup)
+      .addTo(mapRef.current);
+  }, [ac]);
+
   return (
-    <div style={{borderRadius:12,overflow:"hidden",border:"1px solid "+C.border,position:"relative",userSelect:"none"}}>
-      <div style={{overflow:"hidden",cursor:drag?"grabbing":z>1?"grab":"default",touchAction:"none"}}
-        onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerLeave={onPU} onWheel={onW}>
-        <svg viewBox={"0 0 "+W+" "+H} width="100%"
-          style={{display:"block",transform:"scale("+z+") translate("+pan.x/z+"px,"+pan.y/z+"px)",transformOrigin:"center center",transition:drag?"none":"transform 0.2s"}}>
-          <rect width={W} height={H} fill="#5B9EC9"/>
-          <path d="M 214.8,11.1 L 360,0 L 360,45 L 298.5,34.3 L 278.3,23.0 L 260.3,30.5 L 250.8,8.3 L 230.8,5.6 Z" fill="#6EB5D8"/>
-          <path d={MOROCCO_PATH} fill="#C5D49A" stroke="#4A7A30" strokeWidth={1.3/z} strokeLinejoin="round"/>
-          <path d="M 113.1,125.3 Q 150,112 185,115 Q 222,108 258,122 Q 244,136 210,132 Q 172,130 138,136 Z" fill="#9A7850" fillOpacity={0.4}/>
-          {[28,30,32,34].map(lt=>{
-            const a=geoToSvg(lt,-13.5,W,H),b=geoToSvg(lt,-0.8,W,H);
-            return <g key={lt}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="white" strokeOpacity={0.3} strokeWidth={0.5/z} strokeDasharray="3,6"/></g>;
-          })}
-          {AIRPORTS_DATA.map(({code,lat,lon,type})=>{
-            if(type!=="intl"&&z<2)return null;
-            const p=geoToSvg(lat,lon,W,H),s=Math.max(.6,1/z);
-            return (
-              <g key={code} transform={"translate("+p.x+","+p.y+")"}>
-                {type==="intl"
-                  ?<rect x={-4*s} y={-4*s} width={8*s} height={8*s} rx={1.5*s} fill="white" stroke="#2E5A18" strokeWidth={s}/>
-                  :<circle r={3*s} fill="#C5D49A" stroke="#2E5A18" strokeWidth={s}/>}
-                <text y={-7*s} textAnchor="middle" fontSize={8*s} fill="#0F1F3D" fontWeight="700" stroke="white" strokeWidth={2.5*s} paintOrder="stroke">{code}</text>
-              </g>
-            );
-          })}
-          {tr.map((t,i)=><polygon key={i} points="0,-4 2.5,3.5 0,2 -2.5,3.5" fill="#1E3A5F" opacity={0.55} transform={"translate("+t.x+","+t.y+") rotate("+t.h+")"}/>)}
-          {ap&&(
-            <g transform={"translate("+ap.x+","+ap.y+")"}>
-              <circle r={18/z} fill="none" stroke={ac.simulated?"#C9A84C":"#00A86B"} strokeWidth={1.5/z} opacity={0.4}/>
-              <polygon points={"0,"+(-11/z)+" "+(6/z)+","+(9/z)+" 0,"+(6/z)+" "+(-6/z)+","+(9/z)} fill={ac.simulated?"#A0720A":"#007A4D"} stroke="white" strokeWidth={2/z} transform={"rotate("+(ac.heading||0)+")"} style={{filter:"drop-shadow(0 1px 3px rgba(0,0,0,.4))"}}/>
-              <text y={26/z} textAnchor="middle" fontSize={9/z} fontWeight="700" fill={ac.simulated?"#7A5000":"#005A35"} stroke="white" strokeWidth={3/z} paintOrder="stroke">CN-KTA</text>
-            </g>
-          )}
-          {!ap&&<text x={W/2} y={H/2} textAnchor="middle" fontSize={11} fill="#475569">En attente ADS-B...</text>}
-          <g transform={"translate("+(W-18)+",18) scale("+(1/z)+")"}>
-            <circle r={10} fill="white" fillOpacity={0.85}/>
-            <text textAnchor="middle" y={-1} fontSize={7} fill="#0F1F3D" fontWeight="800">N</text>
-            <polygon points="0,-7 1.5,-2 -1.5,-2" fill="#0F1F3D"/>
-          </g>
-        </svg>
-      </div>
-      <div style={{position:"absolute",right:10,top:10,display:"flex",flexDirection:"column",gap:4,zIndex:10}}>
-        <button onClick={zI} style={{width:36,height:36,background:"white",border:"1px solid "+C.border,borderRadius:8,fontSize:20,fontWeight:"700",cursor:"pointer",color:C.navy,WebkitTapHighlightColor:"transparent",opacity:z>=MZ?.4:1}}>+</button>
-        <button onClick={zO} style={{width:36,height:36,background:"white",border:"1px solid "+C.border,borderRadius:8,fontSize:20,fontWeight:"700",cursor:"pointer",color:C.navy,WebkitTapHighlightColor:"transparent",opacity:z<=1?.4:1}}>-</button>
-        {ap&&<button onClick={cA} style={{width:36,height:36,background:C.gold,border:"none",borderRadius:8,fontSize:14,cursor:"pointer",color:"white",WebkitTapHighlightColor:"transparent"}}>&#x2708;</button>}
-      </div>
-      {ac&&ac.lat&&(
-        <div style={{padding:"8px 14px",background:"white",borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,background:ac.simulated?"linear-gradient(135deg,#A0720A,#C9A84C)":"linear-gradient(135deg,#007A4D,#00A86B)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"white",transform:"rotate("+(ac.heading||0)+"deg)",transition:"transform 1s"}}>&#x2708;</div>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:12,color:C.navy}}>CN-KTA {ac.simulated?"SIM":"LIVE"}</div>
-            <div style={{fontSize:10,color:C.slate}}>{ac.lat.toFixed(3)}N {Math.abs(ac.lon).toFixed(3)}W {ac.alt_ft?("\u00B7 "+ac.alt_ft.toLocaleString()+" ft"):""}  {ac.speed_kt?("\u00B7 "+ac.speed_kt+" kt"):""}</div>
+    <div style={{borderRadius:12,overflow:"hidden",border:"1px solid "+C.border,position:"relative"}}>
+      {status==="loading" && (
+        <div style={{height:360,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#EBF0F8",gap:10}}>
+          <div style={{fontSize:28}}>🗺</div>
+          <div style={{color:C.slate,fontSize:13,fontWeight:600}}>Chargement Mapbox...</div>
+        </div>
+      )}
+      {status==="error" && (
+        <div style={{height:360,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#F4F7FB",gap:10}}>
+          <div style={{fontSize:32}}>🌐</div>
+          <div style={{fontWeight:700,color:C.navy,fontSize:14}}>Connexion requise</div>
+          <div style={{color:C.slate,fontSize:12,textAlign:"center",padding:"0 24px",lineHeight:1.6}}>
+            Mapbox necessite une connexion internet.
           </div>
-          <div style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:ac.simulated?"#FEF3C7":"#D1FAE5",color:ac.simulated?"#A0720A":"#007A4D"}}>{ac.simulated?"SIM":"LIVE"}</div>
+        </div>
+      )}
+      <div ref={mapDiv} style={{height:380,width:"100%",display:status==="error"?"none":"block"}}/>
+      {ac?.lat && (
+        <div style={{padding:"8px 14px",background:"white",borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,
+            background:ac.simulated?"linear-gradient(135deg,#A0720A,#C9A84C)":"linear-gradient(135deg,#007A4D,#00A86B)",
+            display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"white",
+            transform:"rotate("+(ac.heading||0)+"deg)",transition:"transform 1s ease"}}>&#x2708;</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:12,color:C.navy}}>CN-KTA — {ac.simulated?"Simulation":"ADS-B Live"}</div>
+            <div style={{fontSize:10,color:C.slate}}>{ac.lat.toFixed(4)}N {Math.abs(ac.lon).toFixed(4)}W {ac.alt_ft?(" · "+ac.alt_ft.toLocaleString()+" ft"):""} {ac.speed_kt?(" · "+ac.speed_kt+" kt"):""} {ac.heading?(" · Cap "+Math.round(ac.heading)):""}</div>
+          </div>
+          <div style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,
+            background:ac.simulated?"#FEF3C7":"#D1FAE5",
+            color:ac.simulated?"#A0720A":"#007A4D"}}>
+            {ac.simulated?"SIM":"LIVE"}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function simulateFlightState(icao24) {
-  const now       = Date.now();
-  const seed      = Math.sin(now / 8000);   // slow oscillation
-  const seed2     = Math.cos(now / 6000);
-  const seed3     = Math.sin(now / 4000);
 
-  // Progress 0->1 on a 55-min loop
-  const elapsed   = (now % (55 * 60 * 1000)) / (55 * 60 * 1000);
-
-  // Interpolate lat/lon along CMN->FEZ great circle
-  const lat = 33.3675 + (33.9273 - 33.3675) * elapsed;
-  const lon = -7.5900 + (-4.9778 - (-7.5900)) * elapsed;
-
-  // Realistic EMB 145 cruise: FL280, 440-460 kt
-  const cruiseAlt  = 8534;  // meters ~ FL280
-  // Climb/cruise/descend profile
-  let altM;
-  if (elapsed < 0.15)       altM = cruiseAlt * (elapsed / 0.15);
-  else if (elapsed > 0.85)  altM = cruiseAlt * ((1 - elapsed) / 0.15);
-  else                      altM = cruiseAlt + seed * 80;
-
-  const speed_ms   = 225 + seed2 * 8;          // ~440-460 kt in m/s
-  const heading    = 72 + seed3 * 3;            // ENE toward FEZ, slight wobble
-  const vertRate   = elapsed < 0.15 ? 8.5
-                   : elapsed > 0.85 ? -7.2
-                   : seed * 0.5;
-
-  return {
-    icao24:      icao24 || "020035",
-    callsign:    "AJS03",
-    country:     "Morocco",
-    lat,
-    lon,
-    onGround:    false,
-    heading,
-    vertRate_ms: vertRate,
-    squawk:      "2341",
-    lastContact: Math.floor(now / 1000),
-    speed_kt:    Math.round(speed_ms * 1.94384),
-    alt_ft:      Math.round(altM * 3.28084),
-    flightLevel: Math.round(altM * 3.28084 / 100),
-    simulated:   true,
-  };
-}
-
-// Generate ~12 simulated Morocco traffic blips
-function simulateMoroccoTraffic() {
-  const t = Date.now();
-  return Array.from({ length: 12 }, (_, i) => {
-    const angle = (t / 20000 + i * 0.52) % (Math.PI * 2);
-    const lat   = 31.5 + Math.sin(angle + i) * 3.2;
-    const lon   = -6.5 + Math.cos(angle + i * 0.7) * 5.1;
-    return [
-      `02${(1000 + i * 37).toString(16).slice(-4)}`,
-      `RAM${100 + i * 7}`,
-      "Morocco",
-      Math.floor(t/1000), Math.floor(t/1000),
-      lon, lat, 8000 + i * 200,
-      false,
-      220 + i * 5, (angle * 57.3) % 360, 0,
-      null, 8100 + i * 200, "2100", false, 0
-    ];
-  });
-}
-
-// Try real OpenSky first, fall back to simulation
-async function fetchByIcao24(icao24) {
-  try {
-    const r = await Promise.race([
-      fetch(`https://opensky-network.org/api/states/all?icao24=${icao24.toLowerCase()}`),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
-    ]);
-    if (r.ok) {
-      const j = await r.json();
-      if (j.states?.[0]) return j.states[0];
-    }
-  } catch(_e) {}
-  // Fallback: simulation
-  return null; // signal to use simulation in fetchOpenSky
-}
-
-async function fetchMorocco() {
-  try {
-    const r = await Promise.race([
-      fetch("https://opensky-network.org/api/states/all?lamin=27.7&lomin=-13.2&lamax=35.9&lomax=-0.9"),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
-    ]);
-    if (r.ok) {
-      const j = await r.json();
-      return j.states ?? [];
-    }
-  } catch(_e) {}
-  return simulateMoroccoTraffic();
-}
-
-function parseState(s) {
-  if(!s)return null;
-  return {icao24:s[0],callsign:(s[1]||"").trim(),country:s[2],lon:s[5],lat:s[6],alt_m:s[7],onGround:s[8],speed_ms:s[9],heading:s[10],alt_m_geo:s[13]};
-}
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
 function computeAlerts(kpis, flights) {
