@@ -1719,6 +1719,20 @@ function App() {
               if(!window.jspdf){alert("jsPDF non charge. Verifiez votre connexion.");return;}
               try {
                 const { jsPDF } = window.jspdf;
+                // Compute chart data from flights
+                const byDate={};
+                flights.filter(f=>f.status==="Termine"&&f.date).forEach(f=>{
+                  const d=f.date.slice(5);
+                  if(!byDate[d])byDate[d]={date:d,vols:[],pax:0,delayed:0,consomme:0,consoVols:0};
+                  byDate[d].vols.push(f);byDate[d].pax+=f.pax;
+                  if(f.delayMin>15)byDate[d].delayed++;
+                  if(f.consoH>0){byDate[d].consomme+=f.consoH;byDate[d].consoVols++;}
+                });
+                const days=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date)).slice(-14);
+                const otpData=days.map(d=>({label:d.date,val:d.vols.length>0?Math.round((d.vols.length-d.delayed)/d.vols.length*100):null}));
+                const lfData=days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+f.load,0)/d.vols.length):null}));
+                const consoData=days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
+                const paxData=days.map(d=>({label:d.date,val:d.pax}));
                 const doc = new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
                 const PW=210, PH=297, M=15, CW=PW-M*2;
                 let y=0;
