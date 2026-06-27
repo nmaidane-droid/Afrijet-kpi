@@ -1238,9 +1238,29 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading 
 
 function ScreenOps({ flights, onUpdateFlight }) {
   const [edit,setEdit]=useState(null);
+  const [search,setSearch]=useState("");
+  const [filterStatus,setFilterStatus]=useState("Tous");
   const sBg=s=>s==="Termine"?C.emeraldL:s==="En vol"?C.goldL:s==="Annule"?C.dangerL:C.bg;
   const sTx=s=>s==="Termine"?C.emeraldD:s==="En vol"?C.gold:s==="Annule"?C.danger:C.slate;
   const sIc=s=>s==="Termine"?"✓":s==="En vol"?"✈":s==="Annule"?"✗":"○";
+
+  // Filter flights
+  const filtered=flights.filter(f=>{
+    const q=search.trim().toLowerCase();
+    if(q){
+      const dateShort=f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"";
+      const match=(f.num||"").toLowerCase().includes(q)||
+        (f.from||"").toLowerCase().includes(q)||
+        (f.to||"").toLowerCase().includes(q)||
+        ((f.from||"")+(f.to||"")).toLowerCase().includes(q)||
+        (f.date||"").includes(q)||
+        dateShort.includes(q)||
+        (f.cm1||"").toLowerCase().includes(q);
+      if(!match)return false;
+    }
+    if(filterStatus!=="Tous"&&f.status!==filterStatus)return false;
+    return true;
+  });
 
   const calcEdit=ef=>{
     if(!ef)return{};
@@ -1406,14 +1426,32 @@ function ScreenOps({ flights, onUpdateFlight }) {
           </button>
         </div>
       )}
-      <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,overflow:"hidden"}}>
-        <div style={{padding:"9px 14px",background:C.bg,borderBottom:"1px solid "+C.border,fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase"}}>
-          Rotations — appuyez pour modifier
+      <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+        <input
+          type="text"
+          placeholder="🔍  Rechercher — vol, route, date (JJ/MM), CM1..."
+          value={search}
+          onChange={e=>setSearch(e.target.value)}
+          style={{width:"100%",padding:"9px 12px",borderRadius:9,border:"1.5px solid "+C.border,fontSize:13,color:C.text,background:C.bg,outline:"none"}}
+        />
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {["Tous","Planifie","En vol","Termine","Annule"].map(s=>(
+            <button key={s} onClick={()=>setFilterStatus(s)}
+              style={{padding:"4px 10px",borderRadius:8,border:"1.5px solid "+(filterStatus===s?C.navy:C.border),background:filterStatus===s?C.navy:"white",color:filterStatus===s?"white":C.slate,fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              {s}
+            </button>
+          ))}
         </div>
-        {flights.length===0&&<div style={{padding:20,textAlign:"center",color:C.slateL,fontSize:13}}>Aucun vol planifie</div>}
-        {flights.map((f,i)=>(
+      </div>
+      <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,overflow:"hidden"}}>
+        <div style={{padding:"9px 14px",background:C.bg,borderBottom:"1px solid "+C.border,fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",display:"flex",justifyContent:"space-between"}}>
+          <span>Rotations — appuyez pour modifier</span>
+          <span style={{color:C.navy}}>{filtered.length}/{flights.length}</span>
+        </div>
+        {filtered.length===0&&<div style={{padding:20,textAlign:"center",color:C.slateL,fontSize:13}}>Aucun vol trouvé</div>}
+        {filtered.map((f,i)=>(
           <div key={i} onClick={()=>setEdit({...f})}
-            style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<flights.length-1?"1px solid "+C.border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             <div style={{width:34,height:34,borderRadius:9,background:sBg(f.status),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <span style={{fontWeight:800,fontSize:14,color:sTx(f.status)}}>{sIc(f.status)}</span>
             </div>
