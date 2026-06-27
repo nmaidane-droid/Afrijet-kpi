@@ -1246,16 +1246,17 @@ function ScreenOps({ flights, onUpdateFlight }) {
 
   // Filter flights
   const filtered=flights.filter(f=>{
-    const q=search.trim().toLowerCase();
+    const q=search.trim().toUpperCase();
     if(q){
       const dateShort=f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"";
-      const match=(f.num||"").toLowerCase().includes(q)||
-        (f.from||"").toLowerCase().includes(q)||
-        (f.to||"").toLowerCase().includes(q)||
-        ((f.from||"")+(f.to||"")).toLowerCase().includes(q)||
+      const route=(f.from||"")+"-"+(f.to||"");
+      const match=(f.num||"").includes(q)||
+        route.includes(q)||
+        (f.from||"").includes(q)||
+        (f.to||"").includes(q)||
         (f.date||"").includes(q)||
         dateShort.includes(q)||
-        (f.cm1||"").toLowerCase().includes(q);
+        (f.cm1||"").toUpperCase().includes(q);
       if(!match)return false;
     }
     if(filterStatus!=="Tous"&&f.status!==filterStatus)return false;
@@ -1429,10 +1430,10 @@ function ScreenOps({ flights, onUpdateFlight }) {
       <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
         <input
           type="text"
-          placeholder="🔍  Rechercher — vol, route, date (JJ/MM), CM1..."
+          placeholder="🔍  Vol, CMN-AGA, 26/06, CM1..."
           value={search}
-          onChange={e=>setSearch(e.target.value)}
-          style={{width:"100%",padding:"9px 12px",borderRadius:9,border:"1.5px solid "+C.border,fontSize:13,color:C.text,background:C.bg,outline:"none"}}
+          onChange={e=>setSearch(e.target.value.toUpperCase())}
+          style={{width:"100%",padding:"9px 12px",borderRadius:9,border:"1.5px solid "+C.border,fontSize:13,color:C.text,background:C.bg,outline:"none",textTransform:"uppercase"}}
         />
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {["Tous","Planifie","En vol","Termine","Annule"].map(s=>(
