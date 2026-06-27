@@ -1087,7 +1087,15 @@ function FormMaint({ onSubmit, maintData }) {
   const [fiab,setFiab]=useState(String(md.fiabMoteurs||"99.8"));
   const [techD,setTechD]=useState(String(md.techDelay||"0.4"));
   const [aog,setAog]=useState(String(md.aog||"0"));
-  const [mels,setMels]=useState(md.mels||[]);
+  const [mels,setMels]=useState(()=>(maintData?.mels||[]));
+  useEffect(()=>{
+    if(maintData?.mels) setMels(maintData.mels);
+    if(maintData?.ttaf) setTtaf(String(maintData.ttaf));
+    if(maintData?.nextCheckH) setNextH(String(maintData.nextCheckH));
+    if(maintData?.fiabMoteurs) setFiab(String(maintData.fiabMoteurs));
+    if(maintData?.techDelay!==undefined) setTechD(String(maintData.techDelay));
+    if(maintData?.aog!==undefined) setAog(String(maintData.aog));
+  },[maintData]);
   const [showMelForm,setShowMelForm]=useState(false);
   const [editIdx,setEditIdx]=useState(null);
   const [mSys,setMSys]=useState("");
