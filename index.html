@@ -2002,7 +2002,9 @@ function App() {
                   doc.setFontSize(7.5);
                   doc.setFont("helvetica","normal");
                   doc.text(f.dep+"-"+f.arr,M+65,y);
-                  doc.text(f.pax+" pax | "+f.load+"%",M+95,y);
+                  const dur=f.dureeMin>0?(Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0")):"--";
+                  doc.text(dur,M+97,y);
+                  doc.text(f.pax+" pax",M+113,y);
                   if(f.cm1){doc.setFontSize(6.5);doc.text(f.cm1,M+130,y);}
                   y+=9;
                 });
