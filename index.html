@@ -1647,11 +1647,39 @@ function buildReport(flights, kpis, now, finData, maintData) {
   const sec=(t,c)=>"<div style='background:"+c+";color:white;padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em'>"+t+"</div>";
   const card=c=>"<div style='background:white;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;margin:10px 12px'>"+c+"</div>";
 
-  const fRows=flights.map((f,i)=>{
-    const sc=f.status==="Termine"?"#D1FAE5":f.status==="En vol"?"#FEF3C7":"#F1F5F9";
-    const tc=f.status==="Termine"?"#065F46":f.status==="En vol"?"#92400E":"#475569";
-    return "<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'><div style='font-weight:800;font-size:12px;color:"+N+";min-width:52px'>"+f.num+"</div><div style='flex:1;font-size:12px'>"+f.from+" - "+f.to+
-        "<div style='font-size:10px;color:#94A3B8'>"+f.dep+" - "+f.arr+"</div></div><div style='text-align:right'><div style='font-size:11px'>"+f.pax+" pax</div><span style='background:"+sc+";color:"+tc+";padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700'>"+f.status+"</span></div></div>";
+  const gridStyle="display:grid;grid-template-columns:46px 64px 68px 36px 32px 20px 40px;align-items:center;padding:4px 6px;border-bottom:1px solid #EEF2F8;";
+  const fHeader="<div style='"+gridStyle+"background:#EEF2F8;border-bottom:1px solid #DDE3ED'>"
+    +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;padding-left:11px'>Vol</div>"
+    +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;text-align:center'>Route</div>"
+    +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;text-align:center'>BLK Time</div>"
+    +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;text-align:center'>Date</div>"
+    +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;text-align:center'>FLT</div>"
+    +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;text-align:center'>Pax</div>"
+    +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;text-align:right'>CM1</div>"
+    +"</div>";
+  const fRows=fHeader+flights.map((f,i)=>{
+    const dot=f.status==="Termine"?"#00936A":f.status==="En vol"?"#D97706":"#94A3B8";
+    let durVal="--";
+    if(f.status==="Termine"&&f.depReal&&f.arrReal&&f.depReal.length>=4&&f.arrReal.length>=4){
+      const[dh,dm]=f.depReal.split(":").map(Number);
+      const[ah,am]=f.arrReal.split(":").map(Number);
+      const r=(ah*60+am)-(dh*60+dm);
+      if(r>0)durVal=Math.floor(r/60)+"h"+String(r%60).padStart(2,"0");
+    } else if(f.dureeMin>0){
+      durVal=Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0");
+    }
+    const durColor=f.status==="Termine"?"#00936A":"#94A3B8";
+    const dateShort=f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--";
+    const cm1Last=(f.cm1||"--").split(" ").slice(-1)[0];
+    return "<div style='"+gridStyle+"background:"+(i%2?"#F8FAFC":"white")+"'>"
+      +"<div style='display:flex;align-items:center;gap:4px'><span style='width:7px;height:7px;border-radius:50%;background:"+dot+";display:inline-block;flex-shrink:0'></span><span style='font-weight:800;font-size:10px;color:#0F1F3D'>"+f.num+"</span></div>"
+      +"<div style='font-size:10px;font-weight:700;white-space:nowrap;text-align:center'>"+f.from+"→"+f.to+"</div>"
+      +"<div style='font-size:8.5px;color:#64748B;white-space:nowrap;text-align:center'>"+f.dep+"-"+f.arr+"</div>"
+      +"<div style='font-size:8.5px;color:#94A3B8;white-space:nowrap'>"+dateShort+"</div>"
+      +"<div style='font-size:10px;font-weight:700;color:"+durColor+";text-align:center'>"+durVal+"</div>"
+      +"<div style='font-size:10px;text-align:center'>"+f.pax+"</div>"
+      +"<div style='font-size:9px;color:#64748B;text-align:right'>"+cm1Last+"</div>"
+      +"</div>";
   }).join("");
 
   const melRows=mels.map(m=>
@@ -1982,44 +2010,88 @@ function App() {
 
                 // ── Operations ──
                 drawSection("  ROTATIONS  ("+flights.length+" vols)",15,31,61);
+
+                // Column positions
+                const C0=M+2,C1=M+22,C2=M+62,C3=M+95,C4=M+114,C5=M+126,C6=M+148;
+
+                // Header row
+                doc.setFillColor(30,52,97);
+                doc.rect(M,y-4,CW,7,"F");
+                doc.setTextColor(255,255,255);
+                doc.setFontSize(6.5);
+                doc.setFont("helvetica","bold");
+                doc.text("VOL",C0+8,y,"center");
+                doc.text("ROUTE",C1+18,y,"center");
+                doc.text("BLK TIME",C2+14,y,"center");
+                doc.text("DATE",C3+8,y,"center");
+                doc.text("FLT",C4+4,y,"center");
+                doc.text("Pax",C5+4,y,"center");
+                doc.text("CM1",C6,y);
+                y+=8;
+                doc.setFont("helvetica","normal");
+
                 flights.forEach((f,idx)=>{
                   if(y>270){doc.addPage();y=20;}
-                  const isEven=idx%2===0;
-                  doc.setFillColor(isEven?248:255,isEven?250:255,isEven?252:255);
+                  // Alternating row background
+                  doc.setFillColor(idx%2===0?248:255, idx%2===0?250:255, idx%2===0?252:255);
                   doc.rect(M,y-4,CW,8,"F");
-                  // Status color
-                  const sc=f.status==="Termine"?[0,147,106]:f.status==="En vol"?[217,119,6]:[100,116,139];
-                  doc.setFillColor(...sc);
-                  doc.roundedRect(M+2,y-3,14,6,1,1,"F");
-                  doc.setTextColor(255,255,255);
-                  doc.setFontSize(6.5);
-                  doc.setFont("helvetica","bold");
-                  doc.text(f.num,M+9,y,"center");
+
+                  // Status dot
+                  const dotC=f.status==="Termine"?[0,147,106]:f.status==="En vol"?[217,119,6]:[148,163,184];
+                  doc.setFillColor(...dotC);
+                  doc.circle(C0+2,y-1,1.5,"F");
+
+                  // Vol number
                   doc.setTextColor(15,31,61);
-                  doc.setFontSize(8.5);
-                  doc.text(f.from+" -> "+f.to,M+20,y);
-                  doc.setTextColor(100,116,139);
-                  doc.setFontSize(7.5);
+                  doc.setFontSize(7);
+                  doc.setFont("helvetica","bold");
+                  doc.text(f.num,C0+6,y);
+
+                  // Route
+                  doc.setFontSize(8);
+                  doc.text(f.from+"->"+f.to,C1+18,y,"center");
+
+                  // BLK Time (dep-arr)
                   doc.setFont("helvetica","normal");
-                  doc.text(f.dep+"-"+f.arr,M+65,y);
+                  doc.setTextColor(100,116,139);
+                  doc.setFontSize(7);
+                  doc.text(f.dep+"-"+f.arr,C2+14,y,"center");
+
+                  // Date DD/MM
+                  const dateF=f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--";
+                  doc.text(dateF,C3+8,y,"center");
+
+                  // FLT (real duration)
+                  let durVal="--";
                   if(f.status==="Termine"&&f.depReal&&f.arrReal&&f.depReal.length>=4&&f.arrReal.length>=4){
-                    const [dh2,dm2]=f.depReal.split(":").map(Number);
-                    const [ah2,am2]=f.arrReal.split(":").map(Number);
-                    const reel=(ah2*60+am2)-(dh2*60+dm2);
-                    if(reel>0){
-                      const dur=Math.floor(reel/60)+"h"+String(reel%60).padStart(2,"0");
-                      doc.setTextColor(0,147,106);
-                      doc.text(dur,M+97,y);
-                      doc.setTextColor(100,116,139);
-                    }
-                  } else if(f.status==="Termine"&&f.dureeMin>0){
-                    const dur=Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0");
-                    doc.setTextColor(0,147,106);
-                    doc.text(dur,M+97,y);
-                    doc.setTextColor(100,116,139);
+                    const[dh,dm]=f.depReal.split(":").map(Number);
+                    const[ah,am]=f.arrReal.split(":").map(Number);
+                    const r=(ah*60+am)-(dh*60+dm);
+                    if(r>0)durVal=Math.floor(r/60)+"h"+String(r%60).padStart(2,"0");
+                  } else if(f.dureeMin>0){
+                    durVal=Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0");
                   }
-                  doc.text(f.pax+" pax",M+113,y);
-                  if(f.cm1){doc.setFontSize(6.5);doc.text(f.cm1,M+130,y);}
+                  doc.setTextColor(f.status==="Termine"?0:100, f.status==="Termine"?147:116, f.status==="Termine"?106:139);
+                  doc.setFont("helvetica","bold");
+                  doc.setFontSize(7.5);
+                  doc.text(durVal,C4+4,y,"center");
+
+                  // Pax
+                  doc.setTextColor(15,31,61);
+                  doc.setFont("helvetica","normal");
+                  doc.setFontSize(7.5);
+                  doc.text(String(f.pax),C5+4,y,"center");
+
+                  // CM1 last name
+                  const cm1L=(f.cm1||"--").split(" ").slice(-1)[0];
+                  doc.setTextColor(100,116,139);
+                  doc.setFontSize(7);
+                  doc.text(cm1L,C6,y);
+
+                  // Row separator
+                  doc.setDrawColor(226,232,240);
+                  doc.setLineWidth(0.2);
+                  doc.line(M,y+4,M+CW,y+4);
                   y+=9;
                 });
                 y+=4;
