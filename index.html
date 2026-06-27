@@ -672,6 +672,10 @@ const INIT_FLIGHTS = [
   {num:"AJS04",cm1:"Rahimi Hassan",cm2:"Idrissi Omar",cc:"Chraibi Nadia",from:"FEZ",to:"CMN",dep:"14:45",arr:"15:40",status:"Planifie",pax:15,load:83, date:"2026-06-26"},
   {num:"AJS05",cm1:"Alami Karim",cm2:"Tazi Youssef",cc:"Bennani Sara",from:"CMN",to:"OUD",dep:"17:00",arr:"18:10",status:"Planifie",pax:14,load:78, date:"2026-06-26"},
   {num:"AJS06",cm1:"Rahimi Hassan",cm2:"Idrissi Omar",cc:"Chraibi Nadia",from:"OUD",to:"CMN",dep:"19:30",arr:"20:40",status:"Planifie",pax:13,load:72, date:"2026-06-26"},
+  {num:"AJS07",cm1:"Alami Karim",cm2:"Tazi Youssef",cc:"Bennani Sara",from:"AGA",to:"CMN",dep:"09:15",arr:"10:35",status:"Termine",pax:15,load:83,date:"2026-06-25",carbDep:4300,carbArr:2650,consomme:1650,consoH:830,fuelPct:46,delayMin:0,nps:80,depReal:"09:15",arrReal:"10:35"},
+  {num:"AJS08",cm1:"Rahimi Hassan",cm2:"Fassi Amine",cc:"Sebti Leila",from:"CMN",to:"FEZ",dep:"14:00",arr:"14:55",status:"Termine",pax:16,load:89,date:"2026-06-25",carbDep:3800,carbArr:2400,consomme:1400,consoH:840,fuelPct:42,delayMin:8,nps:76,depReal:"14:08",arrReal:"15:03"},
+  {num:"AJS09",cm1:"Alami Karim",cm2:"Idrissi Omar",cc:"Chraibi Nadia",from:"CMN",to:"RAK",dep:"10:00",arr:"10:50",status:"Termine",pax:18,load:100,date:"2026-06-24",carbDep:3600,carbArr:2250,consomme:1350,consoH:810,fuelPct:39,delayMin:0,nps:88,depReal:"10:00",arrReal:"10:50"},
+  {num:"AJS10",cm1:"Rahimi Hassan",cm2:"Tazi Youssef",cc:"Bennani Sara",from:"RAK",to:"CMN",dep:"12:30",arr:"13:20",status:"Termine",pax:17,load:94,date:"2026-06-24",carbDep:3700,carbArr:2300,consomme:1400,consoH:840,fuelPct:40,delayMin:5,nps:82,depReal:"12:35",arrReal:"13:25"},
 ];
 
 const INIT_KPIS = {
@@ -1577,6 +1581,13 @@ function App() {
   const [now,setNow]         = useState(new Date());
   const [tab,setTab]         = usePersist("tab","forms");
   const [flights,setFlights] = usePersist("flights",INIT_FLIGHTS);
+  // Auto-upgrade: if demo data is old (fewer than 8 flights), reload with new demo
+  useEffect(()=>{
+    if(flights.length>0 && flights.length<8 && flights.every(f=>f.num&&f.num.startsWith("AJS"))){
+      const hasOldData = !flights.some(f=>f.date==="2026-06-24"||f.date==="2026-06-25");
+      if(hasOldData) setFlights(INIT_FLIGHTS);
+    }
+  },[]);
   const [kpis,setKpis]       = usePersist("kpis",INIT_KPIS);
   const [maintData,setMaint] = usePersist("maint",INIT_MAINT);
   const [finData,setFin]     = usePersist("fin",INIT_FIN);
