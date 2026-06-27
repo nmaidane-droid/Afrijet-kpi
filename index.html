@@ -10,7 +10,7 @@
 <body style="margin:0;padding:0;background:#F4F7FB;font-family:Arial,sans-serif;">
   <div id="root">
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px;">
-      <div style="font-size:48px;">✈</div>
+      <div style="font-size:48px;">&#x2708;</div>
       <div style="font-weight:800;font-size:18px;color:#0F1F3D;">Afrijet Sahara</div>
       <div style="color:#64748B;font-size:13px;">Chargement en cours...</div>
       <div id="err" style="display:none;color:#DC2626;font-size:12px;padding:0 20px;text-align:center;"></div>
@@ -19,6 +19,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
     window.addEventListener('load', function() {
       try {
@@ -519,7 +520,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
           <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,background:ac.simulated?"linear-gradient(135deg,#A0720A,#C9A84C)":"linear-gradient(135deg,#007A4D,#00A86B)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"white",transform:"rotate("+(ac.heading||0)+"deg)",transition:"transform 1s"}}>&#x2708;</div>
           <div style={{flex:1}}>
             <div style={{fontWeight:700,fontSize:12,color:C.navy}}>CN-KTA {ac.simulated?"SIM":"LIVE"}</div>
-            <div style={{fontSize:10,color:C.slate}}>{ac.lat.toFixed(3)}N {Math.abs(ac.lon).toFixed(3)}W {ac.alt_ft?("· "+ac.alt_ft.toLocaleString()+" ft"):""}  {ac.speed_kt?("· "+ac.speed_kt+" kt"):""}</div>
+            <div style={{fontSize:10,color:C.slate}}>{ac.lat.toFixed(3)}N {Math.abs(ac.lon).toFixed(3)}W {ac.alt_ft?("\u00B7 "+ac.alt_ft.toLocaleString()+" ft"):""}  {ac.speed_kt?("\u00B7 "+ac.speed_kt+" kt"):""}</div>
           </div>
           <div style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:ac.simulated?"#FEF3C7":"#D1FAE5",color:ac.simulated?"#A0720A":"#007A4D"}}>{ac.simulated?"SIM":"LIVE"}</div>
         </div>
@@ -1314,7 +1315,7 @@ function ScreenPerf({ kpis, flights }) {
         <Bar label="OTP" value={kpis.otp} max={100} unit="%" color={kpis.otp>=90?C.emerald:C.warn} sub="Objectif: 90%"/>
         <Bar label="Load Factor" value={kpis.loadFactor} max={100} unit="%" color={kpis.loadFactor>=80?C.emerald:C.warn} sub="Objectif: 80%"/>
         <Bar label="Retards" value={kpis.delayMin} max={60} unit=" min" color={kpis.delayMin<=15?C.emerald:C.danger} sub="Seuil: 15 min"/>
-        <Bar label="Conso. carburant moyenne" value={consoMoy} max={1000} unit=" kg/h" color={consoMoy<900?C.emerald:C.danger} sub={consoLabel+" · Seuil 900 kg/h"}/>
+        <Bar label="Conso. carburant moyenne" value={consoMoy} max={1000} unit=" kg/h" color={consoMoy<900?C.emerald:C.danger} sub={consoLabel+" \u00B7 Seuil 900 kg/h"}/>
       </Card>
     </div>
   );
@@ -1402,17 +1403,10 @@ function buildReport(flights, kpis, now, finData, maintData) {
   const marge=tRev>0?Math.round((1-tCout/tRev)*1000)/10:0;
 
   const row=(v1,l1,c1,v2,l2,c2,v3,l3,c3)=>
-    "<div style='display:grid;grid-template-columns:1fr 1fr 1fr'>"+
-    "<div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c1+"'>"+v1+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l1+"</div></div>"+
-    "<div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c2+"'>"+v2+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l2+"</div></div>"+
-    "<div style='text-align:center;padding:10px 4px'><div style='font-size:20px;font-weight:800;color:"+c3+"'>"+v3+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l3+"</div></div></div>";
+    "<div style='display:grid;grid-template-columns:1fr 1fr 1fr'><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c1+"'>"+v1+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l1+"</div></div><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c2+"'>"+v2+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l2+"</div></div><div style='text-align:center;padding:10px 4px'><div style='font-size:20px;font-weight:800;color:"+c3+"'>"+v3+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l3+"</div></div></div>";
 
   const kpiLine=(l,v,o,ok)=>
-    "<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'>"+
-    "<div style='flex:1;font-size:12px;color:#475569'>"+l+"<div style='font-size:10px;color:#94A3B8'>Objectif: "+o+"</div></div>"+
-    "<div style='font-weight:800;font-size:13px;color:"+N+";padding-right:8px'>"+v+"</div>"+
-    "<span style='background:"+(ok?"#D1FAE5":"#FEF3C7")+";color:"+(ok?"#065F46":"#92400E")+";padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700'>"+(ok?"OK":"Att.")+"</span>"+
-    "</div>";
+    "<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'><div style='flex:1;font-size:12px;color:#475569'>"+l+"<div style='font-size:10px;color:#94A3B8'>Objectif: "+o+"</div></div><div style='font-weight:800;font-size:13px;color:"+N+";padding-right:8px'>"+v+"</div><span style='background:"+(ok?"#D1FAE5":"#FEF3C7")+";color:"+(ok?"#065F46":"#92400E")+";padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700'>"+(ok?"OK":"Att.")+"</span></div>";
 
   const sec=(t,c)=>"<div style='background:"+c+";color:white;padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em'>"+t+"</div>";
   const card=c=>"<div style='background:white;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;margin:10px 12px'>"+c+"</div>";
@@ -1420,38 +1414,21 @@ function buildReport(flights, kpis, now, finData, maintData) {
   const fRows=flights.map((f,i)=>{
     const sc=f.status==="Termine"?"#D1FAE5":f.status==="En vol"?"#FEF3C7":"#F1F5F9";
     const tc=f.status==="Termine"?"#065F46":f.status==="En vol"?"#92400E":"#475569";
-    return "<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'>"+
-      "<div style='font-weight:800;font-size:12px;color:"+N+";min-width:52px'>"+f.num+"</div>"+
-      "<div style='flex:1;font-size:12px'>"+f.from+" - "+f.to+
-        "<div style='font-size:10px;color:#94A3B8'>"+f.dep+" - "+f.arr+"</div></div>"+
-      "<div style='text-align:right'>"+
-        "<div style='font-size:11px'>"+f.pax+" pax</div>"+
-        "<span style='background:"+sc+";color:"+tc+";padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700'>"+f.status+"</span>"+
-      "</div></div>";
+    return "<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'><div style='font-weight:800;font-size:12px;color:"+N+";min-width:52px'>"+f.num+"</div><div style='flex:1;font-size:12px'>"+f.from+" - "+f.to+
+        "<div style='font-size:10px;color:#94A3B8'>"+f.dep+" - "+f.arr+"</div></div><div style='text-align:right'><div style='font-size:11px'>"+f.pax+" pax</div><span style='background:"+sc+";color:"+tc+";padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700'>"+f.status+"</span></div></div>";
   }).join("");
 
   const melRows=mels.map(m=>
-    "<div style='padding:6px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center'>"+
-    "<span style='background:#FEF3C7;color:#A0720A;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700'>Cat."+m.sev+"</span>"+
-    "<div style='flex:1;font-size:11px'>"+m.sys+"</div>"+
-    "<div style='font-size:10px;color:#64748B'>"+m.exp+"</div></div>"
+    "<div style='padding:6px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center'><span style='background:#FEF3C7;color:#A0720A;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700'>Cat."+m.sev+"</span><div style='flex:1;font-size:11px'>"+m.sys+"</div><div style='font-size:10px;color:#64748B'>"+m.exp+"</div></div>"
   ).join("");
 
   const finRows=fd.map((f,i)=>{
     const m=f.revenus>0?Math.round((1-f.couts/f.revenus)*100):0;
-    return "<div style='display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'>"+
-      "<div style='flex:1;font-size:12px;font-weight:600'>"+f.mois+"</div>"+
-      "<div style='font-size:11px;color:#1E293B'>"+Math.round(f.revenus/1000)+"K MAD</div>"+
-      "<div style='font-size:11px;color:#64748B;min-width:40px;text-align:right'>"+m+"%</div></div>";
+    return "<div style='display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'><div style='flex:1;font-size:12px;font-weight:600'>"+f.mois+"</div><div style='font-size:11px;color:#1E293B'>"+Math.round(f.revenus/1000)+"K MAD</div><div style='font-size:11px;color:#64748B;min-width:40px;text-align:right'>"+m+"%</div></div>";
   }).join("");
 
   return (
-    "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'>"+
-    "<div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px'>"+
-      "<div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div>"+
-      "<div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Journalier</div>"+
-      "<div style='color:#94A3B8;font-size:11px'>EMB 145 CN-KTA · 18 sieges Business · "+ds+"</div>"+
-    "</div>"+
+    "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px'><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Journalier</div><div style='color:#94A3B8;font-size:11px'>EMB 145 CN-KTA \u00B7 18 sieges Business \u00B7 "+ds+"</div></div>"+
     card(row(done,"Termines",G,flights.filter(f=>f.status==="En vol").length,"En vol",O,tPax,"PAX total",N))+
     card(sec("Performance","#0F1F3D")+
       kpiLine("OTP (ponctualite)",kpis.otp+"%","90%",kpis.otp>=90)+
@@ -1469,8 +1446,7 @@ function buildReport(flights, kpis, now, finData, maintData) {
       row(Math.round(tRev/1000)+"K","Revenus (MAD)",G,Math.round(tCout/1000)+"K","Couts (MAD)",N,marge+"%","Marge brute",marge>=20?G:O)+
       finRows
     ):"")+
-    "<div style='text-align:center;padding:12px;font-size:9px;color:#94A3B8'>Afrijet Sahara · EMB 145 CN-KTA · DGAC Maroc · Confidentiel</div>"+
-    "</div>"
+    "<div style='text-align:center;padding:12px;font-size:9px;color:#94A3B8'>Afrijet Sahara \u00B7 EMB 145 CN-KTA \u00B7 DGAC Maroc \u00B7 Confidentiel</div></div>"
   );
 }
 
@@ -1563,7 +1539,7 @@ function App() {
           </button>
           <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData))}
             style={{width:36,height:36,background:C.emerald,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
-            ⬇
+            📋
           </button>
         </div>
       </div>
@@ -1614,6 +1590,182 @@ function App() {
               Fermer
             </button>
           </div>
+
+          {/* Share buttons */}
+          <div style={{padding:"12px 16px",background:"#0F1F3D",borderBottom:"1px solid rgba(255,255,255,.1)",display:"flex",gap:8,flexShrink:0}}>
+            {/* WhatsApp */}
+            <button onClick={()=>{
+              const ds=now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
+              const done=flights.filter(f=>f.status==="Termine").length;
+              const nl="\n";
+              const txt="*Rapport KPI Afrijet Sahara*"+nl+"EMB 145 CN-KTA - "+ds+nl+nl+"Vols termines: "+done+"/"+flights.length+nl+"PAX total: "+flights.reduce((s,f)=>s+f.pax,0)+nl+nl+"OTP: "+kpis.otp+"% | Load Factor: "+kpis.loadFactor+"% | Retards: "+kpis.delayMin+" min"+nl+nl+"MEL actifs: "+kpis.melCount+nl+nl+"Revenus cumules: "+Math.round((finData||[]).reduce((s,f)=>s+f.revenus,0)/1000)+"K MAD"+nl+nl+"Rapport Afrijet Sahara KPI Dashboard";
+              window.open("https://wa.me/?text="+encodeURIComponent(txt),"_blank");
+            }}
+              style={{flex:1,height:44,background:"#25D366",border:"none",borderRadius:10,color:"white",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              <span style={{fontSize:18}}>💬</span> WhatsApp
+            </button>
+
+            {/* Email */}
+            <button onClick={()=>{
+              const ds=now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
+              const done=flights.filter(f=>f.status==="Termine").length;
+              const subject="Rapport KPI Afrijet Sahara - EMB 145 CN-KTA - "+ds;
+              const body="Rapport KPI Afrijet Sahara"+nl+"EMB 145 CN-KTA | "+ds+nl+nl+"OPERATIONS"+nl+"Vols termines: "+done+"/"+flights.length+nl+"PAX total: "+flights.reduce((s,f)=>s+f.pax,0)+nl+nl+"PERFORMANCE"+nl+"OTP: "+kpis.otp+"%"+nl+"Load Factor: "+kpis.loadFactor+"%"+nl+"Retards: "+kpis.delayMin+" min"+nl+nl+"MAINTENANCE"+nl+"MEL actifs: "+kpis.melCount+nl+nl+"FINANCES"+nl+"Revenus cumules: "+Math.round((finData||[]).reduce((s,f)=>s+f.revenus,0)/1000)+"K MAD"+nl+nl+"Rapport genere par Afrijet Sahara KPI Dashboard";
+              window.location.href="mailto:?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+            }}
+              style={{flex:1,height:44,background:"#0369A1",border:"none",borderRadius:10,color:"white",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              <span style={{fontSize:18}}>✉</span> Email
+            </button>
+
+            {/* PDF jsPDF */}
+            <button onClick={()=>{
+              const { jsPDF } = window.jspdf;
+              const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+              const W=210, margin=14;
+              let y=0;
+
+              // Header
+              doc.setFillColor(15,31,61);
+              doc.rect(0,0,W,28,"F");
+              doc.setTextColor(160,114,10);
+              doc.setFontSize(8);
+              doc.setFont("helvetica","bold");
+              doc.text("AFRIJET SAHARA \u00B7 EMB 145 CN-KTA \u00B7 DGAC MAROC",margin,9);
+              doc.setTextColor(255,255,255);
+              doc.setFontSize(16);
+              doc.text("RAPPORT KPI JOURNALIER",margin,18);
+              doc.setFontSize(9);
+              doc.setFont("helvetica","normal");
+              doc.setTextColor(148,163,184);
+              const ds=now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
+              doc.text(ds,margin,24);
+              y=36;
+
+              // Section helper
+              const section=(title,color)=>{
+                doc.setFillColor(...color);
+                doc.rect(margin,y,W-margin*2,7,"F");
+                doc.setTextColor(255,255,255);
+                doc.setFontSize(9);
+                doc.setFont("helvetica","bold");
+                doc.text(title.toUpperCase(),margin+3,y+5);
+                y+=10;
+              };
+
+              // Row helper
+              const row=(label,value,ok)=>{
+                if(y>270){doc.addPage();y=20;}
+                doc.setTextColor(71,85,105);
+                doc.setFontSize(9);
+                doc.setFont("helvetica","normal");
+                doc.text(label,margin+2,y);
+                doc.setTextColor(15,31,61);
+                doc.setFont("helvetica","bold");
+                doc.text(String(value),W-margin-40,y,"right");
+                if(ok!==undefined){
+                  doc.setFillColor(ok?0:220,ok?147:38,ok?106:26);
+                  doc.roundedRect(W-margin-20,y-4,18,5,1,1,"F");
+                  doc.setTextColor(255,255,255);
+                  doc.setFontSize(7);
+                  doc.text(ok?"OK":"Att.",W-margin-11,y,"center");
+                }
+                y+=6;
+                doc.setDrawColor(221,227,237);
+                doc.line(margin,y-1,W-margin,y-1);
+              };
+
+              // KPI Summary boxes
+              const done=flights.filter(f=>f.status==="Termine").length;
+              const tPax=flights.reduce((s,f)=>s+f.pax,0);
+              const boxes=[
+                [done+"/"+flights.length,"Vols termines",[0,147,106]],
+                [kpis.otp+"%","OTP",kpis.otp>=90?[0,147,106]:[217,119,6]],
+                [kpis.loadFactor+"%","Load Factor",kpis.loadFactor>=80?[0,147,106]:[217,119,6]],
+                [tPax,"PAX total",[15,31,61]],
+              ];
+              const bw=(W-margin*2-9)/4;
+              boxes.forEach(([v,l,c],i)=>{
+                const x=margin+i*(bw+3);
+                doc.setFillColor(...c);
+                doc.roundedRect(x,y,bw,16,2,2,"F");
+                doc.setTextColor(255,255,255);
+                doc.setFontSize(14);
+                doc.setFont("helvetica","bold");
+                doc.text(String(v),x+bw/2,y+9,"center");
+                doc.setFontSize(7);
+                doc.setFont("helvetica","normal");
+                doc.text(l,x+bw/2,y+14,"center");
+              });
+              y+=22;
+
+              // Performance
+              section("Performance",[15,31,61]);
+              row("Ponctualite (OTP)",kpis.otp+"%",kpis.otp>=90);
+              row("Load Factor",kpis.loadFactor+"%",kpis.loadFactor>=80);
+              row("Retards moyens",kpis.delayMin+" min",kpis.delayMin<=15);
+              row("Conso. carburant",(kpis.consoH||"--")+" kg/h",!kpis.consoH||kpis.consoH<900);
+              row("NPS passagers",(kpis.nps||"--")+"/100",(kpis.nps||0)>=70);
+              y+=4;
+
+              // Operations
+              section("Operations",[15,31,61]);
+              flights.forEach(f=>{
+                if(y>270){doc.addPage();y=20;}
+                doc.setTextColor(15,31,61);
+                doc.setFontSize(9);
+                doc.setFont("helvetica","bold");
+                doc.text(f.num,margin+2,y);
+                doc.setFont("helvetica","normal");
+                doc.setTextColor(71,85,105);
+                doc.text(f.from+" -> "+f.to+" | "+f.dep+"-"+f.arr+" | "+f.pax+" pax",margin+20,y);
+                const sc=f.status==="Termine"?[0,147,106]:f.status==="En vol"?[217,119,6]:[100,116,139];
+                doc.setFillColor(...sc);
+                doc.roundedRect(W-margin-22,y-4,20,5,1,1,"F");
+                doc.setTextColor(255,255,255);
+                doc.setFontSize(7);
+                doc.text(f.status,W-margin-12,y,"center");
+                y+=6;
+                doc.setDrawColor(221,227,237);
+                doc.line(margin,y-1,W-margin,y-1);
+              });
+              y+=4;
+
+              // Maintenance
+              section("Maintenance CAMO",[0,147,106]);
+              row("TTAF",(window.__maintTtaf||"--")+" h");
+              row("A-Check dans",kpis.nextCheckH+" h",kpis.nextCheckH>50);
+              row("MEL actifs",kpis.melCount,kpis.melCount===0);
+              y+=4;
+
+              // Finances
+              const fd=finData||[];
+              if(fd.length>0){
+                section("Finances Cumul 2026",[124,58,237]);
+                const tRev=fd.reduce((s,f)=>s+f.revenus,0);
+                const tCout=fd.reduce((s,f)=>s+f.couts,0);
+                const marge=tRev>0?Math.round((1-tCout/tRev)*100):0;
+                row("Revenus cumules",Math.round(tRev/1000)+"K MAD");
+                row("Couts cumules",Math.round(tCout/1000)+"K MAD");
+                row("Marge brute",marge+"%",marge>=20);
+                y+=4;
+              }
+
+              // Footer
+              if(y>260)doc.addPage();
+              doc.setDrawColor(160,114,10);
+              doc.line(margin,275,W-margin,275);
+              doc.setTextColor(148,163,184);
+              doc.setFontSize(7);
+              doc.setFont("helvetica","normal");
+              doc.text("Afrijet Sahara \u00B7 EMB 145 CN-KTA \u00B7 DGAC Maroc \u00B7 Confidentiel",W/2,280,"center");
+
+              doc.save("Rapport_KPI_Afrijet_"+now.toISOString().slice(0,10)+".pdf");
+            }}
+              style={{flex:1,height:44,background:"#7C3AED",border:"none",borderRadius:10,color:"white",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              <span style={{fontSize:18}}>📄</span> PDF
+            </button>
+          </div>
+
           <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
             <div dangerouslySetInnerHTML={{__html:report}}/>
           </div>
