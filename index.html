@@ -1902,33 +1902,33 @@ function App() {
 
                 // ── Cover header ──
                 doc.setFillColor(15,31,61);
-                doc.rect(0,0,PW,42,"F");
+                doc.rect(0,0,PW,36,"F");
                 doc.setFillColor(160,114,10);
-                doc.rect(0,38,PW,4,"F");
+                doc.rect(0,33,PW,3,"F");
 
-                // Logo placeholder circle
+                // Logo
                 doc.setFillColor(160,114,10);
-                doc.circle(M+8,19,8,"F");
+                doc.circle(M+7,16,6,"F");
                 doc.setTextColor(255,255,255);
-                doc.setFontSize(10);
+                doc.setFontSize(8);
                 doc.setFont("helvetica","bold");
-                doc.text("AJS",M+8,22,"center");
+                doc.text("AJS",M+7,19,"center");
 
                 // Title
                 doc.setTextColor(255,255,255);
-                doc.setFontSize(18);
+                doc.setFontSize(15);
                 doc.setFont("helvetica","bold");
-                doc.text("RAPPORT KPI JOURNALIER",M+22,16);
-                doc.setFontSize(9);
+                doc.text("RAPPORT KPI JOURNALIER",M+18,13);
+                doc.setFontSize(8);
                 doc.setFont("helvetica","normal");
                 doc.setTextColor(148,163,184);
                 const ds=now.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-                doc.text(ds.toUpperCase(),M+22,23);
+                doc.text(ds.toUpperCase(),M+18,20);
                 doc.setTextColor(160,114,10);
-                doc.setFontSize(8);
+                doc.setFontSize(7.5);
                 doc.setFont("helvetica","bold");
-                doc.text("EMB 145  |  CN-KTA  |  18 SIEGES BUSINESS  |  DGAC MAROC",M+22,30);
-                y=52;
+                doc.text("EMB 145  |  CN-KTA  |  18 SIEGES BUSINESS  |  DGAC MAROC",M+18,27);
+                y=42;
 
                 // ── KPI Summary cards ──
                 const done=flights.filter(f=>f.status==="Termine").length;
@@ -1945,38 +1945,35 @@ function App() {
                 cards.forEach((card,i)=>{
                   const x=M+i*(cw+3);
                   doc.setFillColor(...card.c);
-                  doc.roundedRect(x,y,cw,20,2,2,"F");
-                  doc.setFillColor(255,255,255,card.ok?0:30);
+                  doc.roundedRect(x,y,cw,16,2,2,"F");
                   doc.setTextColor(255,255,255);
-                  doc.setFontSize(15);
+                  doc.setFontSize(13);
                   doc.setFont("helvetica","bold");
-                  doc.text(String(card.v),x+cw/2,y+11,"center");
-                  doc.setFontSize(6.5);
+                  doc.text(String(card.v),x+cw/2,y+9,"center");
+                  doc.setFontSize(6);
                   doc.setFont("helvetica","normal");
-                  doc.text(card.l.toUpperCase(),x+cw/2,y+17,"center");
+                  doc.text(card.l.toUpperCase(),x+cw/2,y+14,"center");
                 });
-                y+=28;
+                y+=22;
 
                 // ── Section helper ──
                 const drawSection=(title,r,g,b)=>{
-                  if(y>260){doc.addPage();y=20;}
+                  if(y>260){doc.addPage();y=15;}
                   doc.setFillColor(r,g,b);
-                  doc.roundedRect(M,y,CW,8,1,1,"F");
+                  doc.roundedRect(M,y,CW,6,1,1,"F");
                   doc.setTextColor(255,255,255);
-                  doc.setFontSize(8.5);
+                  doc.setFontSize(7.5);
                   doc.setFont("helvetica","bold");
-                  doc.text(title,M+4,y+5.5);
-                  y+=12;
+                  doc.text(title,M+4,y+4.5);
+                  y+=9;
                 };
 
-                // ── Row helper ──
                 const drawRow=(label,val,ok,isLast)=>{
-                  if(y>275){doc.addPage();y=20;}
-                  // Alternating bg
+                  if(y>275){doc.addPage();y=15;}
                   doc.setFillColor(248,250,252);
-                  doc.rect(M,y-4,CW,7,"F");
+                  doc.rect(M,y-3,CW,6,"F");
                   doc.setTextColor(71,85,105);
-                  doc.setFontSize(8.5);
+                  doc.setFontSize(7.5);
                   doc.setFont("helvetica","normal");
                   doc.text(label,M+3,y);
                   doc.setTextColor(15,31,61);
@@ -1985,16 +1982,16 @@ function App() {
                   if(ok!==undefined){
                     const bc=ok?[0,147,106]:[217,119,6];
                     doc.setFillColor(...bc);
-                    doc.roundedRect(M+CW-22,y-3.5,18,5,1,1,"F");
+                    doc.roundedRect(M+CW-22,y-2.5,18,4.5,1,1,"F");
                     doc.setTextColor(255,255,255);
-                    doc.setFontSize(6.5);
-                    doc.text(ok?"CONFORME":"ATTENTION",M+CW-13,y,"center");
+                    doc.setFontSize(6);
+                    doc.text(ok?"OK":"Att.",M+CW-13,y,"center");
                   }
-                  y+=7;
+                  y+=6;
                   if(!isLast){
                     doc.setDrawColor(226,232,240);
                     doc.setLineWidth(0.2);
-                    doc.line(M,y-3,M+CW,y-3);
+                    doc.line(M,y-2,M+CW,y-2);
                   }
                   y+=1;
                 };
@@ -2016,9 +2013,9 @@ function App() {
 
                 // Header row
                 doc.setFillColor(30,52,97);
-                doc.rect(M,y-4,CW,7,"F");
+                doc.rect(M,y-3,CW,6,"F");
                 doc.setTextColor(255,255,255);
-                doc.setFontSize(6.5);
+                doc.setFontSize(6);
                 doc.setFont("helvetica","bold");
                 doc.text("VOL",C0+8,y,"center");
                 doc.text("ROUTE",C1+18,y,"center");
@@ -2027,41 +2024,40 @@ function App() {
                 doc.text("FLT",C4+4,y,"center");
                 doc.text("Pax",C5+4,y,"center");
                 doc.text("CM1",C6,y);
-                y+=8;
+                y+=7;
                 doc.setFont("helvetica","normal");
 
                 flights.forEach((f,idx)=>{
-                  if(y>270){doc.addPage();y=20;}
-                  // Alternating row background
+                  if(y>270){doc.addPage();y=15;}
                   doc.setFillColor(idx%2===0?248:255, idx%2===0?250:255, idx%2===0?252:255);
-                  doc.rect(M,y-4,CW,8,"F");
+                  doc.rect(M,y-3,CW,7,"F");
 
                   // Status dot
                   const dotC=f.status==="Termine"?[0,147,106]:f.status==="En vol"?[217,119,6]:[148,163,184];
                   doc.setFillColor(...dotC);
-                  doc.circle(C0+2,y-1,1.5,"F");
+                  doc.circle(C0+2,y,1.2,"F");
 
-                  // Vol number
+                  // Vol
                   doc.setTextColor(15,31,61);
-                  doc.setFontSize(7);
+                  doc.setFontSize(6.5);
                   doc.setFont("helvetica","bold");
                   doc.text(f.num,C0+6,y);
 
                   // Route
-                  doc.setFontSize(8);
+                  doc.setFontSize(7.5);
                   doc.text(f.from+"->"+f.to,C1+18,y,"center");
 
-                  // BLK Time (dep-arr)
+                  // BLK Time
                   doc.setFont("helvetica","normal");
                   doc.setTextColor(100,116,139);
-                  doc.setFontSize(7);
+                  doc.setFontSize(6.5);
                   doc.text(f.dep+"-"+f.arr,C2+14,y,"center");
 
-                  // Date DD/MM
+                  // Date
                   const dateF=f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--";
                   doc.text(dateF,C3+8,y,"center");
 
-                  // FLT (real duration)
+                  // FLT
                   let durVal="--";
                   if(f.status==="Termine"&&f.depReal&&f.arrReal&&f.depReal.length>=4&&f.arrReal.length>=4){
                     const[dh,dm]=f.depReal.split(":").map(Number);
@@ -2073,28 +2069,32 @@ function App() {
                   }
                   doc.setTextColor(f.status==="Termine"?0:100, f.status==="Termine"?147:116, f.status==="Termine"?106:139);
                   doc.setFont("helvetica","bold");
-                  doc.setFontSize(7.5);
+                  doc.setFontSize(7);
                   doc.text(durVal,C4+4,y,"center");
 
                   // Pax
                   doc.setTextColor(15,31,61);
                   doc.setFont("helvetica","normal");
-                  doc.setFontSize(7.5);
+                  doc.setFontSize(7);
                   doc.text(String(f.pax),C5+4,y,"center");
 
-                  // CM1 last name
+                  // CM1
                   const cm1L=(f.cm1||"--").split(" ").slice(-1)[0];
                   doc.setTextColor(100,116,139);
-                  doc.setFontSize(7);
+                  doc.setFontSize(6.5);
                   doc.text(cm1L,C6,y);
 
                   // Row separator
                   doc.setDrawColor(226,232,240);
                   doc.setLineWidth(0.2);
-                  doc.line(M,y+4,M+CW,y+4);
-                  y+=9;
+                  doc.line(M,y+3,M+CW,y+3);
+                  y+=7;
                 });
-                y+=4;
+                y+=3;
+
+                // ── Page 2 ──
+                doc.addPage();
+                y=15;
 
                 // ── Maintenance ──
                 const md=maintData||{};
@@ -2217,6 +2217,23 @@ function App() {
                   doc.text("AFRIJET SAHARA  |  EMB 145 CN-KTA  |  DGAC MAROC  |  CONFIDENTIEL",PW/2,PH-6,"center");
                   doc.setTextColor(160,114,10);
                   doc.text("Page "+p+"/"+totalPages,PW-M,PH-6,"right");
+                }
+
+                // ── Footer on all pages ──
+                const nbPages=doc.internal.getNumberOfPages();
+                for(let p=1;p<=nbPages;p++){
+                  doc.setPage(p);
+                  doc.setFillColor(15,31,61);
+                  doc.rect(0,PH-10,PW,10,"F");
+                  doc.setFillColor(160,114,10);
+                  doc.rect(0,PH-11,PW,1,"F");
+                  doc.setTextColor(255,255,255);
+                  doc.setFontSize(6.5);
+                  doc.setFont("helvetica","normal");
+                  doc.text("AFRIJET SAHARA  |  EMB 145 CN-KTA  |  DGAC MAROC  |  CONFIDENTIEL",PW/2,PH-4,"center");
+                  doc.setTextColor(160,114,10);
+                  doc.setFont("helvetica","bold");
+                  doc.text("Page "+p+"/"+nbPages,PW-M,PH-4,"right");
                 }
 
                 doc.save("Rapport_KPI_Afrijet_"+now.toISOString().slice(0,10)+".pdf");
