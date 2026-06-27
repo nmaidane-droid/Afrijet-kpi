@@ -1499,18 +1499,22 @@ function ScreenPerf({ kpis, flights, finData }) {
   const volsNps = flights.filter(f=>f.status==="Termine"&&f.nps>0);
   const npsVal = volsNps.length>0 ? Math.round(volsNps.reduce((s,f)=>s+f.nps,0)/volsNps.length) : kpis.nps||0;
 
-  // Build chart data from flights grouped by date
-  const byDate = {};
+  // Build chart data grouped by week for smooth curves
+  const byWeek = {};
   flights.filter(f=>f.status==="Termine"&&f.date).forEach(f=>{
-    const d = f.date.slice(5); // MM-DD
-    if(!byDate[d]) byDate[d] = {date:d,vols:[],pax:0,delayed:0,consomme:0,consoVols:0};
-    byDate[d].vols.push(f);
-    byDate[d].pax += f.pax;
-    if(f.delayMin>15) byDate[d].delayed++;
-    if(f.consoH>0){byDate[d].consomme+=f.consoH;byDate[d].consoVols++;}
+    const d = new Date(f.date);
+    // Get Monday of that week
+    const day = d.getDay()||7;
+    const mon = new Date(d); mon.setDate(d.getDate()-day+1);
+    const wk = mon.toISOString().slice(5,10); // MM-DD of Monday
+    if(!byWeek[wk]) byWeek[wk]={date:wk,vols:[],pax:0,consomme:0,consoVols:0};
+    byWeek[wk].vols.push(f);
+    byWeek[wk].pax += f.pax;
+    if(f.consoH>0){byWeek[wk].consomme+=f.consoH;byWeek[wk].consoVols++;}
   });
-  const days = Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
-  const otpData  = days.map(d=>({label:d.date,val:d.vols.length>0?Math.round((d.vols.length-d.delayed)/d.vols.length*100):null}));
+  const days = Object.values(byWeek).sort((a,b)=>a.date.localeCompare(b.date));
+  const otpScore=f=>f.delayMin<=0?100:f.delayMin<=15?85:f.delayMin<=30?70:f.delayMin<=45?50:25;
+  const otpData  = days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+otpScore(f),0)/d.vols.length):null}));
   const lfData   = days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+f.load,0)/d.vols.length):null}));
   const consoData= days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
   const paxData  = days.map(d=>({label:d.date,val:d.pax}));
@@ -1597,13 +1601,19 @@ function ScreenPerf({ kpis, flights, finData }) {
     );
   };
 
+  const volsDone = flights.filter(f=>f.status==="Termine");
+  const otpVal = volsDone.length>0 ? Math.round(volsDone.reduce((s,f)=>s+otpScore(f),0)/volsDone.length) : kpis.otp||0;
+  const lfVal = volsDone.length>0 ? Math.round(volsDone.reduce((s,f)=>s+f.load,0)/volsDone.length) : kpis.loadFactor||0;
+  const delayVols = volsDone.filter(f=>f.delayMin>0);
+  const delayVal = delayVols.length>0 ? Math.round(delayVols.reduce((s,f)=>s+f.delayMin,0)/delayVols.length) : kpis.delayMin||0;
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {/* KPI tiles */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <KpiTile title="OTP" value={kpis.otp} unit="%" accent={kpis.otp>=90?C.emerald:C.warn} icon="⏰"/>
-        <KpiTile title="Load Factor" value={kpis.loadFactor} unit="%" accent={C.emerald} icon="👥"/>
-        <KpiTile title="Retards" value={kpis.delayMin} unit="min" accent={kpis.delayMin>15?C.warn:C.emerald} icon="⚠"/>
+        <KpiTile title="OTP" value={otpVal} unit="%" accent={otpVal>=90?C.emerald:C.warn} icon="⏰"/>
+        <KpiTile title="Load Factor" value={lfVal} unit="%" accent={lfVal>=80?C.emerald:C.warn} icon="👥"/>
+        <KpiTile title="Retards moy." value={delayVal} unit="min" accent={delayVal>15?C.warn:C.emerald} icon="⚠"/>
         {(()=>{
           return <KpiTile title="NPS moyen" value={npsVal} unit="%" accent={npsVal>=70?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}/>;
         })()}
@@ -1716,7 +1726,8 @@ function ScreenFin({ finData }) {
 function buildReport(flights, kpis, now, finData, maintData) {
   const ds=now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
   const G="#00936A",O="#D97706",N="#0F1F3D";
-  const done=flights.filter(f=>f.status==="Termine").length;
+  const volsDoneR=flights.filter(f=>f.status==="Termine");
+  const done=volsDoneR.length;
   const tPax=flights.reduce((s,f)=>s+f.pax,0);
   const md=maintData||{};
   const mels=(md.mels||[]);
@@ -1724,6 +1735,17 @@ function buildReport(flights, kpis, now, finData, maintData) {
   const tRev=fd.reduce((s,f)=>s+f.revenus,0);
   const tCout=fd.reduce((s,f)=>s+f.couts,0);
   const marge=tRev>0?Math.round((1-tCout/tRev)*1000)/10:0;
+
+  // Computed KPIs from flights
+  const otpScoreR=f=>f.delayMin<=0?100:f.delayMin<=15?85:f.delayMin<=30?70:f.delayMin<=45?50:25;
+  const rOtp=volsDoneR.length>0?Math.round(volsDoneR.reduce((s,f)=>s+otpScoreR(f),0)/volsDoneR.length):kpis.otp||0;
+  const rLf=volsDoneR.length>0?Math.round(volsDoneR.reduce((s,f)=>s+f.load,0)/volsDoneR.length):kpis.loadFactor||0;
+  const rDelayVols=volsDoneR.filter(f=>f.delayMin>0);
+  const rDelay=rDelayVols.length>0?Math.round(rDelayVols.reduce((s,f)=>s+f.delayMin,0)/rDelayVols.length):kpis.delayMin||0;
+  const rConsoVols=volsDoneR.filter(f=>f.consoH>0);
+  const rConso=rConsoVols.length>0?Math.round(rConsoVols.reduce((s,f)=>s+f.consoH,0)/rConsoVols.length):kpis.consoH||0;
+  const rNpsVols=volsDoneR.filter(f=>f.nps>0);
+  const rNps=rNpsVols.length>0?Math.round(rNpsVols.reduce((s,f)=>s+f.nps,0)/rNpsVols.length):kpis.nps||0;
 
   const row=(v1,l1,c1,v2,l2,c2,v3,l3,c3)=>
     "<div style='display:grid;grid-template-columns:1fr 1fr 1fr'><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c1+"'>"+v1+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l1+"</div></div><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c2+"'>"+v2+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l2+"</div></div><div style='text-align:center;padding:10px 4px'><div style='font-size:20px;font-weight:800;color:"+c3+"'>"+v3+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l3+"</div></div></div>";
@@ -1782,11 +1804,11 @@ function buildReport(flights, kpis, now, finData, maintData) {
     "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px'><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Journalier</div><div style='color:#94A3B8;font-size:11px'>EMB 145 CN-KTA \u00B7 18 sieges Business \u00B7 "+ds+"</div></div>"+
     card(row(done,"Termines",G,flights.filter(f=>f.status==="En vol").length,"En vol",O,tPax,"PAX total",N))+
     card(sec("Performance","#0F1F3D")+
-      kpiLine("OTP (ponctualite)",kpis.otp+"%","90%",kpis.otp>=90)+
-      kpiLine("Load Factor",kpis.loadFactor+"%","80%",kpis.loadFactor>=80)+
-      kpiLine("Retards",kpis.delayMin+" min","15 min",kpis.delayMin<=15)+
-      kpiLine("Conso. carburant",(kpis.consoH||"--")+" kg/h","900 kg/h",!kpis.consoH||kpis.consoH<900)+
-      kpiLine("NPS passagers",(kpis.nps||"--"),"70",(kpis.nps||0)>=70)
+      kpiLine("OTP (ponctualite)",rOtp+"%","90%",rOtp>=90)+
+      kpiLine("Load Factor",rLf+"%","80%",rLf>=80)+
+      kpiLine("Retards moy.",rDelay+" min","15 min",rDelay<=15)+
+      kpiLine("Conso. carburant",rConso+" kg/h","900 kg/h",rConso<900)+
+      kpiLine("NPS passagers",rNps+"/100","70",rNps>=70)
     )+
     card(sec("Operations — "+flights.length+" rotations","#0F1F3D")+fRows)+
     card(sec("Maintenance CAMO","#00936A")+
@@ -1968,17 +1990,21 @@ function App() {
               if(!window.jspdf){alert("jsPDF non charge. Verifiez votre connexion.");return;}
               try {
                 const { jsPDF } = window.jspdf;
-                // Compute chart data from flights
-                const byDate={};
+                // Compute chart data from flights grouped by week
+                const byWeekP={};
                 flights.filter(f=>f.status==="Termine"&&f.date).forEach(f=>{
-                  const d=f.date.slice(5);
-                  if(!byDate[d])byDate[d]={date:d,vols:[],pax:0,delayed:0,consomme:0,consoVols:0};
-                  byDate[d].vols.push(f);byDate[d].pax+=f.pax;
-                  if(f.delayMin>15)byDate[d].delayed++;
-                  if(f.consoH>0){byDate[d].consomme+=f.consoH;byDate[d].consoVols++;}
+                  const d=new Date(f.date);
+                  const day=d.getDay()||7;
+                  const mon=new Date(d);mon.setDate(d.getDate()-day+1);
+                  const wk=mon.toISOString().slice(5,10);
+                  if(!byWeekP[wk])byWeekP[wk]={date:wk,vols:[],pax:0,delayed:0,consomme:0,consoVols:0};
+                  byWeekP[wk].vols.push(f);byWeekP[wk].pax+=f.pax;
+                  if(f.delayMin>15)byWeekP[wk].delayed++;
+                  if(f.consoH>0){byWeekP[wk].consomme+=f.consoH;byWeekP[wk].consoVols++;}
                 });
-                const days=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
-                const otpData=days.map(d=>({label:d.date,val:d.vols.length>0?Math.round((d.vols.length-d.delayed)/d.vols.length*100):null}));
+                const days=Object.values(byWeekP).sort((a,b)=>a.date.localeCompare(b.date));
+                const otpScore2=f=>f.delayMin<=0?100:f.delayMin<=15?85:f.delayMin<=30?70:f.delayMin<=45?50:25;
+                const otpData=days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+otpScore2(f),0)/d.vols.length):null}));
                 const lfData=days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+f.load,0)/d.vols.length):null}));
                 const consoData=days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
                 const paxData=days.map(d=>({label:d.date,val:d.pax}));
@@ -2018,14 +2044,22 @@ function App() {
                 y=42;
 
                 // ── KPI Summary cards ──
-                const done=flights.filter(f=>f.status==="Termine").length;
+                const volsDoneP=flights.filter(f=>f.status==="Termine");
+                const done=volsDoneP.length;
                 const tPax=flights.reduce((s,f)=>s+f.pax,0);
-                const volsNps=flights.filter(f=>f.status==="Termine"&&f.nps>0);
-                const npsVal=volsNps.length>0?Math.round(volsNps.reduce((s,f)=>s+f.nps,0)/volsNps.length):0;
+                const otpScoreP=f=>f.delayMin<=0?100:f.delayMin<=15?85:f.delayMin<=30?70:f.delayMin<=45?50:25;
+                const pOtp=volsDoneP.length>0?Math.round(volsDoneP.reduce((s,f)=>s+otpScoreP(f),0)/volsDoneP.length):kpis.otp||0;
+                const pLf=volsDoneP.length>0?Math.round(volsDoneP.reduce((s,f)=>s+f.load,0)/volsDoneP.length):kpis.loadFactor||0;
+                const pDelayVols=volsDoneP.filter(f=>f.delayMin>0);
+                const pDelay=pDelayVols.length>0?Math.round(pDelayVols.reduce((s,f)=>s+f.delayMin,0)/pDelayVols.length):kpis.delayMin||0;
+                const pConsoVols=volsDoneP.filter(f=>f.consoH>0);
+                const pConso=pConsoVols.length>0?Math.round(pConsoVols.reduce((s,f)=>s+f.consoH,0)/pConsoVols.length):kpis.consoH||0;
+                const pNpsVols=volsDoneP.filter(f=>f.nps>0);
+                const pNps=pNpsVols.length>0?Math.round(pNpsVols.reduce((s,f)=>s+f.nps,0)/pNpsVols.length):kpis.nps||0;
                 const cards=[
                   {v:done+"/"+flights.length,l:"Vols termines",c:[0,147,106],ok:true},
-                  {v:kpis.otp+"%",l:"OTP Ponctualite",c:kpis.otp>=90?[0,147,106]:[217,119,6],ok:kpis.otp>=90},
-                  {v:kpis.loadFactor+"%",l:"Load Factor",c:kpis.loadFactor>=80?[0,147,106]:[217,119,6],ok:kpis.loadFactor>=80},
+                  {v:pOtp+"%",l:"OTP Ponctualite",c:pOtp>=90?[0,147,106]:[217,119,6],ok:pOtp>=90},
+                  {v:pLf+"%",l:"Load Factor",c:pLf>=80?[0,147,106]:[217,119,6],ok:pLf>=80},
                   {v:tPax+" pax",l:"PAX total",c:[15,31,61],ok:true},
                 ];
                 const cw=(CW-9)/4;
@@ -2085,11 +2119,11 @@ function App() {
 
                 // ── Performance ──
                 drawSection("  PERFORMANCE OPERATIONNELLE",15,31,61);
-                drawRow("Ponctualite OTP",kpis.otp+"%",kpis.otp>=90);
-                drawRow("Load Factor",kpis.loadFactor+"%",kpis.loadFactor>=80);
-                drawRow("Retards moyens",kpis.delayMin+" min",kpis.delayMin<=15);
-                drawRow("Consommation carburant",(kpis.consoH||"--")+" kg/h",!kpis.consoH||kpis.consoH<900);
-                drawRow("NPS passagers",(npsVal||"--")+"/100",npsVal>=70,true);
+                drawRow("Ponctualite OTP",pOtp+"%",pOtp>=90);
+                drawRow("Load Factor",pLf+"%",pLf>=80);
+                drawRow("Retards moyens",pDelay+" min",pDelay<=15);
+                drawRow("Consommation carburant",pConso+" kg/h",pConso<900);
+                drawRow("NPS passagers",pNps+"/100",pNps>=70,true);
                 y+=4;
 
                 // ── Operations ──
