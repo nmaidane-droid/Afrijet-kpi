@@ -662,10 +662,11 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
       )}
       {status==="error" && (
         <div style={{height:360,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#F4F7FB",gap:10}}>
-          <div style={{fontSize:32}}>🌐</div>
-          <div style={{fontWeight:700,color:C.navy,fontSize:14}}>Connexion requise</div>
+          <div style={{fontSize:32}}>🗺</div>
+          <div style={{fontWeight:700,color:C.navy,fontSize:14}}>Carte non disponible</div>
           <div style={{color:C.slate,fontSize:12,textAlign:"center",padding:"0 24px",lineHeight:1.6}}>
-            Mapbox necessite une connexion internet.
+            La carte Mapbox nécessite une connexion internet.<br/>
+            Elle s'affiche correctement sur <b>afrijet-kpi.vercel.app</b>
           </div>
         </div>
       )}
@@ -1199,9 +1200,13 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights
 }
 
 // ── Screens ──────────────────────────────────────────────────────────────────
-function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading }) {
+function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading, flights }) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Card>
+        <SectionTitle>Carte ADS-B — Maroc</SectionTitle>
+        <MapMarocSVG ac={ac} moroccoTraffic={moroccoTraffic} icao24={icao24}/>
+      </Card>
       <Card>
         <SectionTitle>Code ICAO24 — CN-KTA</SectionTitle>
         <div style={{display:"flex",gap:8}}>
@@ -1943,7 +1948,6 @@ function App() {
   const TABS=[
     {id:"forms",icon:"📝",label:"Formulaires"},
     {id:"live", icon:"📡",label:"Live"},
-    {id:"carte",icon:"🗺",label:"Carte"},
     {id:"alertes",icon:"🔔",label:"Alertes"},
     {id:"ops",  icon:"✈", label:"Ops."},
     {id:"perf", icon:"📊",label:"Perf."},
@@ -1987,8 +1991,7 @@ function App() {
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
         {tab==="forms"   && <ScreenForms onSubmitVol={d=>{setFlights(f=>[...f,d]);}} onSubmitMaint={setMaint} onSubmitFin={d=>setFin(f=>[...f,d])} onReset={()=>setReset(true)} flights={flights} crew={crew} setCrew={setCrew}/>}
-        {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading}/>}
-        {tab==="carte"   && <ScreenCarte flights={flights} ac={ac} moroccoTraffic={mTraffic} icao24={icao24}/>}
+        {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism}/>}
         {tab==="ops"     && <ScreenOps flights={flights} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
