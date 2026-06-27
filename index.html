@@ -1321,6 +1321,10 @@ function ScreenPerf({ kpis, flights, finData }) {
   const lfData   = days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+f.load,0)/d.vols.length):null}));
   const consoData= days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
   const paxData  = days.map(d=>({label:d.date,val:d.pax}));
+  const npsData  = days.map(d=>{
+    const npsVols=d.vols.filter(f=>f.nps>0);
+    return {label:d.date,val:npsVols.length>0?Math.round(npsVols.reduce((s,f)=>s+f.nps,0)/npsVols.length):null};
+  });
 
   // Mini SVG line chart component
   const LineChart = ({data, color, target, maxVal, minVal, title, unit}) => {
@@ -1421,8 +1425,8 @@ function ScreenPerf({ kpis, flights, finData }) {
             data={lfData} color={C.navy} target={80} maxVal={100} minVal={50} unit="%" current={kpis.loadFactor} currentLabel="Aujourd hui"/>
           <ChartCard title="Conso. carburant moyenne" icon="⛽"
             data={consoData} color={C.gold} target={900} maxVal={1100} minVal={600} unit="kg/h" current={consoMoy} currentLabel={consoLabel}/>
-          <ChartCard title="PAX par jour" icon="👤"
-            data={paxData} color="#7C3AED" maxVal={null} minVal={0} unit="" current={tPax} currentLabel="Total" />
+          <ChartCard title="NPS passagers" icon="⭐"
+            data={npsData} color="#7C3AED" target={70} maxVal={100} minVal={40} unit="/100" current={npsVal} currentLabel={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}/>
         </>
       ) : (
         <Card>
@@ -1744,6 +1748,7 @@ function App() {
                 const lfData=days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+f.load,0)/d.vols.length):null}));
                 const consoData=days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
                 const paxData=days.map(d=>({label:d.date,val:d.pax}));
+                const npsData2=days.map(d=>{const nv=d.vols.filter(f=>f.nps>0);return{label:d.date,val:nv.length>0?Math.round(nv.reduce((s,f)=>s+f.nps,0)/nv.length):null};});
                 const doc = new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
                 const PW=210, PH=297, M=15, CW=PW-M*2;
                 let y=0;
@@ -1987,7 +1992,7 @@ function App() {
                   drawChart(otpData,"Ponctualite OTP",[0,147,106],90,60,100,"%");
                   drawChart(lfData,"Load Factor",[15,31,61],80,50,100,"%");
                   drawChart(consoData,"Consommation carburant moyenne",[160,114,10],900,600,1100," kg/h");
-                  drawChart(paxData,"PAX par jour",[124,58,237],undefined,0,null,"");
+                  drawChart(npsData2,"NPS passagers",[124,58,237],70,40,100,"/100");
                   y+=4;
                 }
 
