@@ -705,15 +705,21 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
 
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
-function computeAlerts(kpis, flights) {
+function computeAlerts(kpis, flights, maintData) {
   const a=[];
-  if(kpis.otp<85)a.push({id:"otp",sev:"danger",msg:"OTP critique: "+kpis.otp+"% (seuil 85%)",icon:"⏰"});
-  else if(kpis.otp<90)a.push({id:"otp",sev:"warn",msg:"OTP en baisse: "+kpis.otp+"%",icon:"⏰"});
-  if(kpis.melCount>=3)a.push({id:"mel",sev:"danger",msg:kpis.melCount+" MEL actifs",icon:"🔧"});
+  const otp=kpis.otp||0;
+  if(otp<85)a.push({id:"otp",sev:"danger",msg:"OTP critique: "+otp+"% (seuil 85%)",icon:"⏰"});
+  else if(otp<90)a.push({id:"otp",sev:"warn",msg:"OTP en baisse: "+otp+"%",icon:"⏰"});
   if(kpis.delayMin>30)a.push({id:"del",sev:"danger",msg:"Retards: "+kpis.delayMin+" min",icon:"⚠"});
   else if(kpis.delayMin>15)a.push({id:"del",sev:"warn",msg:"Retards: "+kpis.delayMin+" min",icon:"⚠"});
   if(kpis.loadFactor<70)a.push({id:"lf",sev:"warn",msg:"Load Factor: "+kpis.loadFactor+"%",icon:"💺"});
   if((kpis.nextCheckH||999)<50)a.push({id:"chk",sev:"danger",msg:"A-Check dans "+(kpis.nextCheckH||0)+"h",icon:"🔧"});
+  // MEL alerts per item
+  const mels=(maintData?.mels||[]);
+  mels.forEach((m,i)=>{
+    const sev=m.sev==="B"?"danger":"warn";
+    a.push({id:"mel_"+i,sev,msg:"MEL Cat."+m.sev+" — "+m.sys+" ("+m.mel+") · Exp: "+m.exp,icon:"🔧"});
+  });
   return a;
 }
 
@@ -1074,21 +1080,38 @@ function FormEquipage({ crew, setCrew }) {
   );
 }
 
-function FormMaint({ onSubmit }) {
-  const [ttaf,setTtaf]=useState("4218");
-  const [mel,setMel]=useState("2");
-  const [nextH,setNextH]=useState("182");
-  const [fiab,setFiab]=useState("99.8");
-  const [techD,setTechD]=useState("0.4");
-  const [aog,setAog]=useState("0");
+function FormMaint({ onSubmit, maintData }) {
+  const md=maintData||{};
+  const [ttaf,setTtaf]=useState(String(md.ttaf||"4218"));
+  const [nextH,setNextH]=useState(String(md.nextCheckH||"182"));
+  const [fiab,setFiab]=useState(String(md.fiabMoteurs||"99.8"));
+  const [techD,setTechD]=useState(String(md.techDelay||"0.4"));
+  const [aog,setAog]=useState(String(md.aog||"0"));
+  const [mels,setMels]=useState(md.mels||[]);
+  const [showMelForm,setShowMelForm]=useState(false);
+  const [editIdx,setEditIdx]=useState(null);
+  const [mSys,setMSys]=useState("");
+  const [mMel,setMMel]=useState("");
+  const [mExp,setMExp]=useState("");
+  const [mSev,setMSev]=useState("B");
 
-  const melNum=Number(mel)||0;
-  const nextNum=Number(nextH)||0;
+  const openAdd=()=>{setMSys("");setMMel("");setMExp("");setMSev("B");setEditIdx(null);setShowMelForm(true);};
+  const openEdit=(m,i)=>{setMSys(m.sys);setMMel(m.mel);setMExp(m.exp);setMSev(m.sev);setEditIdx(i);setShowMelForm(true);};
+  const saveMel=()=>{
+    if(!mSys.trim())return;
+    const newMel={sys:mSys.trim(),mel:mMel.trim(),exp:mExp.trim(),sev:mSev};
+    setMels(editIdx!==null?mels.map((m,i)=>i===editIdx?newMel:m):[...mels,newMel]);
+    setShowMelForm(false);
+  };
+  const deleteMel=i=>setMels(mels.filter((_,idx)=>idx!==i));
+  const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
+  const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
 
   const submit=()=>{
-    onSubmit({ttaf:Number(ttaf)||0,melCount:melNum,nextCheckH:nextNum,
-      fiabMoteurs:Number(fiab)||0,techDelay:Number(techD)||0,aog:Number(aog)||0,mels:[]});
+    onSubmit({ttaf:Number(ttaf)||0,melCount:mels.length,nextCheckH:Number(nextH)||0,
+      fiabMoteurs:Number(fiab)||0,techDelay:Number(techD)||0,aog:Number(aog)||0,mels});
   };
+
   return (
     <Card accent="#00936A">
       <FHeader icon="🔧" title="Maintenance CAMO" subtitle="Rapport hebdomadaire CAMO" color="#00936A"/>
@@ -1096,24 +1119,87 @@ function FormMaint({ onSubmit }) {
         <FSection title="Cellule" color="#00936A"/>
         <FGrid>
           <FField label="TTAF (heures)" value={ttaf} onChange={setTtaf} type="number" min={0}/>
-          <FCalc label="Prochain A-Check" value={nextNum+"h"} color={nextNum<50?"#DC2626":nextNum<100?"#D97706":"#00936A"}/>
+          <FField label="Prochain check (h)" value={nextH} onChange={setNextH} type="number" min={0}/>
         </FGrid>
         <FSection title="Fiabilite" color="#00936A"/>
         <FGrid>
           <FField label="Fiabilite moteurs (%)" value={fiab} onChange={setFiab} type="number" min={0} max={100}/>
           <FField label="Tech delay (%)" value={techD} onChange={setTechD} type="number" min={0} max={100}/>
         </FGrid>
-        <FSection title="MEL / AOG" color="#00936A"/>
-        <FGrid>
-          <FField label="MEL actifs" value={mel} onChange={setMel} type="number" min={0}/>
-          <FField label="Prochain check (h)" value={nextH} onChange={setNextH} type="number" min={0}/>
-        </FGrid>
         <FGrid>
           <FField label="AOG (jours)" value={aog} onChange={setAog} type="number" min={0}/>
-          <FCalc label="Statut MEL" value={melNum===0?"OK":melNum<=2?"Surveille":"CRITIQUE"} color={melNum===0?"#00936A":melNum<=2?"#D97706":"#DC2626"}/>
+          <FCalc label="Statut MEL" value={mels.length===0?"OK":mels.length<=2?"Surveille":"CRITIQUE"} color={mels.length===0?"#00936A":mels.length<=2?"#D97706":"#DC2626"}/>
         </FGrid>
+
+        <FSection title={"MEL actifs ("+mels.length+")"} color="#00936A"/>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12,padding:"8px 0"}}>Aucun MEL — appuyez sur + pour ajouter</div>}
+          {mels.map((m,i)=>(
+            <div key={i} style={{background:C.bg,borderRadius:10,padding:"10px 12px",display:"flex",gap:10,alignItems:"center"}}>
+              <span style={{background:sevBg(m.sev),color:sevColor(m.sev),padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,flexShrink:0}}>Cat.{m.sev}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
+                <div style={{fontSize:10,color:C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}</div>
+              </div>
+              <button onClick={()=>openEdit(m,i)} style={{background:"none",border:"none",fontSize:15,cursor:"pointer",color:C.slate,padding:"4px",WebkitTapHighlightColor:"transparent"}}>✏</button>
+              <button onClick={()=>deleteMel(i)} style={{background:"none",border:"none",fontSize:15,cursor:"pointer",color:C.danger,padding:"4px",WebkitTapHighlightColor:"transparent"}}>🗑</button>
+            </div>
+          ))}
+          <button onClick={openAdd}
+            style={{height:42,background:"white",border:"1.5px dashed #00936A",borderRadius:10,color:"#00936A",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            + Ajouter un MEL
+          </button>
+        </div>
+
         <FSubmit label="Enregistrer Maintenance" color="#00936A" onClick={submit}/>
       </div>
+
+      {showMelForm&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"flex-end"}}>
+          <div style={{background:"white",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px 16px 32px"}}>
+            <div style={{fontWeight:800,fontSize:16,color:C.navy,marginBottom:16}}>{editIdx!==null?"Modifier MEL":"Nouveau MEL"}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>SYSTÈME</div>
+                <input value={mSys} onChange={e=>setMSys(e.target.value)} placeholder="ex: Passenger Address System"
+                  style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>RÉFÉRENCE MEL</div>
+                <input value={mMel} onChange={e=>setMMel(e.target.value)} placeholder="ex: MEL 23-61"
+                  style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}/>
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>EXPIRATION</div>
+                  <input value={mExp} onChange={e=>setMExp(e.target.value)} placeholder="ex: 30/07/26"
+                    style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}/>
+                </div>
+                <div style={{width:100}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>CATÉGORIE</div>
+                  <select value={mSev} onChange={e=>setMSev(e.target.value)}
+                    style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:16}}>
+              <button onClick={()=>setShowMelForm(false)}
+                style={{flex:1,height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                Annuler
+              </button>
+              <button onClick={saveMel}
+                style={{flex:2,height:46,background:"#00936A",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -1153,7 +1239,7 @@ function FormFin({ onSubmit }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights, crew, setCrew }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights, crew, setCrew, maintData }) {
   const FORMS=[
     {id:"vol",  icon:"✈", label:"Vol",      color:"#0F1F3D"},
     {id:"crew", icon:"👨‍✈️", label:"Equipage", color:"#0369A1"},
@@ -1195,7 +1281,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights
       </div>
       {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew}/>}
       {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew}/>}
-      {active==="maint" && <FormMaint onSubmit={ok(onSubmitMaint)}/>}
+      {active==="maint" && <FormMaint onSubmit={ok(onSubmitMaint)} maintData={maintData}/>}
       {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)}/>}
     </div>
   );
@@ -1491,8 +1577,8 @@ function ScreenCarte({ flights, ac, moroccoTraffic, icao24 }) {
   );
 }
 
-function ScreenAlertes({ kpis, flights, dismissed, setDismissed }) {
-  const all=computeAlerts(kpis,flights);
+function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData }) {
+  const all=computeAlerts(kpis,flights,maintData);
   const active=all.filter(a=>!dismissed.includes(a.id));
   const colors={danger:{bg:"#FEE2E2",border:"#DC2626",text:"#DC2626"},warn:{bg:"#FEF3C7",border:"#D97706",text:"#D97706"}};
   return (
@@ -1697,28 +1783,32 @@ function ScreenPerf({ kpis, flights, finData }) {
 function ScreenMaint({ kpis, maintData }) {
   const md=maintData||{};
   const mels=md.mels||[];
+  const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
+  const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
-        <KpiTile title="A-Check dans" value={md.nextCheckH||kpis.nextCheckH||0} unit="h" accent={(md.nextCheckH||kpis.nextCheckH||999)<50?C.danger:C.emerald} icon="🔧"/>
-        <KpiTile title="MEL actifs" value={kpis.melCount} unit="" accent={kpis.melCount>0?C.warn:C.emerald} icon="⚠"/>
+        <KpiTile title="A-Check dans" value={md.nextCheckH||0} unit="h" accent={(md.nextCheckH||999)<50?C.danger:C.emerald} icon="🔧"/>
+        <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
         <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||0} unit="%" accent={(md.fiabMoteurs||0)>=99.5?C.emerald:C.warn} icon="✈"/>
       </div>
-      {mels.length>0&&(
-        <Card>
-          <SectionTitle>MEL actifs ({mels.length})</SectionTitle>
-          {mels.map((m,i)=>(
-            <div key={i} style={{padding:"8px 0",borderBottom:i<mels.length-1?"1px solid "+C.border:"none",display:"flex",gap:10,alignItems:"center"}}>
-              <span style={{background:"#FEF3C7",color:"#A0720A",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}}>Cat.{m.sev}</span>
-              <div style={{flex:1}}>
-                <div style={{fontSize:12,fontWeight:600,color:C.text}}>{m.sys}</div>
-                <div style={{fontSize:10,color:C.slate}}>{m.mel} · Exp: {m.exp}</div>
-              </div>
+      <Card>
+        <SectionTitle>MEL actifs ({mels.length})</SectionTitle>
+        {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:13,padding:"12px 0"}}>Aucun MEL actif</div>}
+        {mels.map((m,i)=>(
+          <div key={i} style={{padding:"10px 0",borderBottom:i<mels.length-1?"1px solid "+C.border:"none",display:"flex",gap:10,alignItems:"center"}}>
+            <span style={{background:sevBg(m.sev),color:sevColor(m.sev),padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,flexShrink:0}}>Cat.{m.sev}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
+              <div style={{fontSize:10,color:C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}</div>
             </div>
-          ))}
-        </Card>
-      )}
+          </div>
+        ))}
+        <div style={{marginTop:10,fontSize:11,color:C.slateL,textAlign:"center"}}>
+          Gérer les MEL dans Formulaires → Maintenance
+        </div>
+      </Card>
       <Card>
         <SectionTitle>Indicateurs CAMO</SectionTitle>
         <Bar label="Fiabilite moteurs" value={md.fiabMoteurs||0} max={100} unit="%" color={(md.fiabMoteurs||0)>=99.5?C.emerald:C.warn} sub="Objectif: 99.5%"/>
@@ -1929,7 +2019,7 @@ function App() {
     setDism([]);setReport(null);setReset(false);setTab("forms");
   };
 
-  const allAlerts  = computeAlerts(kpis,flights);
+  const allAlerts  = computeAlerts(kpis,flights,maintData);
   const critCount  = allAlerts.filter(a=>!dismissed.includes(a.id)).length;
   const timeStr    = now.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
 
@@ -1978,9 +2068,9 @@ function App() {
 
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
-        {tab==="forms"   && <ScreenForms onSubmitVol={d=>{setFlights(f=>[...f,d]);}} onSubmitMaint={setMaint} onSubmitFin={d=>setFin(f=>[...f,d])} onReset={()=>setReset(true)} flights={flights} crew={crew} setCrew={setCrew}/>}
+        {tab==="forms"   && <ScreenForms onSubmitVol={d=>{setFlights(f=>[...f,d]);}} onSubmitMaint={setMaint} onSubmitFin={d=>setFin(f=>[...f,d])} onReset={()=>setReset(true)} flights={flights} crew={crew} setCrew={setCrew} maintData={maintData}/>}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights}/>}
-        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism}/>}
+        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism} maintData={maintData}/>}
         {tab==="ops"     && <ScreenOps flights={flights} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData}/>}
