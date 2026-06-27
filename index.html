@@ -16,30 +16,10 @@
       <div id="err" style="display:none;color:#DC2626;font-size:12px;padding:0 20px;text-align:center;"></div>
     </div>
   </div>
-
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
-
-  <!-- jsPDF with fallback -->
-  <script>
-    function loadJsPDF(cb) {
-      var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-      s.onload = cb;
-      s.onerror = function() {
-        // Fallback to unpkg
-        var s2 = document.createElement('script');
-        s2.src = 'https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js';
-        s2.onload = cb;
-        s2.onerror = function() { console.warn('jsPDF failed to load'); };
-        document.head.appendChild(s2);
-      };
-      document.head.appendChild(s);
-    }
-    loadJsPDF(function() { console.log('jsPDF loaded:', !!window.jspdf); });
-  </script>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
     window.addEventListener('load', function() {
       try {
@@ -1314,32 +1294,154 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed }) {
   );
 }
 
-function ScreenPerf({ kpis, flights }) {
-  const vols=flights.filter(f=>f.status==="Termine"&&f.consoH>0);
-  const consoMoy=vols.length>0?Math.round(vols.reduce((s,f)=>s+f.consoH,0)/vols.length):kpis.consoH||0;
-  const consoLabel=vols.length>0?"Moy. "+vols.length+" vol(s)":"Depuis KPI";
+function ScreenPerf({ kpis, flights, finData }) {
+  const vols = flights.filter(f=>f.status==="Termine"&&f.consoH>0);
+  const consoMoy = vols.length>0 ? Math.round(vols.reduce((s,f)=>s+f.consoH,0)/vols.length) : kpis.consoH||0;
+  const consoLabel = vols.length>0 ? "Moy. "+vols.length+" vol(s)" : "Depuis KPI";
+  const tPax = flights.reduce((s,f)=>s+f.pax,0);
+  const volsNps = flights.filter(f=>f.status==="Termine"&&f.nps>0);
+  const npsVal = volsNps.length>0 ? Math.round(volsNps.reduce((s,f)=>s+f.nps,0)/volsNps.length) : kpis.nps||0;
+
+  // Build chart data from flights grouped by date
+  const byDate = {};
+  flights.filter(f=>f.status==="Termine"&&f.date).forEach(f=>{
+    const d = f.date.slice(5); // MM-DD
+    if(!byDate[d]) byDate[d] = {date:d,vols:[],pax:0,delayed:0,consomme:0,consoVols:0};
+    byDate[d].vols.push(f);
+    byDate[d].pax += f.pax;
+    if(f.delayMin>15) byDate[d].delayed++;
+    if(f.consoH>0){byDate[d].consomme+=f.consoH;byDate[d].consoVols++;}
+  });
+  const days = Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date)).slice(-14);
+  const otpData  = days.map(d=>({label:d.date,val:d.vols.length>0?Math.round((d.vols.length-d.delayed)/d.vols.length*100):null}));
+  const lfData   = days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+f.load,0)/d.vols.length):null}));
+  const consoData= days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
+  const paxData  = days.map(d=>({label:d.date,val:d.pax}));
+
+  // Mini SVG line chart component
+  const LineChart = ({data, color, target, maxVal, minVal, title, unit}) => {
+    const W=300, H=80, padL=28, padR=8, padT=8, padB=20;
+    const cW=W-padL-padR, cH=H-padT-padB;
+    const pts = data.filter(d=>d.val!==null);
+    if(pts.length<2) return (
+      <div style={{textAlign:"center",padding:"20px",color:C.slateL,fontSize:12}}>
+        Donnees insuffisantes (min. 2 vols)
+      </div>
+    );
+    const vals = pts.map(p=>p.val);
+    const lo = minVal!==undefined ? minVal : Math.max(0,Math.min(...vals)-10);
+    const hi = maxVal!==undefined ? maxVal : Math.max(...vals)+10;
+    const range = hi-lo||1;
+    const xScale = i => padL + (i/(pts.length-1))*cW;
+    const yScale = v => padT + cH - ((v-lo)/range)*cH;
+    // Build path
+    const pathD = pts.map((p,i)=>(i===0?"M":"L")+xScale(i).toFixed(1)+","+yScale(p.val).toFixed(1)).join(" ");
+    // Area fill
+    const areaD = pathD+" L"+xScale(pts.length-1).toFixed(1)+","+(padT+cH)+" L"+padL.toFixed(1)+","+(padT+cH)+" Z";
+    // Target line
+    const ty = target!==undefined ? yScale(Math.min(hi,Math.max(lo,target))) : null;
+    return (
+      <svg width="100%" viewBox={"0 0 "+W+" "+H} style={{display:"block",overflow:"visible"}}>
+        {/* Grid lines */}
+        {[0,0.5,1].map((t,i)=>{
+          const yy = padT + cH*t;
+          const lv = Math.round(hi - t*(hi-lo));
+          return <g key={i}>
+            <line x1={padL} y1={yy} x2={W-padR} y2={yy} stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3"/>
+            <text x={padL-3} y={yy+3} textAnchor="end" fontSize={7} fill={C.slateL}>{lv}</text>
+          </g>;
+        })}
+        {/* Target line */}
+        {ty!==null && ty!==undefined && (
+          <g>
+            <line x1={padL} y1={ty} x2={W-padR} y2={ty} stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={0.5}/>
+            <text x={W-padR+2} y={ty+3} fontSize={6.5} fill={color} opacity={0.7}>Obj</text>
+          </g>
+        )}
+        {/* Area */}
+        <path d={areaD} fill={color} fillOpacity={0.08}/>
+        {/* Line */}
+        <path d={pathD} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+        {/* Points */}
+        {pts.map((p,i)=>(
+          <circle key={i} cx={xScale(i)} cy={yScale(p.val)} r={3} fill={color} stroke="white" strokeWidth={1.5}/>
+        ))}
+        {/* Last value label */}
+        <text x={xScale(pts.length-1)} y={yScale(pts[pts.length-1].val)-7}
+          textAnchor="middle" fontSize={8} fontWeight="700" fill={color}>
+          {pts[pts.length-1].val}{unit}
+        </text>
+        {/* X axis labels */}
+        {pts.map((p,i)=>{
+          if(pts.length<=7||i%Math.ceil(pts.length/5)===0||i===pts.length-1)
+            return <text key={i} x={xScale(i)} y={H-4} textAnchor="middle" fontSize={7} fill={C.slateL}>{p.label}</text>;
+          return null;
+        })}
+      </svg>
+    );
+  };
+
+  const ChartCard = ({title,icon,data,color,target,maxVal,minVal,unit,current,currentLabel}) => (
+    <Card>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>{icon} {title}</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:22,fontWeight:800,color}}>{current}{unit}</div>
+          <div style={{fontSize:9,color:C.slateL}}>{currentLabel}</div>
+        </div>
+      </div>
+      <LineChart data={data} color={color} target={target} maxVal={maxVal} minVal={minVal} unit={unit}/>
+    </Card>
+  );
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* KPI tiles */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <KpiTile title="OTP" value={kpis.otp} unit="%" accent={kpis.otp>=90?C.emerald:C.warn} icon="⏰"/>
         <KpiTile title="Load Factor" value={kpis.loadFactor} unit="%" accent={C.emerald} icon="👥"/>
         <KpiTile title="Retards" value={kpis.delayMin} unit="min" accent={kpis.delayMin>15?C.warn:C.emerald} icon="⚠"/>
         {(()=>{
-          const volsNps=flights.filter(f=>f.status==="Termine"&&f.nps>0);
-          const npsVal=volsNps.length>0?Math.round(volsNps.reduce((s,f)=>s+f.nps,0)/volsNps.length):kpis.nps||0;
-          return <KpiTile title="NPS moyen" value={npsVal} unit="/100" accent={npsVal>=70?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"Depuis KPI"}/>;
+          return <KpiTile title="NPS moyen" value={npsVal} unit="/100" accent={npsVal>=70?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}/>;
         })()}
       </div>
+
+      {/* Charts */}
+      {days.length>=2 ? (
+        <>
+          <ChartCard title="Ponctualite OTP" icon="⏰"
+            data={otpData} color={C.emerald} target={90} maxVal={100} minVal={60} unit="%" current={kpis.otp} currentLabel="Aujourd hui"/>
+          <ChartCard title="Load Factor" icon="👥"
+            data={lfData} color={C.navy} target={80} maxVal={100} minVal={50} unit="%" current={kpis.loadFactor} currentLabel="Aujourd hui"/>
+          <ChartCard title="Conso. carburant moyenne" icon="⛽"
+            data={consoData} color={C.gold} target={900} maxVal={1100} minVal={600} unit="kg/h" current={consoMoy} currentLabel={consoLabel}/>
+          <ChartCard title="PAX par jour" icon="👤"
+            data={paxData} color="#7C3AED" maxVal={null} minVal={0} unit="" current={tPax} currentLabel="Total" />
+        </>
+      ) : (
+        <Card>
+          <div style={{textAlign:"center",padding:"20px 0",color:C.slateL}}>
+            <div style={{fontSize:32,marginBottom:8}}>📊</div>
+            <div style={{fontWeight:600,fontSize:13,color:C.slate}}>Graphiques disponibles</div>
+            <div style={{fontSize:12,marginTop:4}}>apres 2 jours de vols enregistres</div>
+          </div>
+        </Card>
+      )}
+
+      {/* Bar trends */}
       <Card>
-        <SectionTitle>Tendances</SectionTitle>
+        <SectionTitle>Indicateurs du jour</SectionTitle>
         <Bar label="OTP" value={kpis.otp} max={100} unit="%" color={kpis.otp>=90?C.emerald:C.warn} sub="Objectif: 90%"/>
         <Bar label="Load Factor" value={kpis.loadFactor} max={100} unit="%" color={kpis.loadFactor>=80?C.emerald:C.warn} sub="Objectif: 80%"/>
         <Bar label="Retards" value={kpis.delayMin} max={60} unit=" min" color={kpis.delayMin<=15?C.emerald:C.danger} sub="Seuil: 15 min"/>
-        <Bar label="Conso. carburant moyenne" value={consoMoy} max={1000} unit=" kg/h" color={consoMoy<900?C.emerald:C.danger} sub={consoLabel+" \u00B7 Seuil 900 kg/h"}/>
+        <Bar label="Conso. carburant moyenne" value={consoMoy} max={1000} unit=" kg/h" color={consoMoy<900?C.emerald:C.danger} sub={consoLabel+" · Seuil 900 kg/h"}/>
       </Card>
     </div>
   );
 }
+
 
 function ScreenMaint({ kpis, maintData }) {
   const md=maintData||{};
@@ -1571,7 +1673,7 @@ function App() {
         {tab==="carte"   && <ScreenCarte flights={flights} ac={ac} moroccoTraffic={mTraffic} icao24={icao24}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism}/>}
         {tab==="ops"     && <ScreenOps flights={flights} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
-        {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights}/>}
+        {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData}/>}
         {tab==="fin"     && <ScreenFin finData={finData}/>}
       </div>
@@ -1777,6 +1879,90 @@ function App() {
                   drawRow("Revenus cumules",Math.round(tRev/1000)+"K MAD");
                   drawRow("Couts cumules",Math.round(tCout/1000)+"K MAD");
                   drawRow("Marge brute",marge+"%",marge>=20,true);
+                  y+=4;
+                }
+
+                // ── Graphiques evolution ──
+                if(days.length>=2){
+                  if(y>200){doc.addPage();y=20;}
+                  drawSection("  GRAPHIQUES D EVOLUTION (14 derniers jours)",15,31,61);
+
+                  const drawChart=(chartData,title,color,target,minV,maxV,unitLabel)=>{
+                    if(y>230){doc.addPage();y=20;}
+                    const pts=chartData.filter(d=>d.val!==null);
+                    if(pts.length<2)return;
+                    const cX=M, cY=y, cW2=CW, cH2=28;
+                    const lo=minV!==undefined?minV:Math.max(0,Math.min(...pts.map(p=>p.val))-5);
+                    const hi=maxV!==undefined?maxV:Math.max(...pts.map(p=>p.val))+5;
+                    const range=hi-lo||1;
+                    const xS=i=>cX+(i/(pts.length-1))*cW2;
+                    const yS=v=>cY+cH2-((v-lo)/range)*cH2;
+
+                    // Chart title
+                    doc.setTextColor(71,85,105);
+                    doc.setFontSize(7.5);
+                    doc.setFont("helvetica","bold");
+                    doc.text(title,cX,cY-2);
+                    const lastVal=pts[pts.length-1].val;
+                    const r=color[0],g=color[1],b=color[2];
+                    doc.setTextColor(r,g,b);
+                    doc.text(String(lastVal)+unitLabel,cX+CW,cY-2,"right");
+
+                    // Background
+                    doc.setFillColor(248,250,252);
+                    doc.roundedRect(cX,cY,cW2,cH2,1,1,"F");
+
+                    // Grid
+                    doc.setDrawColor(226,232,240);
+                    doc.setLineWidth(0.2);
+                    [0,0.5,1].forEach(t=>{
+                      const yy=cY+cH2*t;
+                      doc.line(cX,yy,cX+cW2,yy);
+                      doc.setTextColor(148,163,184);
+                      doc.setFontSize(6);
+                      doc.setFont("helvetica","normal");
+                      doc.text(String(Math.round(hi-t*(hi-lo))),cX-1,yy+1,"right");
+                    });
+
+                    // Target line
+                    if(target!==undefined){
+                      const ty2=yS(Math.min(hi,Math.max(lo,target)));
+                      doc.setDrawColor(r,g,b);
+                      doc.setLineWidth(0.4);
+                      doc.setLineDashPattern([1.5,1.5],0);
+                      doc.line(cX,ty2,cX+cW2,ty2);
+                      doc.setLineDashPattern([],0);
+                    }
+
+                    // Line
+                    doc.setDrawColor(r,g,b);
+                    doc.setLineWidth(1.2);
+                    for(let i=1;i<pts.length;i++){
+                      doc.line(xS(i-1),yS(pts[i-1].val),xS(i),yS(pts[i].val));
+                    }
+
+                    // Points
+                    pts.forEach((p,i)=>{
+                      doc.setFillColor(r,g,b);
+                      doc.circle(xS(i),yS(p.val),0.8,"F");
+                    });
+
+                    // X labels
+                    pts.forEach((p,i)=>{
+                      if(pts.length<=7||i===0||i===pts.length-1||i%Math.ceil(pts.length/5)===0){
+                        doc.setTextColor(148,163,184);
+                        doc.setFontSize(5.5);
+                        doc.setFont("helvetica","normal");
+                        doc.text(p.label,xS(i),cY+cH2+4,"center");
+                      }
+                    });
+                    y+=cH2+10;
+                  };
+
+                  drawChart(otpData,"Ponctualite OTP",[0,147,106],90,60,100,"%");
+                  drawChart(lfData,"Load Factor",[15,31,61],80,50,100,"%");
+                  drawChart(consoData,"Consommation carburant moyenne",[160,114,10],900,600,1100," kg/h");
+                  drawChart(paxData,"PAX par jour",[124,58,237],undefined,0,null,"");
                   y+=4;
                 }
 
