@@ -490,30 +490,53 @@ function simulateFlightState(icao24) {
 }
 
 // Generate ~12 simulated Morocco traffic blips
+const FR24_TOKEN = "019f0a80-1fdb-7142-998d-63a6e2239e6a|hz3Pj2427d6I0rNiPTyaySYS9SNPjoc3eopFXabKe9094339";
+const FR24_BASE  = "https://fr24api.flightradar24.com/api/sandbox";
+
 async function fetchByIcao24(icao24) {
   try {
     const r = await Promise.race([
-      fetch(`https://opensky-network.org/api/states/all?icao24=${icao24.toLowerCase()}`),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
+      fetch(`${FR24_BASE}/live/flight-positions/light?registration=CN-KTA`, {
+        headers: { "Authorization": "Bearer "+FR24_TOKEN, "Accept-Version": "v1" }
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6000))
     ]);
     if (r.ok) {
       const j = await r.json();
-      if (j.states?.[0]) return j.states[0];
+      const flights = j.data || [];
+      if (flights.length > 0) {
+        const f = flights[0];
+        return {
+          icao24: icao24,
+          callsign: f.callsign || "CN-KTA",
+          lat: f.lat,
+          lon: f.lon,
+          heading: f.track,
+          alt_m: f.alt,
+          speed_ms: f.gspeed ? f.gspeed * 0.514444 : null,
+          simulated: false
+        };
+      }
     }
   } catch(_e) {}
-  // Fallback: simulation
-  return null; // signal to use simulation in fetchOpenSky
+  return null;
 }
 
 async function fetchMorocco() {
   try {
+    // Morocco bounding box: N35.9 S27.7 W-13.2 E-0.9
     const r = await Promise.race([
-      fetch("https://opensky-network.org/api/states/all?lamin=27.7&lomin=-13.2&lamax=35.9&lomax=-0.9"),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
+      fetch(`${FR24_BASE}/live/flight-positions/light?bounds=35.9,27.7,-13.2,-0.9`, {
+        headers: { "Authorization": "Bearer "+FR24_TOKEN, "Accept-Version": "v1" }
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6000))
     ]);
     if (r.ok) {
       const j = await r.json();
-      return j.states ?? [];
+      return (j.data || []).map(f => [
+        f.fr24_id, f.callsign, f.lat, f.lon, f.track, f.alt, f.gspeed ? Math.round(f.gspeed*0.514444) : 0,
+        f.squawk||"", "FR24", f.registration||"", "", f.type||"", f.callsign||"", 0, 0, "live"
+      ]);
     }
   } catch(_e) {}
   return simulateMoroccoTraffic();
@@ -1905,7 +1928,7 @@ function App() {
     setLoading(true);
     try {
       const [st,tr] = await Promise.all([fetchByIcao24(icao24),fetchMorocco()]);
-      if(st){const p=parseState(st);if(p){setAc({...p,simulated:false,alt_ft:p.alt_m?Math.round(p.alt_m*3.281):null,speed_kt:p.speed_ms?Math.round(p.speed_ms*1.944):null});}}
+      if(st){setAc({...st,alt_ft:st.alt_m?Math.round(st.alt_m*3.281):null,speed_kt:st.speed_ms?Math.round(st.speed_ms*1.944):null});}
       else{setAc(simulateFlightState(icao24));}
       setMTraff(tr);
     } catch(_e){setAc(simulateFlightState(icao24));}
