@@ -1251,13 +1251,22 @@ function FormFin({ onSubmit }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights, crew, setCrew, maintData, onImport }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, onImport }) {
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
 
   const doExport=()=>{
-    const data={flights,maintData,crew};
+    const data={
+      version:"1.0",
+      exportDate:new Date().toISOString(),
+      flights,
+      maintData,
+      crew,
+      finData,
+      kpis,
+      dismissed,
+    };
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
@@ -1278,7 +1287,11 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights
       reader.onload=ev=>{
         try{
           const data=JSON.parse(ev.target.result);
-          if(data&&onImport){onImport(data);setSaved(true);setTimeout(()=>setSaved(false),2500);}
+          if(data&&onImport){
+            onImport(data);
+            setSaved(true);
+            setTimeout(()=>setSaved(false),2500);
+          }
         }catch(err){alert("Fichier invalide — vérifiez que c'est un backup Afrijet.");}
       };
       reader.readAsText(file);
@@ -2121,7 +2134,22 @@ function App() {
 
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
-        {tab==="forms"   && <ScreenForms onSubmitVol={d=>{setFlights(f=>[...f,d]);}} onSubmitMaint={setMaint} onSubmitFin={d=>setFin(f=>[...f,d])} onReset={()=>setReset(true)} flights={flights} crew={crew} setCrew={setCrew} maintData={maintData} onImport={data=>{if(data.flights)setFlights(data.flights);if(data.maintData)setMaint(data.maintData);if(data.crew)setCrew(data.crew);}}/>}
+        {tab==="forms"   && <ScreenForms
+          onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
+          onSubmitMaint={setMaint}
+          onSubmitFin={d=>setFin(f=>[...f,d])}
+          onReset={()=>setReset(true)}
+          flights={flights} crew={crew} setCrew={setCrew}
+          maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed}
+          onImport={data=>{
+            if(data.flights)   setFlights(data.flights);
+            if(data.maintData) setMaint(data.maintData);
+            if(data.crew)      setCrew(data.crew);
+            if(data.finData)   setFin(data.finData);
+            if(data.kpis)      setKpis(data.kpis);
+            if(data.dismissed) setDism(data.dismissed);
+          }}
+        />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism} maintData={maintData}/>}
         {tab==="ops"     && <ScreenOps flights={flights} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
