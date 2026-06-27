@@ -445,10 +445,11 @@ const AIRPORTS_DATA = [
 
 
 function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
-  const mapDiv  = useRef(null);
-  const mapRef  = useRef(null);
-  const markRef = useRef(null);
-  const popRef  = useRef(null);
+  const mapDiv     = useRef(null);
+  const mapRef     = useRef(null);
+  const markRef    = useRef(null);
+  const mapReady   = useRef(false);
+  const pendingAc  = useRef(null);
   const [status, setStatus] = useState("loading");
 
   const TOKEN = "pk.eyJ1Ijoibm1haWRhbmUiLCJhIjoiY21xd2dwZm9lMTNicjJzcjQ0Z2thNmJtdiJ9.x1S5ogXqsfjCbgmm9-9vtQ";
@@ -493,6 +494,12 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
         map.addControl(new window.mapboxgl.AttributionControl({compact:true}));
         map.on("load", () => {
           setStatus("ready");
+          mapReady.current = true;
+          // Place pending CN-KTA marker if ac was already set
+          if (pendingAc.current) {
+            placeMarker(map, pendingAc.current);
+            pendingAc.current = null;
+          }
           // Add airports
           AIRPORTS.forEach(a => {
             const el = document.createElement("div");
@@ -520,21 +527,40 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
     return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
   }, []);
 
-  // Update CN-KTA marker
-  useEffect(() => {
-    if (!mapRef.current || !window.mapboxgl || !ac?.lat) return;
-    const color = ac.simulated ? "#A0720A" : "#00936A";
+  // Helper to place CN-KTA marker
+  const placeMarker = (map, acData) => {
+    if (!window.mapboxgl || !acData?.lat) return;
+    const color = acData.simulated ? "#A0720A" : "#00936A";
     const el = document.createElement("div");
-    el.style.cssText = "font-size:26px;color:"+color+";filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));transform:rotate("+(ac.heading||0)+"deg);line-height:1;cursor:pointer";
+    el.style.cssText = "font-size:28px;color:"+color+";filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));transform:rotate("+(acData.heading||0)+"deg);line-height:1;cursor:pointer;transition:transform 1s";
     el.textContent = "✈";
     const popup = new window.mapboxgl.Popup({offset:20}).setHTML(
-      "<div style='font-family:Arial;padding:4px'><b style='font-size:13px'>CN-KTA</b><br><span style='color:#64748B;font-size:11px'>"+(ac.simulated?"Simulation":"ADS-B Live")+"</span><br><hr style='margin:4px 0;border-color:#EEF2F8'><span style='font-size:11px'>Alt: <b>"+(ac.alt_ft?ac.alt_ft.toLocaleString():"--")+" ft</b><br>Vitesse: <b>"+(ac.speed_kt||"--")+" kt</b><br>Cap: <b>"+Math.round(ac.heading||0)+"</b></span></div>"
+      "<div style='font-family:Arial;padding:6px 8px'>" +
+      "<b style='font-size:13px;color:#0F1F3D'>CN-KTA</b><br>" +
+      "<span style='color:#64748B;font-size:11px'>"+(acData.simulated?"Simulation":"ADS-B Live")+"</span>" +
+      "<hr style='margin:5px 0;border-color:#EEF2F8'>" +
+      "<div style='font-size:11px;line-height:1.8'>" +
+      "Alt: <b>"+(acData.alt_ft?acData.alt_ft.toLocaleString():"--")+" ft</b><br>" +
+      "Vitesse: <b>"+(acData.speed_kt||"--")+" kt</b><br>" +
+      "Cap: <b>"+Math.round(acData.heading||0)+"</b>" +
+      "</div></div>"
     );
     if (markRef.current) markRef.current.remove();
     markRef.current = new window.mapboxgl.Marker({element:el})
-      .setLngLat([ac.lon, ac.lat])
+      .setLngLat([acData.lon, acData.lat])
       .setPopup(popup)
-      .addTo(mapRef.current);
+      .addTo(map);
+  };
+
+  // Update CN-KTA marker when ac changes
+  useEffect(() => {
+    if (!ac?.lat) return;
+    if (mapReady.current && mapRef.current) {
+      placeMarker(mapRef.current, ac);
+    } else {
+      // Map not ready yet - store for later
+      pendingAc.current = ac;
+    }
   }, [ac]);
 
   return (
