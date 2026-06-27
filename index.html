@@ -6,14 +6,35 @@
   <meta name="theme-color" content="#0F1F3D"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <title>Afrijet Sahara KPI</title>
-  <link rel="manifest" href="/manifest.json"/>
 </head>
-<body style="margin:0;background:#F4F7FB;">
-  <div id="root"></div>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone@7.23.6/babel.min.js"></script>
-  <script type="text/babel" data-presets="react">
+<body style="margin:0;padding:0;background:#F4F7FB;font-family:Arial,sans-serif;">
+  <div id="root">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px;">
+      <div style="font-size:48px;">✈</div>
+      <div style="font-weight:800;font-size:18px;color:#0F1F3D;">Afrijet Sahara</div>
+      <div style="color:#64748B;font-size:13px;">Chargement en cours...</div>
+      <div id="err" style="display:none;color:#DC2626;font-size:12px;padding:0 20px;text-align:center;"></div>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+  <script>
+    window.addEventListener('load', function() {
+      try {
+        var code = document.getElementById('app-code').textContent;
+        var compiled = Babel.transform(code, { presets: ['react'] }).code;
+        var fn = new Function('React', 'ReactDOM', compiled + '\nreturn App;');
+        var App = fn(React, ReactDOM);
+        var root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+      } catch(e) {
+        document.getElementById('err').style.display = 'block';
+        document.getElementById('err').textContent = 'Erreur: ' + e.message;
+      }
+    });
+  </script>
+  <script id="app-code" type="text/plain">
 // React hooks available globally via Babel standalone
 const { useState, useEffect, useRef } = React;
 
@@ -600,14 +621,6 @@ async function fetchMorocco() {
     }
   } catch(_e) {}
   return simulateMoroccoTraffic();
-}
-async function fetchMorocco() {
-  try {
-    const r=await Promise.race([fetch("https://opensky-network.org/api/states/all?lamin=27.5&lomin=-13.5&lamax=36.1&lomax=-0.8"),new Promise((_,rj)=>setTimeout(()=>rj(new Error("t")),8000))]);
-    if(!r.ok)return[];
-    const j=await r.json();
-    return j.states||[];
-  } catch(_e){return[];}
 }
 
 function parseState(s) {
@@ -1631,8 +1644,6 @@ function App() {
 }
 
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(App));
   </script>
 </body>
 </html>
