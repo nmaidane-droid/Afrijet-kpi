@@ -1390,20 +1390,22 @@ function ScreenPerf({ kpis, flights, finData }) {
     );
   };
 
-  const ChartCard = ({title,icon,data,color,target,maxVal,minVal,unit,current,currentLabel}) => (
-    <Card>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div>
+  const ChartCard = ({title,icon,data,color,target,maxVal,minVal,unit}) => {
+    const pts = data.filter(d=>d.val!==null);
+    const avg = pts.length>0 ? Math.round(pts.reduce((s,p)=>s+p.val,0)/pts.length) : null;
+    return (
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>{icon} {title}</div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:22,fontWeight:800,color}}>{avg!==null?avg:"--"}{unit}</div>
+            <div style={{fontSize:9,color:C.slateL}}>Moyenne periode</div>
+          </div>
         </div>
-        <div style={{textAlign:"right"}}>
-          <div style={{fontSize:22,fontWeight:800,color}}>{current}{unit}</div>
-          <div style={{fontSize:9,color:C.slateL}}>{currentLabel}</div>
-        </div>
-      </div>
-      <LineChart data={data} color={color} target={target} maxVal={maxVal} minVal={minVal} unit={unit}/>
-    </Card>
-  );
+        <LineChart data={data} color={color} target={target} maxVal={maxVal} minVal={minVal} unit={unit}/>
+      </Card>
+    );
+  };
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -1421,13 +1423,13 @@ function ScreenPerf({ kpis, flights, finData }) {
       {days.length>=2 ? (
         <>
           <ChartCard title="Ponctualite OTP" icon="⏰"
-            data={otpData} color={C.emerald} target={90} maxVal={100} minVal={60} unit="%" current={kpis.otp} currentLabel="Aujourd hui"/>
+            data={otpData} color={C.emerald} target={90} maxVal={100} minVal={60} unit="%"/>
           <ChartCard title="Load Factor" icon="👥"
-            data={lfData} color={C.navy} target={80} maxVal={100} minVal={50} unit="%" current={kpis.loadFactor} currentLabel="Aujourd hui"/>
+            data={lfData} color={C.navy} target={80} maxVal={100} minVal={50} unit="%"/>
           <ChartCard title="Conso. carburant moyenne" icon="⛽"
-            data={consoData} color={C.gold} target={900} maxVal={1100} minVal={600} unit="kg/h" current={consoMoy} currentLabel={consoLabel}/>
+            data={consoData} color={C.gold} target={900} maxVal={1100} minVal={600} unit="kg/h"/>
           <ChartCard title="NPS passagers" icon="⭐"
-            data={npsData} color="#7C3AED" target={70} maxVal={100} minVal={40} unit="%" current={npsVal} currentLabel={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}/>
+            data={npsData} color="#7C3AED" target={70} maxVal={100} minVal={40} unit="%"/>
         </>
       ) : (
         <Card>
@@ -1929,15 +1931,15 @@ function App() {
                     const xS=i=>cX+(i/(pts.length-1))*cW2;
                     const yS=v=>cY+cH2-((v-lo)/range)*cH2;
 
-                    // Chart title
+                    // Chart title with average
+                    const avgVal=Math.round(pts.reduce((s,p)=>s+p.val,0)/pts.length);
                     doc.setTextColor(71,85,105);
                     doc.setFontSize(7.5);
                     doc.setFont("helvetica","bold");
                     doc.text(title,cX,cY-2);
-                    const lastVal=pts[pts.length-1].val;
                     const r=color[0],g=color[1],b=color[2];
                     doc.setTextColor(r,g,b);
-                    doc.text(String(lastVal)+unitLabel,cX+CW,cY-2,"right");
+                    doc.text("Moy: "+String(avgVal)+unitLabel,cX+CW,cY-2,"right");
 
                     // Background
                     doc.setFillColor(248,250,252);
