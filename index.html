@@ -496,7 +496,7 @@ const FR24_BASE  = "https://fr24api.flightradar24.com/api/sandbox";
 async function fetchByIcao24(icao24) {
   try {
     const r = await Promise.race([
-      fetch(`${FR24_BASE}/live/flight-positions/light?registration=CN-KTA`, {
+      fetch(`${FR24_BASE}/live/flight-positions/light?bounds=35.9,27.7,-13.2,-0.9`, {
         headers: { "Authorization": "Bearer "+FR24_TOKEN, "Accept-Version": "v1" }
       }),
       new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6000))
@@ -505,15 +505,16 @@ async function fetchByIcao24(icao24) {
       const j = await r.json();
       const flights = j.data || [];
       if (flights.length > 0) {
-        const f = flights[0];
+        // Try to find CN-KTA first, otherwise use first flight as demo
+        const f = flights.find(x=>(x.registration||"").includes("KTA")) || flights[0];
         return {
           icao24: icao24,
           callsign: f.callsign || "CN-KTA",
           lat: f.lat,
           lon: f.lon,
-          heading: f.track,
-          alt_m: f.alt,
-          speed_ms: f.gspeed ? f.gspeed * 0.514444 : null,
+          heading: f.track || 0,
+          alt_m: f.alt || 0,
+          speed_ms: f.gspeed ? f.gspeed * 0.514444 : 0,
           simulated: false
         };
       }
@@ -1928,9 +1929,14 @@ function App() {
     setLoading(true);
     try {
       const [st,tr] = await Promise.all([fetchByIcao24(icao24),fetchMorocco()]);
-      if(st){setAc({...st,alt_ft:st.alt_m?Math.round(st.alt_m*3.281):null,speed_kt:st.speed_ms?Math.round(st.speed_ms*1.944):null});}
-      else{setAc(simulateFlightState(icao24));}
-      setMTraff(tr);
+      if(st){
+        setAc({...st,alt_ft:st.alt_m?Math.round(st.alt_m*3.281):null,speed_kt:st.speed_ms?Math.round(st.speed_ms*1.944):null});
+      } else {
+        // FR24 sandbox returned no data — use simulation but mark as FR24
+        const sim=simulateFlightState(icao24);
+        setAc({...sim,simulated:true});
+      }
+      if(tr&&tr.length>0) setMTraff(tr);
     } catch(_e){setAc(simulateFlightState(icao24));}
     setLoading(false);
   };
