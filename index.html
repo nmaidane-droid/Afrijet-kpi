@@ -444,6 +444,82 @@ const AIRPORTS_DATA = [
 ];
 
 
+function simulateFlightState(icao24) {
+  const now       = Date.now();
+  const seed      = Math.sin(now / 8000);   // slow oscillation
+  const seed2     = Math.cos(now / 6000);
+  const seed3     = Math.sin(now / 4000);
+
+  // Progress 0->1 on a 55-min loop
+  const elapsed   = (now % (55 * 60 * 1000)) / (55 * 60 * 1000);
+
+  // Interpolate lat/lon along CMN->FEZ great circle
+  const lat = 33.3675 + (33.9273 - 33.3675) * elapsed;
+  const lon = -7.5900 + (-4.9778 - (-7.5900)) * elapsed;
+
+  // Realistic EMB 145 cruise: FL280, 440-460 kt
+  const cruiseAlt  = 8534;  // meters ~ FL280
+  // Climb/cruise/descend profile
+  let altM;
+  if (elapsed < 0.15)       altM = cruiseAlt * (elapsed / 0.15);
+  else if (elapsed > 0.85)  altM = cruiseAlt * ((1 - elapsed) / 0.15);
+  else                      altM = cruiseAlt + seed * 80;
+
+  const speed_ms   = 225 + seed2 * 8;          // ~440-460 kt in m/s
+  const heading    = 72 + seed3 * 3;            // ENE toward FEZ, slight wobble
+  const vertRate   = elapsed < 0.15 ? 8.5
+                   : elapsed > 0.85 ? -7.2
+                   : seed * 0.5;
+
+  return {
+    icao24:      icao24 || "020035",
+    callsign:    "AJS03",
+    country:     "Morocco",
+    lat,
+    lon,
+    onGround:    false,
+    heading,
+    vertRate_ms: vertRate,
+    squawk:      "2341",
+    lastContact: Math.floor(now / 1000),
+    speed_kt:    Math.round(speed_ms * 1.94384),
+    alt_ft:      Math.round(altM * 3.28084),
+    flightLevel: Math.round(altM * 3.28084 / 100),
+    simulated:   true,
+  };
+}
+
+// Generate ~12 simulated Morocco traffic blips
+async function fetchByIcao24(icao24) {
+  try {
+    const r = await Promise.race([
+      fetch(`https://opensky-network.org/api/states/all?icao24=${icao24.toLowerCase()}`),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
+    ]);
+    if (r.ok) {
+      const j = await r.json();
+      if (j.states?.[0]) return j.states[0];
+    }
+  } catch(_e) {}
+  // Fallback: simulation
+  return null; // signal to use simulation in fetchOpenSky
+}
+
+async function fetchMorocco() {
+  try {
+    const r = await Promise.race([
+      fetch("https://opensky-network.org/api/states/all?lamin=27.7&lomin=-13.2&lamax=35.9&lomax=-0.9"),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
+    ]);
+    if (r.ok) {
+      const j = await r.json();
+      return j.states ?? [];
+    }
+  } catch(_e) {}
+  return simulateMoroccoTraffic();
+}
+
+
 function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
   const mapDiv     = useRef(null);
   const mapRef     = useRef(null);
