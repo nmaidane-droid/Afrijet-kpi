@@ -1319,7 +1319,7 @@ function ScreenPerf({ kpis, flights, finData }) {
     if(f.delayMin>15) byDate[d].delayed++;
     if(f.consoH>0){byDate[d].consomme+=f.consoH;byDate[d].consoVols++;}
   });
-  const days = Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date)).slice(-14);
+  const days = Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
   const otpData  = days.map(d=>({label:d.date,val:d.vols.length>0?Math.round((d.vols.length-d.delayed)/d.vols.length*100):null}));
   const lfData   = days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+f.load,0)/d.vols.length):null}));
   const consoData= days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
@@ -1399,7 +1399,7 @@ function ScreenPerf({ kpis, flights, finData }) {
           <div style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>{icon} {title}</div>
           <div style={{textAlign:"right"}}>
             <div style={{fontSize:22,fontWeight:800,color}}>{avg!==null?avg:"--"}{unit}</div>
-            <div style={{fontSize:9,color:C.slateL}}>Moyenne periode</div>
+            <div style={{fontSize:9,color:C.slateL}}>Moyenne — {pts.length} jour(s)</div>
           </div>
         </div>
         <LineChart data={data} color={color} target={target} maxVal={maxVal} minVal={minVal} unit={unit}/>
@@ -1746,7 +1746,7 @@ function App() {
                   if(f.delayMin>15)byDate[d].delayed++;
                   if(f.consoH>0){byDate[d].consomme+=f.consoH;byDate[d].consoVols++;}
                 });
-                const days=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date)).slice(-14);
+                const days=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
                 const otpData=days.map(d=>({label:d.date,val:d.vols.length>0?Math.round((d.vols.length-d.delayed)/d.vols.length*100):null}));
                 const lfData=days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+f.load,0)/d.vols.length):null}));
                 const consoData=days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
