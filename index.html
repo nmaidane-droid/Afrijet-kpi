@@ -1804,7 +1804,7 @@ function ScreenOps({ flights, safetyData, onUpdateFlight }) {
                       style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
                   </div>
                   <div style={{gridColumn:"1 / -1"}}>
-                    <FLabel>NPS passagers (0-10)</FLabel>
+                    <FLabel>NPS client (0-10)</FLabel>
                     <input type="number" min={0} max={10} step={0.1} value={edit.nps||""} placeholder="ex: 7.5"
                       onChange={e=>setEdit({...edit,nps:Math.min(10,Math.max(0,Number(e.target.value)||0))})}
                       style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
@@ -2364,7 +2364,7 @@ function ScreenPerf({ kpis, flights, finData }) {
             data={lfData} color={C.navy} target={80} maxVal={100} minVal={50} unit="%"/>
           <ChartCard title="Conso. carburant moyenne" icon="⛽"
             data={consoData} color={C.gold} target={900} maxVal={1100} minVal={600} unit="kg/h"/>
-          <ChartCard title="NPS passagers" icon="⭐"
+          <ChartCard title="NPS client" icon="⭐"
             data={npsData} color="#7C3AED" target={70} maxVal={100} minVal={40} unit="%"/>
         </>
       ) : (
@@ -2660,7 +2660,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
       kpiLine("Load Factor",rLf+"%","80%",rLf>=80)+
       kpiLine("Retards moy.",rDelay+" min","15 min",rDelay<=15)+
       kpiLine("Conso. carburant",rConso+" kg/h","900 kg/h",rConso<900)+
-      kpiLine("NPS passagers",rNps+"/10","7",rNps>=7)
+      kpiLine("NPS client",rNps+"/10","7",rNps>=7)
     )+
     card(sec("Rotations semaine du "+weekLabel+" — "+weekFlights.length+" vols","#0F1F3D")+fRows)+
     card(sec("Maintenance CAMO","#00936A")+
@@ -3039,7 +3039,7 @@ function App() {
                 drawRow("Load Factor",pLf+"%",pLf>=80);
                 drawRow("Retards moyens",pDelay+" min",pDelay<=15);
                 drawRow("Consommation carburant",pConso+" kg/h",pConso<900);
-                drawRow("NPS passagers",pNps+"/10",pNps>=7,true);
+                drawRow("NPS client",pNps+"/10",pNps>=7,true);
                 y+=4;
 
                 // ── Operations — current week only ──
@@ -3303,7 +3303,7 @@ function App() {
 
                   drawChart(otpData,"Ponctualite OTP",[0,147,106],90,60,100,"%");                  drawChart(lfData,"Load Factor",[15,31,61],80,50,100,"%");
                   drawChart(consoData,"Consommation carburant",[160,114,10],900,600,1100," kg/h");
-                  drawChart(npsData2,"NPS passagers",[124,58,237],7,4,10,"");
+                  drawChart(npsData2,"NPS client",[124,58,237],7,4,10,"");
                 }
 
                 // ── Footer on all pages ──
