@@ -521,9 +521,17 @@ function useMetar(iata) {
   React.useEffect(() => {
     if(!iata||iata.length<3) return;
     setFc("?"); setRaw("");
-    fetch(`https://api.checkwx.com/metar/${iata}/decoded`, {
+    // CheckWX accepte ICAO — on cherche d'abord via station/IATA
+    fetch(`https://api.checkwx.com/station/${iata}`, {
       headers: {"X-API-Key": "add2685cda494119a5465ec664852fed"}
     })
+      .then(r=>r.json())
+      .then(stData=>{
+        const icao = stData?.data?.[0]?.icao || iata;
+        return fetch(`https://api.checkwx.com/metar/${icao}/decoded`, {
+          headers: {"X-API-Key": "add2685cda494119a5465ec664852fed"}
+        });
+      })
       .then(r=>r.json())
       .then(data=>{
         const m = data?.data?.[0];
