@@ -58,7 +58,7 @@ const C = {
   warn:"#D97706", warnL:"#FEF3C7",
   white:"#FFFFFF",
 };
-const TOP=60, BOT=58, PFX="ajs145v2_";
+const TOP=60, BOT=58, PFX="ajs135v1_";
 const fmtMAD = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 
 const lsGet = k => { try { return localStorage.getItem(k); } catch(_e) { return null; } };
@@ -740,18 +740,30 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
 // ── Alerts ───────────────────────────────────────────────────────────────────
 function computeAlerts(kpis, flights, maintData) {
   const a=[];
-  const otp=kpis.otp||0;
+  // Calculate real OTP from flights
+  const volsDone=flights.filter(f=>f.status==="Termine");
+  const otpScore=f=>f.delayMin<=0?100:f.delayMin<=15?85:f.delayMin<=30?70:f.delayMin<=45?50:25;
+  const otp=volsDone.length>0?Math.round(volsDone.reduce((s,f)=>s+otpScore(f),0)/volsDone.length):kpis.otp||0;
+  const delayVols=volsDone.filter(f=>f.delayMin>0);
+  const delayMin=delayVols.length>0?Math.round(delayVols.reduce((s,f)=>s+f.delayMin,0)/delayVols.length):kpis.delayMin||0;
   if(otp<85)a.push({id:"otp",sev:"danger",msg:"OTP critique: "+otp+"% (seuil 85%)",icon:"⏰"});
   else if(otp<90)a.push({id:"otp",sev:"warn",msg:"OTP en baisse: "+otp+"%",icon:"⏰"});
-  if(kpis.delayMin>30)a.push({id:"del",sev:"danger",msg:"Retards: "+kpis.delayMin+" min",icon:"⚠"});
-  else if(kpis.delayMin>15)a.push({id:"del",sev:"warn",msg:"Retards: "+kpis.delayMin+" min",icon:"⚠"});
+  if(delayMin>30)a.push({id:"del",sev:"danger",msg:"Retards: "+delayMin+" min",icon:"⚠"});
+  else if(delayMin>15)a.push({id:"del",sev:"warn",msg:"Retards: "+delayMin+" min",icon:"⚠"});
   if(kpis.loadFactor<70)a.push({id:"lf",sev:"warn",msg:"Load Factor: "+kpis.loadFactor+"%",icon:"💺"});
-  if((kpis.nextCheckH||999)<50)a.push({id:"chk",sev:"danger",msg:"A-Check dans "+(kpis.nextCheckH||0)+"h",icon:"🔧"});
+  // Use maintData for check alerts
+  const md=maintData||{};
+  if((md.nextCheckH||999)<50)a.push({id:"achk",sev:"danger",msg:"A-Check dans "+(md.nextCheckH||0)+"h",icon:"🔧"});
+  else if((md.nextCheckH||999)<100)a.push({id:"achk",sev:"warn",msg:"A-Check dans "+(md.nextCheckH||0)+"h",icon:"🔧"});
+  if(md.bCheckH&&md.bCheckH<100)a.push({id:"bchk",sev:"danger",msg:"B-Check dans "+md.bCheckH+"h",icon:"🔩"});
+  else if(md.bCheckH&&md.bCheckH<300)a.push({id:"bchk",sev:"warn",msg:"B-Check dans "+md.bCheckH+"h",icon:"🔩"});
+  if(md.cCheckH&&md.cCheckH<200)a.push({id:"cchk",sev:"danger",msg:"C-Check dans "+md.cCheckH+"h",icon:"🛠"});
+  else if(md.cCheckH&&md.cCheckH<500)a.push({id:"cchk",sev:"warn",msg:"C-Check dans "+md.cCheckH+"h",icon:"🛠"});
   // MEL alerts per item
-  const mels=(maintData?.mels||[]);
+  const mels=(md.mels||[]);
   mels.forEach((m,i)=>{
-    const sev=m.sev==="B"?"danger":"warn";
-    a.push({id:"mel_"+i,sev,msg:"MEL Cat."+m.sev+" — "+m.sys+" ("+m.mel+") · Exp: "+m.exp,icon:"🔧"});
+    const sev=m.sev==="A"?"danger":m.sev==="B"?"danger":"warn";
+    a.push({id:"mel_"+i,sev,msg:"MEL Cat."+m.sev+" — "+m.sys+" ("+(m.mel||m.ref||"")+") · Exp: "+m.exp,icon:"🔧"});
   });
   return a;
 }
@@ -873,15 +885,13 @@ const INIT_FLIGHTS = [
 ];
 
 const INIT_KPIS = {
-  otp:92, loadFactor:89, delayMin:18, fuelPct:65,
-  melCount:2, nextCheckH:182, nps:72, utilisation:7.5,
-  askK:152, rpkK:135,
-  consoH:850, consomme:6375,
+  otp:92, loadFactor:89, delayMin:18,
+  nps:72, consoH:850,
 };
 
 const INIT_MAINT = {
   melCount:4, nextCheckH:182, ttaf:4218,
-  fiabMoteurs:99.8, techDelay:0.4, aog:0,
+  fiabMoteurs:99.8, evtMoteur:0,
   mels:[
     {sys:"Passenger Address System", mel:"MEL 23-61", exp:"30/06/26", sev:"B"},
     {sys:"No. 2 VHF Nav - ILS",      mel:"MEL 34-01", exp:"03/07/26", sev:"B"},
@@ -1384,7 +1394,7 @@ function FormFin({ onSubmit }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, onImport }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport }) {
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
@@ -2390,7 +2400,8 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
     return mels.map(m=>{
       const today=new Date();
       const parts=(m.exp||"").split("/");
-      const exp=parts.length===3?new Date(parts[2]+"-"+parts[1]+"-"+parts[0]):null;
+      const year=parts.length===3?(parts[2].length===2?"20"+parts[2]:parts[2]):null;
+      const exp=year?new Date(year+"-"+parts[1]+"-"+parts[0]):null;
       const daysLeft=exp&&!isNaN(exp)?Math.ceil((exp-today)/(1000*60*60*24)):null;
       const expColor=daysLeft===null?"#64748B":daysLeft<7?"#DC2626":daysLeft<30?"#D97706":"#00936A";
       const expBg=daysLeft===null?"#F1F5F9":daysLeft<7?"#FEE2E2":daysLeft<30?"#FEF3C7":"#D1FAE5";
@@ -2590,7 +2601,7 @@ function App() {
           onSubmitSafety={d=>setSafety(s=>[...s,d])}
           onReset={()=>setReset(true)}
           flights={flights} crew={crew} setCrew={setCrew}
-          maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed}
+          maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed} safetyData={safetyData}
           onImport={data=>{
             if(data.flights)   setFlights(data.flights);
             if(data.maintData) setMaint(data.maintData);
@@ -2908,7 +2919,7 @@ function App() {
                   (md.mels||[]).forEach((m,i)=>{
                     if(y>270){doc.addPage();y=15;}
                     const today=new Date();
-                    const expDate=(()=>{if(!m.exp)return null;const p=m.exp.split("/");return p.length===3?new Date(p[2],p[1]-1,p[0]):null;})();
+                    const expDate=(()=>{if(!m.exp)return null;const p=m.exp.split("/");if(p.length!==3)return null;const yr=p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]);return new Date(yr,parseInt(p[1])-1,parseInt(p[0]));})();
                     const daysLeft=expDate?Math.ceil((expDate-today)/(1000*60*60*24)):null;
                     // Cat badge
                     const catColor=m.sev==="A"?[220,38,38]:m.sev==="B"?[217,119,6]:[100,116,139];
