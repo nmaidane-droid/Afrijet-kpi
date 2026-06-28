@@ -2318,9 +2318,29 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
       +"</div>";
   }).join("");
 
-  const melRows=mels.map(m=>
-    "<div style='padding:6px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center'><span style='background:#FEF3C7;color:#A0720A;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700'>Cat."+m.sev+"</span><div style='flex:1;font-size:11px'>"+m.sys+"</div><div style='font-size:10px;color:#64748B'>"+m.exp+"</div></div>"
-  ).join("");
+  const melRows=(()=>{
+    if(mels.length===0) return "<div style='padding:8px 12px;font-size:11px;color:#94A3B8;text-align:center'>Aucun MEL actif</div>";
+    return mels.map(m=>{
+      const today=new Date();
+      const exp=m.exp?new Date(m.exp.split("/").reverse().join("-")):null;
+      const daysLeft=exp?Math.ceil((exp-today)/(1000*60*60*24)):null;
+      const expColor=daysLeft===null?"#64748B":daysLeft<7?"#DC2626":daysLeft<30?"#D97706":"#00936A";
+      const expBg=daysLeft===null?"#F1F5F9":daysLeft<7?"#FEE2E2":daysLeft<30?"#FEF3C7":"#D1FAE5";
+      const catColor=m.sev==="A"?"#DC2626":m.sev==="B"?"#D97706":"#64748B";
+      const catBg=m.sev==="A"?"#FEE2E2":m.sev==="B"?"#FEF3C7":"#F1F5F9";
+      return "<div style='padding:8px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center'>"+
+        "<span style='background:"+catBg+";color:"+catColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700;flex-shrink:0'>Cat."+m.sev+"</span>"+
+        "<div style='flex:1'>"+
+          "<div style='font-size:11px;font-weight:600;color:#0F1F3D'>"+m.sys+"</div>"+
+          "<div style='font-size:9px;color:#64748B;margin-top:1px'>"+m.ref+"</div>"+
+        "</div>"+
+        "<div style='text-align:right;flex-shrink:0'>"+
+          "<div style='background:"+expBg+";color:"+expColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700'>"+m.exp+"</div>"+
+          (daysLeft!==null?"<div style='font-size:8px;color:"+expColor+";margin-top:2px;text-align:center'>"+(daysLeft<0?"EXPIRÉ":daysLeft===0?"Auj.":daysLeft+"j")+"</div>":"")+
+        "</div>"+
+      "</div>";
+    }).join("");
+  })();
 
   const finRows=fd.map((f,i)=>{
     const m=f.revenus>0?Math.round((1-f.couts/f.revenus)*100):0;
@@ -2812,6 +2832,49 @@ function App() {
                 drawRow("Dispatch Reliability",pDR+"%",pDR>=99);
                 drawRow("Completion Factor",pCF+"%",pCF>=99,true);
                 y+=4;
+
+                // ── MEL detail ──
+                if((md.mels||[]).length>0){
+                  drawSection("  DETAIL MEL ACTIFS",0,147,106);
+                  (md.mels||[]).forEach((m,i)=>{
+                    if(y>270){doc.addPage();y=15;}
+                    const today=new Date();
+                    const expDate=m.exp?new Date(m.exp.split("/").reverse().join("-")):null;
+                    const daysLeft=expDate?Math.ceil((expDate-today)/(1000*60*60*24)):null;
+                    // Cat badge
+                    const catColor=m.sev==="A"?[220,38,38]:m.sev==="B"?[217,119,6]:[100,116,139];
+                    doc.setFillColor(...catColor);
+                    doc.roundedRect(M,y-3.5,10,5,1,1,"F");
+                    doc.setTextColor(255,255,255);
+                    doc.setFont("helvetica","bold");
+                    doc.setFontSize(6);
+                    doc.text("Cat."+m.sev,M+5,y,{align:"center"});
+                    // System name
+                    doc.setTextColor(15,31,61);
+                    doc.setFont("helvetica","bold");
+                    doc.setFontSize(8);
+                    doc.text(m.sys||"--",M+12,y);
+                    // Ref
+                    doc.setTextColor(100,116,139);
+                    doc.setFont("helvetica","normal");
+                    doc.setFontSize(6.5);
+                    doc.text(m.ref||"",M+12,y+3.5);
+                    // Expiration with color
+                    const expColor=daysLeft===null?[100,116,139]:daysLeft<7?[220,38,38]:daysLeft<30?[217,119,6]:[0,147,106];
+                    doc.setTextColor(...expColor);
+                    doc.setFont("helvetica","bold");
+                    doc.setFontSize(7.5);
+                    const daysStr=daysLeft===null?"":daysLeft<0?" (EXPIRÉ)":daysLeft===0?" (Auj.)":` (${daysLeft}j)`;
+                    doc.text((m.exp||"--")+daysStr,M+CW,y,{align:"right"});
+                    if(i<(md.mels||[]).length-1){
+                      doc.setDrawColor(238,242,248);
+                      doc.setLineWidth(0.2);
+                      doc.line(M,y+5,M+CW,y+5);
+                    }
+                    y+=8;
+                  });
+                  y+=4;
+                }
 
                 // ── Sécurité ──
                 const sd=safetyData||[];
