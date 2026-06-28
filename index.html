@@ -2021,9 +2021,21 @@ function ScreenFin({ finData }) {
 function buildReport(flights, kpis, now, finData, maintData) {
   const ds=now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
   const G="#00936A",O="#D97706",N="#0F1F3D";
-  const volsDoneR=flights.filter(f=>f.status==="Termine");
+
+  // Filter to current week (Monday to Sunday)
+  const getMonday=d=>{const day=d.getDay()||7;const mon=new Date(d);mon.setDate(d.getDate()-day+1);mon.setHours(0,0,0,0);return mon;};
+  const monday=getMonday(now);
+  const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);sunday.setHours(23,59,59,999);
+  const weekFlights=flights.filter(f=>{
+    if(!f.date)return false;
+    const fd=new Date(f.date);
+    return fd>=monday&&fd<=sunday;
+  });
+  const weekLabel=monday.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" — "+sunday.toLocaleDateString("fr-FR",{day:"numeric",month:"short"});
+
+  const volsDoneR=weekFlights.filter(f=>f.status==="Termine");
   const done=volsDoneR.length;
-  const tPax=flights.reduce((s,f)=>s+f.pax,0);
+  const tPax=weekFlights.reduce((s,f)=>s+f.pax,0);
   const md=maintData||{};
   const mels=(md.mels||[]);
   const fd=finData||[];
@@ -2061,7 +2073,7 @@ function buildReport(flights, kpis, now, finData, maintData) {
     +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;text-align:center'>Pax</div>"
     +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;text-align:right'>CM1</div>"
     +"</div>";
-  const fRows=fHeader+flights.map((f,i)=>{
+  const fRows=fHeader+weekFlights.map((f,i)=>{
     const dot=f.status==="Termine"?"#00936A":f.status==="En vol"?"#D97706":"#94A3B8";
     let durVal="--";
     if(f.status==="Termine"&&f.depReal&&f.arrReal&&f.depReal.length>=4&&f.arrReal.length>=4){
@@ -2105,9 +2117,16 @@ function buildReport(flights, kpis, now, finData, maintData) {
       kpiLine("Conso. carburant",rConso+" kg/h","900 kg/h",rConso<900)+
       kpiLine("NPS passagers",rNps+"/100","70",rNps>=70)
     )+
-    card(sec("Operations — "+flights.length+" rotations","#0F1F3D")+fRows)+
+    card(sec("Rotations semaine du "+weekLabel+" — "+weekFlights.length+" vols","#0F1F3D")+fRows)+
     card(sec("Maintenance CAMO","#00936A")+
-      row((md.ttaf||0)+"h","TTAF",N,(md.nextCheckH||kpis.nextCheckH||0)+"h","A-Check dans",(md.nextCheckH||kpis.nextCheckH||999)<50?"#DC2626":G,kpis.melCount,"MEL actifs",kpis.melCount>0?O:G)+
+      row((md.ttaf||0)+"h","TTAF",N,(md.nextCheckH||0)+"h","A-Check dans",(md.nextCheckH||999)<50?"#DC2626":G,(md.mels||[]).length,"MEL actifs",(md.mels||[]).length>0?O:G)+
+      (()=>{
+        const fiab=md.fiabMoteurs||0;
+        const techV=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
+        const doneV=flights.filter(f=>f.status==="Termine");
+        const td=doneV.length>0?Math.round((techV.length/doneV.length)*1000)/10:0;
+        return row(fiab+"%","Fiabilite moteurs",fiab>=99.5?G:O,td+"%","Tech Delay",td<2?G:O,(md.bCheckH||"--")+"h","B-Check dans",!md.bCheckH||md.bCheckH>300?G:O);
+      })()+
       melRows
     )+
     (fd.length>0?card(sec("Finances Cumul 2026","#7C3AED")+
@@ -2431,8 +2450,12 @@ function App() {
                 drawRow("NPS passagers",pNps+"/100",pNps>=70,true);
                 y+=4;
 
-                // ── Operations ──
-                drawSection("  ROTATIONS  ("+flights.length+" vols)",15,31,61);
+                // ── Operations — current week only ──
+                const pMonday=(d=>{const day=d.getDay()||7;const mon=new Date(d);mon.setDate(d.getDate()-day+1);mon.setHours(0,0,0,0);return mon;})(now);
+                const pSunday=new Date(pMonday);pSunday.setDate(pMonday.getDate()+6);pSunday.setHours(23,59,59,999);
+                const pWeekLabel=pMonday.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" — "+pSunday.toLocaleDateString("fr-FR",{day:"numeric",month:"short"});
+                const weekF=flights.filter(f=>{if(!f.date)return false;const fd=new Date(f.date);return fd>=pMonday&&fd<=pSunday;});
+                drawSection("  ROTATIONS SEMAINE "+pWeekLabel+"  ("+weekF.length+" vols)",15,31,61);
 
                 // Column positions
                 const C0=M+2,C1=M+22,C2=M+62,C3=M+95,C4=M+114,C5=M+126,C6=M+148;
@@ -2453,7 +2476,7 @@ function App() {
                 y+=7;
                 doc.setFont("helvetica","normal");
 
-                flights.forEach((f,idx)=>{
+                weekF.forEach((f,idx)=>{
                   if(y>270){doc.addPage();y=15;}
                   doc.setFillColor(idx%2===0?248:255, idx%2===0?250:255, idx%2===0?252:255);
                   doc.rect(M,y-3,CW,7,"F");
@@ -2526,10 +2549,18 @@ function App() {
                 const md=maintData||{};
                 drawSection("  MAINTENANCE CAMO",0,147,106);
                 drawRow("TTAF actuel",(md.ttaf||"--")+" h");
-                drawRow("Prochain A-Check dans",(md.nextCheckH||kpis.nextCheckH||"--")+" h",(md.nextCheckH||kpis.nextCheckH||0)>50);
-                drawRow("MEL actifs",kpis.melCount+" item(s)",kpis.melCount===0);
-                drawRow("Fiabilite moteurs",(md.fiabMoteurs||"--")+"%",(md.fiabMoteurs||0)>=99.5);
-                drawRow("Tech delay",(md.techDelay||0)+"%",(md.techDelay||0)<2,true);
+                drawRow("Prochain A-Check dans",(md.nextCheckH||"--")+" h",(md.nextCheckH||0)>50);
+                drawRow("Prochain B-Check dans",(md.bCheckH||"--")+" h",!md.bCheckH||md.bCheckH>300);
+                drawRow("Prochain C-Check dans",(md.cCheckH||"--")+" h",!md.cCheckH||md.cCheckH>500);
+                drawRow("MEL actifs",(md.mels||[]).length+" item(s)",(md.mels||[]).length===0);
+                // Calculated fiabilite from engine events
+                const pFiab=md.fiabMoteurs||0;
+                drawRow("Fiabilite moteurs",(pFiab||"--")+"%",pFiab>=99.5);
+                // Calculated tech delay from flights
+                const pTechVols=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
+                const pDoneVols=flights.filter(f=>f.status==="Termine");
+                const pTechDelay=pDoneVols.length>0?Math.round((pTechVols.length/pDoneVols.length)*1000)/10:0;
+                drawRow("Tech delay",pTechDelay+"%",pTechDelay<2,true);
                 y+=4;
 
                 // ── Finances ──
