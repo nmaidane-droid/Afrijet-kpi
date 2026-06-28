@@ -59,6 +59,7 @@ const C = {
   white:"#FFFFFF",
 };
 const TOP=60, BOT=58, PFX="ajs145v2_";
+const fmtMAD = n => Math.round(n).toLocaleString("fr-FR");
 
 const lsGet = k => { try { return localStorage.getItem(k); } catch(_e) { return null; } };
 const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch(_e) {} };
@@ -2163,7 +2164,7 @@ function ScreenFin({ finData }) {
   const tRev=fd.reduce((s,f)=>s+f.revenus,0);
   const tCout=fd.reduce((s,f)=>s+f.couts,0);
   const marge=tRev>0?Math.round((1-tCout/tRev)*100):0;
-  const fmt=n=>Math.round(n/1000)+"K";
+  const fmt=n=>fmtMAD(n);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -2179,8 +2180,8 @@ function ScreenFin({ finData }) {
               <div key={i} style={{display:"flex",alignItems:"center",padding:"8px 0",borderBottom:i<fd.length-1?"1px solid "+C.border:"none",gap:10}}>
                 <div style={{fontWeight:600,fontSize:13,color:C.text,minWidth:70}}>{f.mois}</div>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:11,color:C.slate}}>Rev: {Math.round(f.revenus/1000)}K MAD</div>
-                  <div style={{fontSize:11,color:C.slate}}>Cout: {Math.round(f.couts/1000)}K MAD</div>
+                  <div style={{fontSize:11,color:C.slate}}>Rev: {fmtMAD(f.revenus)} MAD</div>
+                  <div style={{fontSize:11,color:C.slate}}>Cout: {fmtMAD(f.couts)} MAD</div>
                 </div>
                 <div style={{fontWeight:800,fontSize:14,color:m>=20?C.emerald:m>=10?C.warn:C.danger}}>{m}%</div>
               </div>
@@ -2279,7 +2280,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
 
   const finRows=fd.map((f,i)=>{
     const m=f.revenus>0?Math.round((1-f.couts/f.revenus)*100):0;
-    return "<div style='display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'><div style='flex:1;font-size:12px;font-weight:600'>"+f.mois+"</div><div style='font-size:11px;color:#1E293B'>"+Math.round(f.revenus/1000)+"K MAD</div><div style='font-size:11px;color:#64748B;min-width:40px;text-align:right'>"+m+"%</div></div>";
+    return "<div style='display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'><div style='flex:1;font-size:12px;font-weight:600'>"+f.mois+"</div><div style='font-size:11px;color:#1E293B'>"+fmtMAD(f.revenus)+" MAD</div><div style='font-size:11px;color:#64748B;min-width:40px;text-align:right'>"+m+"%</div></div>";
   }).join("");
 
   return (
@@ -2319,7 +2320,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
       );
     })()+
     (fd.length>0?card(sec("Finances Cumul 2026","#7C3AED")+
-      row(Math.round(tRev/1000)+"K","Revenus (MAD)",G,Math.round(tCout/1000)+"K","Couts (MAD)",N,marge+"%","Marge brute",marge>=20?G:O)+
+      row(fmtMAD(tRev)+" MAD","Revenus",G,fmtMAD(tCout)+" MAD","Couts",N,marge+"%","Marge brute",marge>=20?G:O)+
       finRows
     ):"")+
     "<div style='text-align:center;padding:12px;font-size:9px;color:#94A3B8'>Afrijet Sahara \u00B7 EMB 145 CN-KTA \u00B7 DGAC Maroc \u00B7 Confidentiel</div></div>"
@@ -2779,8 +2780,8 @@ function App() {
                   const tCout=fd.reduce((s,f)=>s+f.couts,0);
                   const marge=tRev>0?Math.round((1-tCout/tRev)*100):0;
                   drawSection("  FINANCES - CUMUL 2026",124,58,237);
-                  drawRow("Revenus cumules",Math.round(tRev/1000)+"K MAD");
-                  drawRow("Couts cumules",Math.round(tCout/1000)+"K MAD");
+                  drawRow("Revenus cumules",fmtMAD(tRev)+" MAD");
+                  drawRow("Couts cumules",fmtMAD(tCout)+" MAD");
                   drawRow("Marge brute",marge+"%",marge>=20,true);
                   y+=4;
                 }
