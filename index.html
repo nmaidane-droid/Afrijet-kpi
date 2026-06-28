@@ -59,7 +59,7 @@ const C = {
   white:"#FFFFFF",
 };
 const TOP=60, BOT=58, PFX="ajs145v2_";
-const fmtMAD = n => Math.round(n).toLocaleString("fr-FR");
+const fmtMAD = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 
 const lsGet = k => { try { return localStorage.getItem(k); } catch(_e) { return null; } };
 const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch(_e) {} };
@@ -1347,9 +1347,19 @@ function FormFin({ onSubmit }) {
           <FField label="Revenus (MAD)" value={rev} onChange={setRev} type="number" min={0} placeholder="1240000"/>
           <FField label="Couts totaux (MAD)" value={cout} onChange={setCout} type="number" min={0} placeholder="910000"/>
         </FGrid>
+        {(revN>0||coutN>0)&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {revN>0&&<div style={{fontSize:11,color:"#00936A",fontWeight:600,textAlign:"center",background:"#D1FAE5",borderRadius:8,padding:"4px 8px"}}>
+              {fmtMAD(revN)} MAD
+            </div>}
+            {coutN>0&&<div style={{fontSize:11,color:"#0369A1",fontWeight:600,textAlign:"center",background:"#DBEAFE",borderRadius:8,padding:"4px 8px"}}>
+              {fmtMAD(coutN)} MAD
+            </div>}
+          </div>
+        )}
         <FGrid>
           <FField label="Cout carburant (MAD)" value={cCarbu} onChange={setCCarbu} type="number" min={0}/>
-          <FCalc label="Marge brute" value={marge!==null?marge+"%":"--"} color={marge!==null?marge>=20?"#00936A":marge>=10?"#D97706":"#DC2626":"#94A3B8"}/>
+          <FCalc label="Marge brute" value={marge!==null?marge+"%":"--"} color={marge!==null?marge>0?"#00936A":marge===0?"#D97706":"#DC2626":"#94A3B8"}/>
         </FGrid>
         <FSubmit label="Enregistrer Finances" color="#7C3AED" onClick={submit}/>
       </div>
@@ -2164,12 +2174,12 @@ function ScreenFin({ finData }) {
   const tRev=fd.reduce((s,f)=>s+f.revenus,0);
   const tCout=fd.reduce((s,f)=>s+f.couts,0);
   const marge=tRev>0?Math.round((1-tCout/tRev)*100):0;
-  const fmt=n=>fmtMAD(n);
+  const fmt=n=>fmtMAD(n)+" MAD";
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <KpiTile title="Revenus cumul. 2026" value={fmt(tRev)} unit="MAD" accent={C.emerald} icon="💰"/>
-        <KpiTile title="Marge brute" value={marge} unit="%" accent={marge>=20?C.emerald:C.warn} icon="📊"/>
+        <KpiTile title="Marge brute" value={marge} unit="%" accent={marge>0?C.emerald:marge===0?C.warn:C.danger} icon="📊"/>
       </div>
       {fd.length>0&&(
         <Card>
@@ -2183,7 +2193,7 @@ function ScreenFin({ finData }) {
                   <div style={{fontSize:11,color:C.slate}}>Rev: {fmtMAD(f.revenus)} MAD</div>
                   <div style={{fontSize:11,color:C.slate}}>Cout: {fmtMAD(f.couts)} MAD</div>
                 </div>
-                <div style={{fontWeight:800,fontSize:14,color:m>=20?C.emerald:m>=10?C.warn:C.danger}}>{m}%</div>
+                <div style={{fontWeight:800,fontSize:14,color:m>0?C.emerald:m===0?C.warn:C.danger}}>{m}%</div>
               </div>
             );
           })}
@@ -2320,7 +2330,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
       );
     })()+
     (fd.length>0?card(sec("Finances Cumul 2026","#7C3AED")+
-      row(fmtMAD(tRev)+" MAD","Revenus",G,fmtMAD(tCout)+" MAD","Couts",N,marge+"%","Marge brute",marge>=20?G:O)+
+      row(fmtMAD(tRev)+" MAD","Revenus",G,fmtMAD(tCout)+" MAD","Couts",N,marge+"%","Marge brute",marge>0?G:O)+
       finRows
     ):"")+
     "<div style='text-align:center;padding:12px;font-size:9px;color:#94A3B8'>Afrijet Sahara \u00B7 EMB 145 CN-KTA \u00B7 DGAC Maroc \u00B7 Confidentiel</div></div>"
@@ -2782,7 +2792,7 @@ function App() {
                   drawSection("  FINANCES - CUMUL 2026",124,58,237);
                   drawRow("Revenus cumules",fmtMAD(tRev)+" MAD");
                   drawRow("Couts cumules",fmtMAD(tCout)+" MAD");
-                  drawRow("Marge brute",marge+"%",marge>=20,true);
+                  drawRow("Marge brute",marge+"%",marge>0,true);
                   y+=4;
                 }
 
