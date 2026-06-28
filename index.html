@@ -3340,57 +3340,58 @@ function App() {
                 const md=pAcList[0]||maintData||{};
                 drawSection("  MAINTENANCE CAMO",0,147,106);
                 pAcList.forEach((ac,acIdx)=>{
-                  if(y>250){doc.addPage();y=15;}
-                  // Aircraft header
+                  if(y>240){doc.addPage();y=15;}
+                  // Aircraft header — immat + type on single line
                   doc.setFillColor(238,242,248);
-                  doc.rect(M,y-4,CW,8,"F");
+                  doc.rect(M,y,CW,7,"F");
                   doc.setFillColor(0,147,106);
-                  doc.rect(M,y-4,3,8,"F");
-                  doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(10);
-                  doc.text(ac.immat||"--",M+6,y);
-                  doc.setTextColor(100,116,139);doc.setFont("helvetica","normal");doc.setFontSize(8);
-                  doc.text(ac.type||"",M+6,y+4);
+                  doc.rect(M,y,3,7,"F");
+                  doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(9);
+                  doc.text((ac.immat||"--")+" · "+(ac.type||""),M+6,y+5);
                   y+=10;
-                  drawRow("TTAF actuel",(ac.ttaf||"--")+" h");
+                  drawRow("TTAF",(ac.ttaf||0)+" h",true);
                   drawRow("MEL actifs",(ac.mels||[]).length+" item(s)",(ac.mels||[]).length===0);
-                  drawRow("A-Check dans",(ac.nextCheckH||"--")+" h",(ac.nextCheckH||0)>50);
-                  drawRow("B-Check dans",(ac.bCheckH||"--")+" h",!ac.bCheckH||ac.bCheckH>300);
-                  drawRow("C-Check dans",(ac.cCheckH||"--")+" h",!ac.cCheckH||ac.cCheckH>500,true);
-                  y+=3;
+                  drawRow("A-Check dans",ac.nextCheckH?(ac.nextCheckH+" h"):"-- h",!ac.nextCheckH||ac.nextCheckH>100);
+                  drawRow("B-Check dans",ac.bCheckH?(ac.bCheckH+" h"):"-- h",!ac.bCheckH||ac.bCheckH>300);
+                  drawRow("C-Check dans",ac.cCheckH?(ac.cCheckH+" h"):"-- h",!ac.cCheckH||ac.cCheckH>500,true);
+                  y+=4;
                   // MEL per aircraft
                   const acMels=ac.mels||[];
                   if(acMels.length>0){
-                    // MEL title
+                    if(y>250){doc.addPage();y=15;}
                     doc.setFillColor(254,243,199);
-                    doc.rect(M,y-3,CW,6,"F");
-                    doc.setTextColor(160,114,10);doc.setFont("helvetica","bold");doc.setFontSize(8);
-                    doc.text("MEL ACTIFS — "+(ac.immat||""),M+3,y);
-                    y+=6;
+                    doc.rect(M,y,CW,6,"F");
+                    doc.setTextColor(160,114,10);doc.setFont("helvetica","bold");doc.setFontSize(7.5);
+                    doc.text("MEL ACTIFS — "+(ac.immat||""),M+3,y+4.5);
+                    y+=9;
                     acMels.forEach((m,i)=>{
                       if(y>270){doc.addPage();y=15;}
                       const today=new Date();
                       const expDate=(()=>{if(!m.exp)return null;const p=m.exp.split("/");if(p.length!==3)return null;const yr=p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]);return new Date(yr,parseInt(p[1])-1,parseInt(p[0]));})();
                       const daysLeft=expDate?Math.ceil((expDate-today)/(1000*60*60*24)):null;
                       const catColor=m.sev==="A"?[220,38,38]:m.sev==="B"?[217,119,6]:[100,116,139];
+                      doc.setFillColor(248,250,252);doc.rect(M,y,CW,8,"F");
                       doc.setFillColor(...catColor);
-                      doc.roundedRect(M,y-3.5,10,5,1,1,"F");
+                      doc.roundedRect(M+2,y+1.5,10,5,1,1,"F");
                       doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(6);
-                      doc.text("Cat."+m.sev,M+5,y,{align:"center"});
+                      doc.text("Cat."+m.sev,M+7,y+4.5,{align:"center"});
                       doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(8);
-                      doc.text(m.sys||"--",M+12,y);
+                      doc.text(m.sys||"--",M+15,y+4);
                       doc.setTextColor(100,116,139);doc.setFont("helvetica","normal");doc.setFontSize(6.5);
-                      doc.text(m.mel||"",M+12,y+3.5);
+                      doc.text(m.mel||"",M+15,y+7);
                       const expColor=daysLeft===null?[100,116,139]:daysLeft<7?[220,38,38]:daysLeft<30?[217,119,6]:[0,147,106];
                       doc.setTextColor(...expColor);doc.setFont("helvetica","bold");doc.setFontSize(7.5);
                       const daysStr=daysLeft===null?"":daysLeft<0?" (EXPIRÉ)":daysLeft===0?" (Auj.)":` (${daysLeft}j)`;
-                      doc.text((m.exp||"--")+daysStr,M+CW,y,{align:"right"});
-                      if(i<acMels.length-1){
-                        doc.setDrawColor(238,242,248);doc.setLineWidth(0.2);
-                        doc.line(M,y+5,M+CW,y+5);
-                      }
-                      y+=8;
+                      doc.text((m.exp||"--")+daysStr,M+CW-2,y+4,{align:"right"});
+                      if(i<acMels.length-1){doc.setDrawColor(226,232,240);doc.setLineWidth(0.2);doc.line(M,y+8,M+CW,y+8);}
+                      y+=9;
                     });
-                    y+=3;
+                    y+=4;
+                  } else {
+                    doc.setFillColor(248,250,252);doc.rect(M,y,CW,6,"F");
+                    doc.setTextColor(148,163,184);doc.setFont("helvetica","normal");doc.setFontSize(7.5);
+                    doc.text("Aucun MEL actif",M+3,y+4.5);
+                    y+=9;
                   }
                   if(acIdx<pAcList.length-1) y+=4;
                 });
