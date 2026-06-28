@@ -1855,8 +1855,8 @@ function LineChart({data, color, target, maxVal, minVal, unit}) {
     </div>
   );
   const vals = pts.map(p=>p.val);
-  const lo = minVal!==undefined ? minVal : Math.max(0,Math.min(...vals)-1);
-  const hi = maxVal!==undefined ? maxVal : Math.max(...vals)+1;
+  const lo = minVal!==undefined ? minVal : Math.max(0,Math.min(...vals)-10);
+  const hi = maxVal!==undefined ? maxVal : Math.max(...vals)+10;
   const range = hi-lo||1;
   const xS = i => padL + (i/(pts.length-1))*cW;
   const yS = v => padT + cH - ((v-lo)/range)*cH;
@@ -1896,16 +1896,17 @@ function LineChart({data, color, target, maxVal, minVal, unit}) {
   );
 }
 
-function ChartCard({title,icon,data,color,target,maxVal,minVal,unit}) {
+function ChartCard({title,icon,data,color,target,maxVal,minVal,unit,showTotal}) {
   const pts = data.filter(d=>d.val!==null);
-  const avg = pts.length>0 ? Math.round(pts.reduce((s,p)=>s+p.val,0)/pts.length) : null;
+  const avg = pts.length>0 ? Math.round(pts.reduce((s,p)=>s+p.val,0)/pts.length*10)/10 : null;
+  const total = pts.reduce((s,p)=>s+p.val,0);
   return (
     <Card>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>{icon} {title}</div>
         <div style={{textAlign:"right"}}>
-          <div style={{fontSize:22,fontWeight:800,color}}>{avg!==null?avg:"--"}{unit}</div>
-          <div style={{fontSize:9,color:C.slateL}}>Moyenne — {pts.length} semaine(s)</div>
+          <div style={{fontSize:22,fontWeight:800,color}}>{showTotal?total:(avg!==null?avg:"--")}{unit}</div>
+          <div style={{fontSize:9,color:C.slateL}}>{showTotal?"Total — "+pts.length+" sem.":"Moyenne — "+pts.length+" semaine(s)"}</div>
         </div>
       </div>
       <LineChart data={data} color={color} target={target} maxVal={maxVal} minVal={minVal} unit={unit}/>
@@ -1982,7 +1983,7 @@ function ScreenSecu({ safetyData, flights }) {
           ].filter(({key})=>weeks.some(w=>w[key]>0)).map(({key,label,color})=>(
             <ChartCard key={key} title={label} icon="🛡"
               data={weeks.map(w=>({label:w.date,val:w[key]}))}
-              color={color} minVal={0} unit=""/>
+              color={color} minVal={0} unit="" showTotal={true}/>
           ))}
         </div>
       )}
