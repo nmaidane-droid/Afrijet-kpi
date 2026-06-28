@@ -2277,7 +2277,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
   }).join("");
 
   return (
-    "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px'><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Journalier</div><div style='color:#94A3B8;font-size:11px'>EMB 145 CN-KTA \u00B7 18 sieges Business \u00B7 "+ds+"</div></div>"+
+    "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px;display:flex;align-items:center;gap:12px'><img src='"+LOGO_B64+"' alt='Afrijet' style='width:48px;height:34px;object-fit:contain;background:white;border-radius:6px;padding:2px;flex-shrink:0'/><div><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Journalier</div><div style='color:#94A3B8;font-size:11px'>EMB 145 CN-KTA \u00B7 18 sieges Business \u00B7 "+ds+"</div></div></div>"+
     card(row(done,"Termines",G,flights.filter(f=>f.status==="En vol").length,"En vol",O,tPax,"PAX total",N))+
     card(sec("Performance","#0F1F3D")+
       kpiLine("OTP (ponctualite)",rOtp+"%","90%",rOtp>=90)+
@@ -2301,10 +2301,9 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
     )+
     (()=>{
       const sd=safetyData||[];
-      if(sd.length===0)return "";
       const tot={approche:sd.filter(e=>e.approche).length,tcas:sd.filter(e=>e.tcas).length,gpws:sd.filter(e=>e.gpws).length,hardLanding:sd.filter(e=>e.hardLanding).length,safa:sd.filter(e=>e.safa).length};
       const vd=flights.filter(f=>f.status==="Termine").length||1;
-      const secRow=(label,count,color)=>"<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'><div style='flex:1;font-size:12px;color:#475569'>"+label+"</div><div style='font-weight:800;font-size:13px;color:"+(count>0?color:"#00936A")+";padding-right:8px'>"+count+"</div><span style='background:"+(count>0?"#FEE2E2":"#D1FAE5")+";color:"+(count>0?color:"#065F46")+";padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700'>"+(Math.round(count/vd*1000)/10)+"%</span></div>";
+      const secRow=(label,count,color)=>"<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'><div style='flex:1;font-size:12px;color:#475569'>"+label+"</div><div style='font-weight:800;font-size:13px;color:'"+(count>0?color:"#00936A")+"';padding-right:8px'>"+count+"</div><span style='background:"+(count>0?"#FEE2E2":"#D1FAE5")+";color:"+(count>0?color:"#065F46")+";padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700'>"+(Math.round(count/vd*1000)/10)+"%</span></div>";
       return card(sec("Sécurité Opérationnelle","#DC2626")+
         secRow("Approches instables",tot.approche,"#DC2626")+
         secRow("TCAS RA",tot.tcas,"#DC2626")+
@@ -2752,22 +2751,20 @@ function App() {
 
                 // ── Sécurité ──
                 const sd=safetyData||[];
-                if(sd.length>0){
-                  drawSection("  SECURITE OPERATIONNELLE",220,38,38);
-                  const vdP=flights.filter(f=>f.status==="Termine").length||1;
-                  const secItems=[
-                    ["Approches instables",sd.filter(e=>e.approche).length],
-                    ["TCAS RA",sd.filter(e=>e.tcas).length],
-                    ["GPWS Warnings",sd.filter(e=>e.gpws).length],
-                    ["Hard Landings",sd.filter(e=>e.hardLanding).length],
-                    ["Inspections SAFA",sd.filter(e=>e.safa).length],
-                  ];
-                  secItems.forEach(([label,count],i)=>{
-                    const pct=Math.round(count/vdP*1000)/10;
-                    drawRow(label,count+" ("+pct+"%)",count===0,i===secItems.length-1);
-                  });
-                  y+=4;
-                }
+                drawSection("  SECURITE OPERATIONNELLE",220,38,38);
+                const vdP=flights.filter(f=>f.status==="Termine").length||1;
+                const secItems=[
+                  ["Approches instables",sd.filter(e=>e.approche).length],
+                  ["TCAS RA",sd.filter(e=>e.tcas).length],
+                  ["GPWS Warnings",sd.filter(e=>e.gpws).length],
+                  ["Hard Landings",sd.filter(e=>e.hardLanding).length],
+                  ["Inspections SAFA",sd.filter(e=>e.safa).length],
+                ];
+                secItems.forEach(([label,count],i)=>{
+                  const pct=Math.round(count/vdP*1000)/10;
+                  drawRow(label,count+" ("+pct+"%)",count===0,i===secItems.length-1);
+                });
+                y+=4;
 
                 // ── Finances ──
                 const fd=finData||[];
