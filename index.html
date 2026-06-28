@@ -2159,10 +2159,27 @@ function ScreenSecu({ safetyData, flights }) {
   const now=new Date();
   const day=now.getDay()||7;
   const monday=new Date(now);monday.setDate(now.getDate()-day+1);monday.setHours(0,0,0,0);
+  const [filterPeriod,setFilterPeriod]=React.useState("Tout");
+  const [filterType,setFilterType]=React.useState("Tous");
+
+  // Filter safetyData by period and type
+  const days=filterPeriod==="7j"?7:filterPeriod==="30j"?30:filterPeriod==="90j"?90:36500;
+  const filtered=safetyData.filter(e=>{
+    const d=new Date(e.date);
+    const inPeriod=(now-d)/(1000*60*60*24)<=days;
+    const inType=filterType==="Tous"||(
+      filterType==="Approche"&&e.approche||
+      filterType==="TCAS"&&e.tcas||
+      filterType==="GPWS"&&e.gpws||
+      filterType==="Hard Landing"&&e.hardLanding||
+      filterType==="SAFA"&&e.safa
+    );
+    return inPeriod&&inType;
+  });
 
   // Group by week for charts
   const byWeek={};
-  safetyData.forEach(e=>{
+  filtered.forEach(e=>{
     const d=new Date(e.date);
     const mon=new Date(d);const wd=d.getDay()||7;mon.setDate(d.getDate()-wd+1);
     const wk=mon.toISOString().slice(5,10);
@@ -2178,11 +2195,11 @@ function ScreenSecu({ safetyData, flights }) {
   const volsDone=flights.filter(f=>f.status==="Termine").length||1;
 
   const totals={
-    approche:safetyData.filter(e=>e.approche).length,
-    tcas:safetyData.filter(e=>e.tcas).length,
-    gpws:safetyData.filter(e=>e.gpws).length,
-    hardLanding:safetyData.filter(e=>e.hardLanding).length,
-    safa:safetyData.filter(e=>e.safa).length,
+    approche:filtered.filter(e=>e.approche).length,
+    tcas:filtered.filter(e=>e.tcas).length,
+    gpws:filtered.filter(e=>e.gpws).length,
+    hardLanding:filtered.filter(e=>e.hardLanding).length,
+    safa:filtered.filter(e=>e.safa).length,
   };
 
   const SecuTile=({label,count,icon,color})=>{
@@ -2197,8 +2214,34 @@ function ScreenSecu({ safetyData, flights }) {
     );
   };
 
+  const FilterBtn=({val,active,onClick})=>(
+    <button onClick={onClick}
+      style={{padding:"3px 9px",borderRadius:8,border:"1px solid "+C.border,
+        background:active?C.navy:"white",color:active?"white":C.slate,
+        fontSize:10,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+      {val}
+    </button>
+  );
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+      {/* Filtres période */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:10,fontWeight:700,color:C.slate}}>Période :</span>
+        {["7j","30j","90j","Tout"].map(f=>(
+          <FilterBtn key={f} val={f} active={filterPeriod===f} onClick={()=>setFilterPeriod(f)}/>
+        ))}
+      </div>
+
+      {/* Filtres type */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:10,fontWeight:700,color:C.slate}}>Type :</span>
+        {["Tous","Approche","TCAS","GPWS","Hard Landing","SAFA"].map(f=>(
+          <FilterBtn key={f} val={f} active={filterType===f} onClick={()=>setFilterType(f)}/>
+        ))}
+      </div>
+
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <SecuTile label="Approche instable" count={totals.approche} icon="⚠️" color="#DC2626"/>
         <SecuTile label="TCAS RA" count={totals.tcas} icon="📡" color="#DC2626"/>
@@ -2209,8 +2252,8 @@ function ScreenSecu({ safetyData, flights }) {
         <SecuTile label="Inspection SAFA" count={totals.safa} icon="🛡" color="#7C3AED"/>
       </div>
 
-      {safetyData.length===0&&(
-        <Card><div style={{textAlign:"center",color:C.slateL,fontSize:13,padding:16}}>Aucun événement enregistré</div></Card>
+      {filtered.length===0&&(
+        <Card><div style={{textAlign:"center",color:C.slateL,fontSize:13,padding:16}}>Aucun événement sur cette période</div></Card>
       )}
 
       {weeks.length>=2&&(
@@ -2229,15 +2272,18 @@ function ScreenSecu({ safetyData, flights }) {
         </div>
       )}
 
-      {safetyData.length>0&&(
+      {filtered.length>0&&(
         <Card>
-          <SectionTitle>Historique événements</SectionTitle>
-          {[...safetyData].reverse().map((e,i)=>(
-            <div key={i} style={{padding:"10px 0",borderBottom:i<safetyData.length-1?"1px solid "+C.border:"none"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <SectionTitle>Historique événements</SectionTitle>
+            <span style={{fontSize:11,color:C.slate,fontWeight:600}}>{filtered.length} événement(s)</span>
+          </div>
+          {[...filtered].reverse().map((e,i)=>(
+            <div key={i} style={{padding:"10px 0",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
                 <span style={{fontWeight:700,fontSize:12,color:C.navy}}>{e.num}</span>
                 <span style={{fontSize:11,color:C.slate}}>{e.from}→{e.to}</span>
-                <span style={{fontSize:10,color:C.slateL,marginLeft:"auto"}}>{e.date?.slice(8)}/{e.date?.slice(5,7)}</span>
+                <span style={{fontSize:10,color:C.slateL,marginLeft:"auto"}}>{e.date?.slice(8)}/{e.date?.slice(5,7)}/{e.date?.slice(2,4)}</span>
               </div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {e.approche&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Approche instable</span>}
