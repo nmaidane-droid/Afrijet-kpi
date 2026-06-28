@@ -1845,6 +1845,74 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData }) {
   );
 }
 
+function LineChart({data, color, target, maxVal, minVal, unit}) {
+  const W=300, H=90, padL=28, padR=8, padT=10, padB=20;
+  const cW=W-padL-padR, cH=H-padT-padB;
+  const pts = data.filter(d=>d.val!==null);
+  if(pts.length<2) return (
+    <div style={{textAlign:"center",padding:"20px",color:C.slateL,fontSize:12}}>
+      Donnees insuffisantes (min. 2 semaines)
+    </div>
+  );
+  const vals = pts.map(p=>p.val);
+  const lo = minVal!==undefined ? minVal : Math.max(0,Math.min(...vals)-1);
+  const hi = maxVal!==undefined ? maxVal : Math.max(...vals)+1;
+  const range = hi-lo||1;
+  const xS = i => padL + (i/(pts.length-1))*cW;
+  const yS = v => padT + cH - ((v-lo)/range)*cH;
+  const pathD = pts.map((p,i)=>(i===0?"M":"L")+xS(i).toFixed(1)+","+yS(p.val).toFixed(1)).join(" ");
+  const areaD = pathD+" L"+xS(pts.length-1).toFixed(1)+","+(padT+cH)+" L"+padL.toFixed(1)+","+(padT+cH)+" Z";
+  const ty = target!==undefined ? yS(Math.min(hi,Math.max(lo,target))) : null;
+  return (
+    <svg width="100%" viewBox={"0 0 "+W+" "+H} style={{display:"block",overflow:"visible"}}>
+      {[0,0.5,1].map((t,i)=>{
+        const yy=padT+cH*t, lv=Math.round(hi-t*(hi-lo));
+        return <g key={i}>
+          <line x1={padL} y1={yy} x2={W-padR} y2={yy} stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3"/>
+          <text x={padL-3} y={yy+3} textAnchor="end" fontSize={7} fill={C.slateL}>{lv}</text>
+        </g>;
+      })}
+      {ty!=null && <g>
+        <line x1={padL} y1={ty} x2={W-padR} y2={ty} stroke={color} strokeWidth={0.8} strokeDasharray="3,2" opacity={0.45}/>
+        <text x={W-padR+2} y={ty+3} fontSize={6} fill={color} opacity={0.6}>Obj</text>
+      </g>}
+      <path d={areaD} fill={color} fillOpacity={0.07}/>
+      <path d={pathD} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      {pts.map((p,i)=>{
+        const isLast = i===pts.length-1;
+        return <g key={i}>
+          <circle cx={xS(i)} cy={yS(p.val)} r={isLast?4:2.5}
+            fill={isLast?color:"white"} stroke={color} strokeWidth={isLast?0:1.5}/>
+          {isLast && <text x={xS(i)} y={yS(p.val)-8} textAnchor="middle"
+            fontSize={8} fontWeight="700" fill={color}>{p.val}{unit}</text>}
+        </g>;
+      })}
+      {pts.map((p,i)=>{
+        if(pts.length<=7||i===0||i===pts.length-1||i%Math.ceil(pts.length/5)===0)
+          return <text key={i} x={xS(i)} y={H-3} textAnchor="middle" fontSize={7} fill={C.slateL}>{p.label}</text>;
+        return null;
+      })}
+    </svg>
+  );
+}
+
+function ChartCard({title,icon,data,color,target,maxVal,minVal,unit}) {
+  const pts = data.filter(d=>d.val!==null);
+  const avg = pts.length>0 ? Math.round(pts.reduce((s,p)=>s+p.val,0)/pts.length) : null;
+  return (
+    <Card>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>{icon} {title}</div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:22,fontWeight:800,color}}>{avg!==null?avg:"--"}{unit}</div>
+          <div style={{fontSize:9,color:C.slateL}}>Moyenne — {pts.length} semaine(s)</div>
+        </div>
+      </div>
+      <LineChart data={data} color={color} target={target} maxVal={maxVal} minVal={minVal} unit={unit}/>
+    </Card>
+  );
+}
+
 function ScreenSecu({ safetyData, flights }) {
   const now=new Date();
   const day=now.getDay()||7;
@@ -1904,33 +1972,19 @@ function ScreenSecu({ safetyData, flights }) {
       )}
 
       {weeks.length>=2&&(
-        <Card>
-          <SectionTitle>Évolution hebdomadaire</SectionTitle>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
           {[
             {key:"approche",label:"Approches instables",color:C.danger},
             {key:"tcas",label:"TCAS RA",color:C.danger},
             {key:"gpws",label:"GPWS Warnings",color:C.warn},
             {key:"hardLanding",label:"Hard Landings",color:C.warn},
             {key:"safa",label:"Inspections SAFA",color:"#7C3AED"},
-          ].filter(({key})=>weeks.some(w=>w[key]>0)).map(({key,label,color})=>{
-            const maxV=Math.max(...weeks.map(w=>w[key]),1);
-            return (
-              <div key={key} style={{marginBottom:14}}>
-                <div style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",marginBottom:6}}>{label}</div>
-                <div style={{display:"flex",alignItems:"flex-end",gap:4,height:40}}>
-                  {weeks.map((w,i)=>(
-                    <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                      <div style={{fontSize:8,color,fontWeight:700}}>{w[key]>0?w[key]:""}</div>
-                      <div style={{width:"100%",background:w[key]>0?color:C.border,borderRadius:3,
-                        height:Math.max(3,Math.round((w[key]/maxV)*28))}}/>
-                      <div style={{fontSize:7,color:C.slateL,transform:"rotate(-45deg)",transformOrigin:"top left",whiteSpace:"nowrap"}}>{w.date}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </Card>
+          ].filter(({key})=>weeks.some(w=>w[key]>0)).map(({key,label,color})=>(
+            <ChartCard key={key} title={label} icon="🛡"
+              data={weeks.map(w=>({label:w.date,val:w[key]}))}
+              color={color} minVal={0} unit=""/>
+          ))}
+        </div>
       )}
 
       {safetyData.length>0&&(
@@ -1991,83 +2045,6 @@ function ScreenPerf({ kpis, flights, finData }) {
   });
 
   // Mini SVG line chart component
-  const LineChart = ({data, color, target, maxVal, minVal, unit}) => {
-    const W=300, H=90, padL=28, padR=8, padT=10, padB=20;
-    const cW=W-padL-padR, cH=H-padT-padB;
-    const pts = data.filter(d=>d.val!==null);
-    if(pts.length<2) return (
-      <div style={{textAlign:"center",padding:"20px",color:C.slateL,fontSize:12}}>
-        Donnees insuffisantes (min. 2 jours)
-      </div>
-    );
-    const vals = pts.map(p=>p.val);
-    const lo = minVal!==undefined ? minVal : Math.max(0,Math.min(...vals)-10);
-    const hi = maxVal!==undefined ? maxVal : Math.max(...vals)+10;
-    const range = hi-lo||1;
-    const xS = i => padL + (i/(pts.length-1))*cW;
-    const yS = v => padT + cH - ((v-lo)/range)*cH;
-    const pathD = pts.map((p,i)=>(i===0?"M":"L")+xS(i).toFixed(1)+","+yS(p.val).toFixed(1)).join(" ");
-    const areaD = pathD+" L"+xS(pts.length-1).toFixed(1)+","+(padT+cH)+" L"+padL.toFixed(1)+","+(padT+cH)+" Z";
-    const ty  = target!==undefined ? yS(Math.min(hi,Math.max(lo,target))) : null;
-    const lastPt = pts[pts.length-1];
-    return (
-      <svg width="100%" viewBox={"0 0 "+W+" "+H} style={{display:"block",overflow:"visible"}}>
-        {/* Grid */}
-        {[0,0.5,1].map((t,i)=>{
-          const yy=padT+cH*t, lv=Math.round(hi-t*(hi-lo));
-          return <g key={i}>
-            <line x1={padL} y1={yy} x2={W-padR} y2={yy} stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3"/>
-            <text x={padL-3} y={yy+3} textAnchor="end" fontSize={7} fill={C.slateL}>{lv}</text>
-          </g>;
-        })}
-        {/* Target line */}
-        {ty!=null && <g>
-          <line x1={padL} y1={ty} x2={W-padR} y2={ty} stroke={color} strokeWidth={0.8} strokeDasharray="3,2" opacity={0.45}/>
-          <text x={W-padR+2} y={ty+3} fontSize={6} fill={color} opacity={0.6}>Obj</text>
-        </g>}
-
-        {/* Area */}
-        <path d={areaD} fill={color} fillOpacity={0.07}/>
-        {/* Line */}
-        <path d={pathD} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
-        {/* Points */}
-        {pts.map((p,i)=>{
-          const isLast = i===pts.length-1;
-          return <g key={i}>
-            <circle cx={xS(i)} cy={yS(p.val)} r={isLast?4:2.5}
-              fill={isLast?color:"white"} stroke={color} strokeWidth={isLast?0:1.5}/>
-            {isLast && <text x={xS(i)} y={yS(p.val)-8} textAnchor="middle"
-              fontSize={8} fontWeight="700" fill={color}>{p.val}{unit}</text>}
-          </g>;
-        })}
-
-        {/* X labels */}
-        {pts.map((p,i)=>{
-          if(pts.length<=7||i===0||i===pts.length-1||i%Math.ceil(pts.length/5)===0)
-            return <text key={i} x={xS(i)} y={H-3} textAnchor="middle" fontSize={7} fill={C.slateL}>{p.label}</text>;
-          return null;
-        })}
-      </svg>
-    );
-  };
-
-  const ChartCard = ({title,icon,data,color,target,maxVal,minVal,unit}) => {
-    const pts = data.filter(d=>d.val!==null);
-    const avg = pts.length>0 ? Math.round(pts.reduce((s,p)=>s+p.val,0)/pts.length) : null;
-    return (
-      <Card>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>{icon} {title}</div>
-          <div style={{textAlign:"right"}}>
-            <div style={{fontSize:22,fontWeight:800,color}}>{avg!==null?avg:"--"}{unit}</div>
-            <div style={{fontSize:9,color:C.slateL}}>Moyenne — {pts.length} jour(s)</div>
-          </div>
-        </div>
-        <LineChart data={data} color={color} target={target} maxVal={maxVal} minVal={minVal} unit={unit}/>
-      </Card>
-    );
-  };
-
   const volsDone = flights.filter(f=>f.status==="Termine");
   const otpVal = volsDone.length>0 ? Math.round(volsDone.reduce((s,f)=>s+otpScore(f),0)/volsDone.length) : kpis.otp||0;
   const lfVal = volsDone.length>0 ? Math.round(volsDone.reduce((s,f)=>s+f.load,0)/volsDone.length) : kpis.loadFactor||0;
