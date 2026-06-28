@@ -1879,7 +1879,7 @@ function ScreenOps({ flights, safetyData, onUpdateFlight }) {
         </div>
       )}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-        {[["○",planned.length,"Planifies",C.slate],["✈",enVol.length,"En vol",C.gold],["✓",done.length,"Termines",C.emerald],["👥",flights.reduce((s,f)=>s+f.pax,0),"PAX",C.navy]].map(([ic,v,l,c])=>(
+        {[["○",planned.length,"Planifies",C.slate],["✈",enVol.length,"En vol",C.gold],["✓",done.length,"Termines",C.emerald],["👥",fmtMAD(flights.reduce((s,f)=>s+f.pax,0)),"PAX",C.navy]].map(([ic,v,l,c])=>(
           <div key={l} style={{background:"white",borderRadius:10,border:"1px solid "+C.border,textAlign:"center",padding:"10px 4px"}}>
             <div style={{fontSize:16}}>{ic}</div>
             <div style={{fontSize:20,fontWeight:800,color:c}}>{v}</div>
@@ -2654,7 +2654,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
 
   return (
     "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px;display:flex;align-items:center;gap:12px'><img src='"+LOGO_B64+"' alt='Afrijet' style='width:48px;height:34px;object-fit:contain;background:white;border-radius:6px;padding:2px;flex-shrink:0'/><div><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Opérationnel</div><div style='color:#94A3B8;font-size:11px'>EMB 135 CN-KTA \u00B7 18 sieges Business \u00B7 "+ds+"</div></div></div>"+
-    card(row(done,"Termines",G,flights.filter(f=>f.status==="En vol").length,"En vol",O,tPax,"PAX total",N))+
+    card(row(done,"Termines",G,flights.filter(f=>f.status==="En vol").length,"En vol",O,fmtMAD(tPax),"PAX total",N))+
     card(sec("Performance","#0F1F3D")+
       kpiLine("OTP (ponctualite)",rOtp+"%","90%",rOtp>=90)+
       kpiLine("Load Factor",rLf+"%","80%",rLf>=80)+
@@ -2976,7 +2976,7 @@ function App() {
                   {v:done+"/"+flights.length,l:"Vols termines",c:[0,147,106],ok:true},
                   {v:pOtp+"%",l:"OTP Ponctualite",c:pOtp>=90?[0,147,106]:[217,119,6],ok:pOtp>=90},
                   {v:pLf+"%",l:"Load Factor",c:pLf>=80?[0,147,106]:[217,119,6],ok:pLf>=80},
-                  {v:tPax+" pax",l:"PAX total",c:[15,31,61],ok:true},
+                  {v:fmtMAD(tPax)+" pax",l:"PAX total",c:[15,31,61],ok:true},
                 ];
                 const cw=(CW-9)/4;
                 cards.forEach((card,i)=>{
