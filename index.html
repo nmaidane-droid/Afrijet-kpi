@@ -142,8 +142,8 @@ function KpiTile({ title, value, unit, sub, accent, icon, info }) {
           <span style={{ fontSize:18 }}>{icon}</span>
         </div>
       </div>
-      <div style={{ fontSize:26, fontWeight:800, color:accent||C.navy, lineHeight:1 }}>
-        {value}<span style={{ fontSize:13, color:C.slate }}> {unit}</span>
+      <div style={{ fontSize:String(value).length>7?"16px":String(value).length>5?"20px":"26px", fontWeight:800, color:accent||C.navy, lineHeight:1.1 }}>
+        {value}<span style={{ fontSize:11, color:C.slate }}> {unit}</span>
       </div>
       {sub && <div style={{ fontSize:10, color:C.slateL, marginTop:4 }}>{sub}</div>}
       {show&&info&&(
@@ -1563,13 +1563,14 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
   );
 }
 
-function ScreenOps({ flights, onUpdateFlight }) {
+function ScreenOps({ flights, safetyData, onUpdateFlight }) {
   const [edit,setEdit]=useState(null);
   const [search,setSearch]=useState("");
   const [filterStatus,setFilterStatus]=useState("Tous");
   const sBg=s=>s==="Termine"?C.emeraldL:s==="En vol"?C.goldL:s==="Annule"?C.dangerL:C.bg;
   const sTx=s=>s==="Termine"?C.emeraldD:s==="En vol"?C.gold:s==="Annule"?C.danger:C.slate;
   const sIc=s=>s==="Termine"?"✓":s==="En vol"?"✈":s==="Annule"?"✗":"○";
+  const getSecEvents=num=>(safetyData||[]).filter(e=>e.num===num);
 
   // Filter flights
   const filtered=flights.filter(f=>{
@@ -1739,6 +1740,24 @@ function ScreenOps({ flights, onUpdateFlight }) {
                 })()}
               </div>
             )}
+            {(()=>{
+              const evts=getSecEvents(edit.num);
+              if(evts.length===0)return null;
+              return (
+                <div style={{background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:10,padding:"10px 14px",marginBottom:4}}>
+                  <div style={{fontWeight:700,fontSize:12,color:"#DC2626",marginBottom:8}}>🛡 Événements sécurité associés</div>
+                  {evts.map((e,i)=>(
+                    <div key={i} style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:i<evts.length-1?6:0}}>
+                      {e.approche&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Approche instable</span>}
+                      {e.tcas&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>TCAS RA</span>}
+                      {e.gpws&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>GPWS Warning</span>}
+                      {e.hardLanding&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Hard Landing</span>}
+                      {e.safa&&<span style={{background:"#EDE9FE",color:"#7C3AED",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>SAFA</span>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <div style={{display:"flex",gap:10}}>
               <button onClick={()=>setEdit(null)} style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Annuler</button>
               <button onClick={doUpdate} style={{flex:2,height:48,background:C.navy,border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Enregistrer</button>
@@ -1789,14 +1808,20 @@ function ScreenOps({ flights, onUpdateFlight }) {
           <span style={{color:C.navy}}>{filtered.length}/{flights.length}</span>
         </div>
         {filtered.length===0&&<div style={{padding:20,textAlign:"center",color:C.slateL,fontSize:13}}>Aucun vol trouvé</div>}
-        {filtered.map((f,i)=>(
+        {filtered.map((f,i)=>{
+          const secEvts=getSecEvents(f.num);
+          const hasSecu=secEvts.length>0;
+          return (
           <div key={i} onClick={()=>setEdit({...f})}
             style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             <div style={{width:34,height:34,borderRadius:9,background:sBg(f.status),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <span style={{fontWeight:800,fontSize:14,color:sTx(f.status)}}>{sIc(f.status)}</span>
             </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:700,fontSize:13,color:C.text}}>{f.num} — {f.from} vers {f.to}</div>
+              <div style={{fontWeight:700,fontSize:13,color:C.text,display:"flex",alignItems:"center",gap:6}}>
+                {f.num} — {f.from} vers {f.to}
+                {hasSecu&&<span style={{background:"#FEE2E2",color:"#DC2626",borderRadius:6,padding:"1px 5px",fontSize:9,fontWeight:800}}>🛡 {secEvts.length}</span>}
+              </div>
               <div style={{fontSize:11,color:C.textSub}}>
                 {f.dep} - {f.arr} · {f.pax} pax · {f.load}%
                 {(()=>{if(f.status==="Termine"&&f.depReal&&f.arrReal&&f.depReal.includes(":")&&f.arrReal.includes(":")){const[dh,dm]=f.depReal.split(":").map(Number);const[ah,am]=f.arrReal.split(":").map(Number);const r=(ah*60+am)-(dh*60+dm);if(r>0)return<span style={{color:C.emerald,fontWeight:700}}> · {Math.floor(r/60)}h{String(r%60).padStart(2,"0")}</span>;}if(f.dureeMin>0)return<span style={{color:C.slateL}}> · {Math.floor(f.dureeMin/60)}h{String(f.dureeMin%60).padStart(2,"0")}</span>;return null;})()}
@@ -1815,7 +1840,8 @@ function ScreenOps({ flights, onUpdateFlight }) {
               <span style={{fontSize:10,color:C.slateL}}>✏</span>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1869,7 +1895,8 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData }) {
   );
 }
 
-function LineChart({data, color, target, maxVal, minVal, unit}) {
+function LineChart({data, color, target, maxVal, minVal, unit, fmtVal}) {
+  const fmt=fmtVal||(v=>v);
   const W=300, H=90, padL=28, padR=8, padT=10, padB=20;
   const cW=W-padL-padR, cH=H-padT-padB;
   const pts = data.filter(d=>d.val!==null);
@@ -1893,7 +1920,7 @@ function LineChart({data, color, target, maxVal, minVal, unit}) {
         const yy=padT+cH*t, lv=Math.round(hi-t*(hi-lo));
         return <g key={i}>
           <line x1={padL} y1={yy} x2={W-padR} y2={yy} stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3"/>
-          <text x={padL-3} y={yy+3} textAnchor="end" fontSize={7} fill={C.slateL}>{lv}</text>
+          <text x={padL-3} y={yy+3} textAnchor="end" fontSize={7} fill={C.slateL}>{fmt(lv)}</text>
         </g>;
       })}
       {ty!=null && <g>
@@ -1908,7 +1935,7 @@ function LineChart({data, color, target, maxVal, minVal, unit}) {
           <circle cx={xS(i)} cy={yS(p.val)} r={isLast?4:2.5}
             fill={isLast?color:"white"} stroke={color} strokeWidth={isLast?0:1.5}/>
           {isLast && <text x={xS(i)} y={yS(p.val)-8} textAnchor="middle"
-            fontSize={8} fontWeight="700" fill={color}>{p.val}{unit}</text>}
+            fontSize={8} fontWeight="700" fill={color}>{fmt(p.val)}{unit}</text>}
         </g>;
       })}
       {pts.map((p,i)=>{
@@ -1920,20 +1947,21 @@ function LineChart({data, color, target, maxVal, minVal, unit}) {
   );
 }
 
-function ChartCard({title,icon,data,color,target,maxVal,minVal,unit,showTotal}) {
+function ChartCard({title,icon,data,color,target,maxVal,minVal,unit,showTotal,fmtVal}) {
   const pts = data.filter(d=>d.val!==null);
   const avg = pts.length>0 ? Math.round(pts.reduce((s,p)=>s+p.val,0)/pts.length*10)/10 : null;
   const total = pts.reduce((s,p)=>s+p.val,0);
+  const fmt=fmtVal||(v=>v);
   return (
     <Card>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>{icon} {title}</div>
         <div style={{textAlign:"right"}}>
-          <div style={{fontSize:22,fontWeight:800,color}}>{showTotal?total:(avg!==null?avg:"--")}{unit}</div>
+          <div style={{fontSize:16,fontWeight:800,color}}>{showTotal?total:(avg!==null?fmt(avg):"--")}{unit}</div>
           <div style={{fontSize:9,color:C.slateL}}>{showTotal?"Total — "+pts.length+" sem.":"Moyenne — "+pts.length+" semaine(s)"}</div>
         </div>
       </div>
-      <LineChart data={data} color={color} target={target} maxVal={maxVal} minVal={minVal} unit={unit}/>
+      <LineChart data={data} color={color} target={target} maxVal={maxVal} minVal={minVal} unit={unit} fmtVal={fmtVal}/>
     </Card>
   );
 }
@@ -2209,12 +2237,46 @@ function ScreenFin({ finData }) {
   const tCout=fd.reduce((s,f)=>s+f.couts,0);
   const marge=tRev>0?Math.round((1-tCout/tRev)*100):0;
   const fmt=n=>fmtMAD(n)+" MAD";
+
+  // Chart data
+  const revData=fd.map(f=>({label:f.mois.slice(0,3),val:f.revenus}));
+  const margeData=fd.map(f=>({label:f.mois.slice(0,3),val:f.revenus>0?Math.round((1-f.couts/f.revenus)*100):0}));
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <KpiTile title="Revenus cumul. 2026" value={fmt(tRev)} unit="MAD" accent={C.emerald} icon="💰"/>
-        <KpiTile title="Marge brute" value={marge} unit="%" accent={marge>0?C.emerald:marge===0?C.warn:C.danger} icon="📊"/>
-      </div>
+      {(()=>{
+        const revStr=fmtMAD(tRev);
+        const margeStr=String(marge)+"%";
+        const maxLen=Math.max(revStr.length, margeStr.length);
+        const fs=maxLen>7?"16px":maxLen>5?"20px":"26px";
+        const tileStyle={background:C.card,borderRadius:12,padding:14,border:"1px solid "+C.border,display:"flex",flexDirection:"column",justifyContent:"space-between",minHeight:90};
+        return (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div style={{...tileStyle,borderTop:"3px solid "+C.emerald}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <span style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>Revenus cumul. 2026</span>
+                <span style={{fontSize:18}}>💰</span>
+              </div>
+              <div style={{fontSize:fs,fontWeight:800,color:C.emerald,lineHeight:1.2}}>{revStr} <span style={{fontSize:11,color:C.slate}}>MAD</span></div>
+            </div>
+            <div style={{...tileStyle,borderTop:"3px solid "+(marge>0?C.emerald:marge===0?C.warn:C.danger)}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <span style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>Marge brute</span>
+                <span style={{fontSize:18}}>📊</span>
+              </div>
+              <div style={{fontSize:fs,fontWeight:800,color:marge>0?C.emerald:marge===0?C.warn:C.danger,lineHeight:1.2,textAlign:"center",flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>{marge}<span style={{fontSize:11,color:C.slate}}> %</span></div>
+            </div>
+          </div>
+        );
+      })()}
+      {fd.length>=2&&(
+        <>
+          <ChartCard title="Revenus mensuels" icon="💰"
+            data={revData} color={C.emerald} minVal={0} unit=" MAD" fmtVal={v=>fmtMAD(v)}/>
+          <ChartCard title="Marge brute mensuelle" icon="📊"
+            data={margeData} color={marge>0?C.emerald:C.danger} minVal={0} maxVal={50} unit="%"/>
+        </>
+      )}
       {fd.length>0&&(
         <Card>
           <SectionTitle>Historique mensuel</SectionTitle>
@@ -2540,7 +2602,7 @@ function App() {
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism} maintData={maintData}/>}
-        {tab==="ops"     && <ScreenOps flights={flights} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
+        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights}/>}
