@@ -515,23 +515,28 @@ function calcFlightCategory(metar) {
   return "VFR";
 }
 
+const IATA_TO_ICAO = {
+  CMN:"GMMN", RAK:"GMMX", AGA:"GMAD", TNG:"GMTT", FEZ:"GMFF",
+  OUD:"GMFO", RBA:"GMME", NDR:"GMMW", AHU:"GMTA", TTU:"GMTN",
+  ESU:"GMMZ", OZZ:"GMMZ", ERH:"GMFK", EUN:"GSAI", VIL:"GQPD",
+  ZGR:"GMAZ", TTA:"GMAT", SMW:"GMMA", SII:"GMMI", GLN:"GMAG",
+  // International
+  LBV:"FOOL", DLA:"FKKD", NSI:"FKYS", ABJ:"DIAP", DKR:"GOOY",
+  NKC:"GQNN", BKO:"GABS", OUA:"DFFD", ACC:"DGAA", LOS:"DNMM",
+  CDG:"LFPG", LHR:"EGLL", MAD:"LEMD", BCN:"LEBL", FCO:"LIRF",
+  JFK:"KJFK", DXB:"OMDB", DOH:"OTHH", IST:"LTFM",
+};
+
 function useMetar(iata) {
   const [fc, setFc] = React.useState("?");
   const [raw, setRaw] = React.useState("");
   React.useEffect(() => {
     if(!iata||iata.length<3) return;
     setFc("?"); setRaw("");
-    // CheckWX accepte ICAO — on cherche d'abord via station/IATA
-    fetch(`https://api.checkwx.com/station/${iata}`, {
-      headers: {"X-API-Key": "add2685cda494119a5465ec664852fed"}
+    const icao = IATA_TO_ICAO[iata.toUpperCase()] || iata.toUpperCase();
+    fetch(`https://api.checkwx.com/metar/${icao}/decoded`, {
+      headers: {"X-API-Key":"add2685cda494119a5465ec664852fed","Accept":"application/json"}
     })
-      .then(r=>r.json())
-      .then(stData=>{
-        const icao = stData?.data?.[0]?.icao || iata;
-        return fetch(`https://api.checkwx.com/metar/${icao}/decoded`, {
-          headers: {"X-API-Key": "add2685cda494119a5465ec664852fed"}
-        });
-      })
       .then(r=>r.json())
       .then(data=>{
         const m = data?.data?.[0];
@@ -539,7 +544,7 @@ function useMetar(iata) {
         setRaw(m.raw_text||"");
         setFc(m.flight_category||calcFlightCategory(m.raw_text||""));
       })
-      .catch(()=>setFc("?"));
+      .catch(e=>{console.error("CheckWX error:",e);setFc("?");});
   }, [iata]);
   return {fc, raw};
 }
