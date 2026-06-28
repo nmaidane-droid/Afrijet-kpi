@@ -467,7 +467,7 @@ function simulateFlightState(icao24) {
   const lat = 33.3675 + (33.9273 - 33.3675) * elapsed;
   const lon = -7.5900 + (-4.9778 - (-7.5900)) * elapsed;
 
-  // Realistic EMB 145 cruise: FL280, 440-460 kt
+  // Realistic EMB 135 cruise: FL280, 440-460 kt
   const cruiseAlt  = 8534;  // meters ~ FL280
   // Climb/cruise/descend profile
   let altM;
@@ -2284,7 +2284,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
   }).join("");
 
   return (
-    "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px;display:flex;align-items:center;gap:12px'><img src='"+LOGO_B64+"' alt='Afrijet' style='width:48px;height:34px;object-fit:contain;background:white;border-radius:6px;padding:2px;flex-shrink:0'/><div><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Journalier</div><div style='color:#94A3B8;font-size:11px'>EMB 145 CN-KTA \u00B7 18 sieges Business \u00B7 "+ds+"</div></div></div>"+
+    "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px;display:flex;align-items:center;gap:12px'><img src='"+LOGO_B64+"' alt='Afrijet' style='width:48px;height:34px;object-fit:contain;background:white;border-radius:6px;padding:2px;flex-shrink:0'/><div><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Journalier</div><div style='color:#94A3B8;font-size:11px'>EMB 135 CN-KTA \u00B7 18 sieges Business \u00B7 "+ds+"</div></div></div>"+
     card(row(done,"Termines",G,flights.filter(f=>f.status==="En vol").length,"En vol",O,tPax,"PAX total",N))+
     card(sec("Performance","#0F1F3D")+
       kpiLine("OTP (ponctualite)",rOtp+"%","90%",rOtp>=90)+
@@ -2323,7 +2323,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
       row(fmtMAD(tRev)+" MAD","Revenus",G,fmtMAD(tCout)+" MAD","Couts",N,marge+"%","Marge brute",marge>0?G:O)+
       finRows
     ):"")+
-    "<div style='text-align:center;padding:12px;font-size:9px;color:#94A3B8'>Afrijet Sahara \u00B7 EMB 145 CN-KTA \u00B7 DGAC Maroc \u00B7 Confidentiel</div></div>"
+    "<div style='text-align:center;padding:12px;font-size:9px;color:#94A3B8'>Afrijet Sahara \u00B7 EMB 135 CN-KTA \u00B7 DGAC Maroc \u00B7 Confidentiel</div></div>"
   );
 }
 
@@ -2421,7 +2421,7 @@ function App() {
           </div>
           <div style={{minWidth:0}}>
             <div style={{fontWeight:800,fontSize:13,color:C.navy,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>AFRIJET SAHARA</div>
-            <div style={{fontSize:9,color:C.gold,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em"}}>EMB 145 · CN-KTA</div>
+            <div style={{fontSize:9,color:C.gold,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em"}}>EMB 135 · CN-KTA</div>
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
@@ -2498,7 +2498,7 @@ function App() {
           <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"2px solid #A0720A"}}>
             <div>
               <div style={{color:"white",fontWeight:800,fontSize:14}}>Rapport KPI</div>
-              <div style={{color:"#A0720A",fontSize:10}}>Afrijet Sahara · EMB 145 CN-KTA</div>
+              <div style={{color:"#A0720A",fontSize:10}}>Afrijet Sahara · EMB 135 CN-KTA</div>
             </div>
             <button onClick={()=>setReport(null)}
               style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"8px 16px",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
@@ -2559,7 +2559,7 @@ function App() {
                 doc.setTextColor(160,114,10);
                 doc.setFontSize(7.5);
                 doc.setFont("helvetica","bold");
-                doc.text("EMB 145  |  CN-KTA  |  18 SIEGES BUSINESS  |  DGAC MAROC",M+42,27);
+                doc.text("EMB 135  |  CN-KTA  |  18 SIEGES BUSINESS  |  DGAC MAROC",M+42,27);
                 y=42;
 
                 // ── KPI Summary cards ──
@@ -2870,7 +2870,7 @@ function App() {
                   doc.setTextColor(255,255,255);
                   doc.setFontSize(6.5);
                   doc.setFont("helvetica","normal");
-                  doc.text("AFRIJET SAHARA  |  EMB 145 CN-KTA  |  DGAC MAROC  |  CONFIDENTIEL",PW/2,PH-4,"center");
+                  doc.text("AFRIJET SAHARA  |  EMB 135 CN-KTA  |  DGAC MAROC  |  CONFIDENTIEL",PW/2,PH-4,"center");
                   doc.setTextColor(160,114,10);
                   doc.setFont("helvetica","bold");
                   doc.text("Page "+p+"/"+nbPages,PW-M,PH-4,"right");
