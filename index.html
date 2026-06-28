@@ -1089,6 +1089,8 @@ function FormMaint({ onSubmit, maintData }) {
   const md=maintData||{};
   const [ttaf,setTtaf]=useState(String(md.ttaf||"4218"));
   const [nextH,setNextH]=useState(String(md.nextCheckH||"182"));
+  const [bCheckH,setBCheckH]=useState(String(md.bCheckH||""));
+  const [cCheckH,setCCheckH]=useState(String(md.cCheckH||""));
   const [fiab,setFiab]=useState(String(md.fiabMoteurs||"99.8"));
   const [techD,setTechD]=useState(String(md.techDelay||"0.4"));
   const [aog,setAog]=useState(String(md.aog||"0"));
@@ -1097,6 +1099,8 @@ function FormMaint({ onSubmit, maintData }) {
     if(maintData?.mels) setMels(maintData.mels);
     if(maintData?.ttaf) setTtaf(String(maintData.ttaf));
     if(maintData?.nextCheckH) setNextH(String(maintData.nextCheckH));
+    if(maintData?.bCheckH!==undefined) setBCheckH(String(maintData.bCheckH||""));
+    if(maintData?.cCheckH!==undefined) setCCheckH(String(maintData.cCheckH||""));
     if(maintData?.fiabMoteurs) setFiab(String(maintData.fiabMoteurs));
     if(maintData?.techDelay!==undefined) setTechD(String(maintData.techDelay));
     if(maintData?.aog!==undefined) setAog(String(maintData.aog));
@@ -1122,6 +1126,7 @@ function FormMaint({ onSubmit, maintData }) {
 
   const submit=()=>{
     onSubmit({ttaf:Number(ttaf)||0,melCount:mels.length,nextCheckH:Number(nextH)||0,
+      bCheckH:Number(bCheckH)||0,cCheckH:Number(cCheckH)||0,
       fiabMoteurs:Number(fiab)||0,techDelay:Number(techD)||0,aog:Number(aog)||0,mels});
   };
 
@@ -1132,7 +1137,20 @@ function FormMaint({ onSubmit, maintData }) {
         <FSection title="Cellule" color="#00936A"/>
         <FGrid>
           <FField label="TTAF (heures)" value={ttaf} onChange={setTtaf} type="number" min={0}/>
-          <FField label="Prochain check (h)" value={nextH} onChange={setNextH} type="number" min={0}/>
+          <FCalc label="Statut cellule" value="En service" color={C.emerald}/>
+        </FGrid>
+        <FSection title="Visites périodiques" color="#00936A"/>
+        <FGrid>
+          <FField label="A-Check dans (h)" value={nextH} onChange={setNextH} type="number" min={0}/>
+          <FCalc label="Statut A-Check" value={!nextH||nextH==="0"?"--":Number(nextH)<50?"URGENT":Number(nextH)<100?"Proche":"OK"} color={!nextH||nextH==="0"?C.slate:Number(nextH)<50?C.danger:Number(nextH)<100?C.warn:C.emerald}/>
+        </FGrid>
+        <FGrid>
+          <FField label="B-Check dans (h)" value={bCheckH} onChange={setBCheckH} type="number" min={0}/>
+          <FCalc label="Statut B-Check" value={!bCheckH||bCheckH==="0"?"--":Number(bCheckH)<100?"URGENT":Number(bCheckH)<300?"Proche":"OK"} color={!bCheckH||bCheckH==="0"?C.slate:Number(bCheckH)<100?C.danger:Number(bCheckH)<300?C.warn:C.emerald}/>
+        </FGrid>
+        <FGrid>
+          <FField label="C-Check dans (h)" value={cCheckH} onChange={setCCheckH} type="number" min={0}/>
+          <FCalc label="Statut C-Check" value={!cCheckH||cCheckH==="0"?"--":Number(cCheckH)<200?"URGENT":Number(cCheckH)<500?"Proche":"OK"} color={!cCheckH||cCheckH==="0"?C.slate:Number(cCheckH)<200?C.danger:Number(cCheckH)<500?C.warn:C.emerald}/>
         </FGrid>
         <FSection title="Fiabilite" color="#00936A"/>
         <FGrid>
@@ -1888,10 +1906,29 @@ function ScreenMaint({ kpis, maintData }) {
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
-        <KpiTile title="A-Check dans" value={md.nextCheckH||0} unit="h" accent={(md.nextCheckH||999)<50?C.danger:C.emerald} icon="🔧"/>
         <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
-        <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||0} unit="%" accent={(md.fiabMoteurs||0)>=99.5?C.emerald:C.warn} icon="✈"/>
       </div>
+      <Card>
+        <SectionTitle>Visites périodiques</SectionTitle>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+          {[
+            {label:"A-Check",val:md.nextCheckH,warn:100,danger:50},
+            {label:"B-Check",val:md.bCheckH,warn:300,danger:100},
+            {label:"C-Check",val:md.cCheckH,warn:500,danger:200},
+          ].map(({label,val,warn,danger})=>{
+            const v=Number(val)||0;
+            const color=!val||v===0?C.slate:v<danger?C.danger:v<warn?C.warn:C.emerald;
+            const status=!val||v===0?"--":v<danger?"URGENT":v<warn?"Proche":"OK";
+            return (
+              <div key={label} style={{background:C.bg,borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+                <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{label}</div>
+                <div style={{fontSize:16,fontWeight:800,color:color}}>{val||"--"}{val?" h":""}</div>
+                <div style={{fontSize:9,fontWeight:700,color:color,marginTop:2}}>{status}</div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
       <Card>
         <SectionTitle>MEL actifs ({mels.length})</SectionTitle>
         {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:13,padding:"12px 0"}}>Aucun MEL actif</div>}
