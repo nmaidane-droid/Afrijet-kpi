@@ -2276,7 +2276,9 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
 
   const row=(v1,l1,c1,v2,l2,c2,v3,l3,c3)=>{
     const fs=n=>String(n).length>8?"13px":String(n).length>5?"16px":"20px";
-    return "<div style='display:grid;grid-template-columns:1fr 1fr 1fr'><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:"+fs(v1)+";font-weight:800;color:"+c1+"'>"+v1+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l1+"</div></div><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:"+fs(v2)+";font-weight:800;color:"+c2+"'>"+v2+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l2+"</div></div><div style='text-align:center;padding:10px 4px'><div style='font-size:"+fs(v3)+";font-weight:800;color:"+c3+"'>"+v3+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l3+"</div></div></div>";
+    const fsSame=(a,b,c)=>{const s=[a,b,c].map(n=>String(n).length);const max=Math.max(...s);return max>8?"13px":max>5?"16px":"20px";};
+    const f=fsSame(v1,v2,v3);
+    return "<div style='display:grid;grid-template-columns:1fr 1fr 1fr'><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:"+f+";font-weight:800;color:"+c1+"'>"+v1+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l1+"</div></div><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:"+f+";font-weight:800;color:"+c2+"'>"+v2+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l2+"</div></div><div style='text-align:center;padding:10px 4px'><div style='font-size:"+f+";font-weight:800;color:"+c3+"'>"+v3+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l3+"</div></div></div>";
   };
 
   const kpiLine=(l,v,o,ok)=>
