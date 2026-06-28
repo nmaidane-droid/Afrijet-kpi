@@ -2119,13 +2119,14 @@ function buildReport(flights, kpis, now, finData, maintData) {
     )+
     card(sec("Rotations semaine du "+weekLabel+" — "+weekFlights.length+" vols","#0F1F3D")+fRows)+
     card(sec("Maintenance CAMO","#00936A")+
-      row((md.ttaf||0)+"h","TTAF",N,(md.nextCheckH||0)+"h","A-Check dans",(md.nextCheckH||999)<50?"#DC2626":G,(md.mels||[]).length,"MEL actifs",(md.mels||[]).length>0?O:G)+
+      row((md.ttaf||0)+"h","TTAF",N,(md.mels||[]).length,"MEL actifs",(md.mels||[]).length>0?O:G,"",""," ")+
+      row((md.nextCheckH||"--")+(md.nextCheckH?"h":""),"A-Check dans",(md.nextCheckH||999)<50?"#DC2626":(md.nextCheckH||999)<100?O:G,(md.bCheckH||"--")+(md.bCheckH?"h":""),"B-Check dans",!md.bCheckH||md.bCheckH>300?G:md.bCheckH>100?O:"#DC2626",(md.cCheckH||"--")+(md.cCheckH?"h":""),"C-Check dans",!md.cCheckH||md.cCheckH>500?G:md.cCheckH>200?O:"#DC2626")+
       (()=>{
         const fiab=md.fiabMoteurs||0;
         const techV=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
         const doneV=flights.filter(f=>f.status==="Termine");
         const td=doneV.length>0?Math.round((techV.length/doneV.length)*1000)/10:0;
-        return row(fiab+"%","Fiabilite moteurs",fiab>=99.5?G:O,td+"%","Tech Delay",td<2?G:O,(md.bCheckH||"--")+"h","B-Check dans",!md.bCheckH||md.bCheckH>300?G:O);
+        return row(fiab+"%","Fiabilite moteurs",fiab>=99.5?G:O,td+"%","Tech Delay",td<2?G:O,"",""," ");
       })()+
       melRows
     )+
@@ -2549,14 +2550,12 @@ function App() {
                 const md=maintData||{};
                 drawSection("  MAINTENANCE CAMO",0,147,106);
                 drawRow("TTAF actuel",(md.ttaf||"--")+" h");
-                drawRow("Prochain A-Check dans",(md.nextCheckH||"--")+" h",(md.nextCheckH||0)>50);
-                drawRow("Prochain B-Check dans",(md.bCheckH||"--")+" h",!md.bCheckH||md.bCheckH>300);
-                drawRow("Prochain C-Check dans",(md.cCheckH||"--")+" h",!md.cCheckH||md.cCheckH>500);
                 drawRow("MEL actifs",(md.mels||[]).length+" item(s)",(md.mels||[]).length===0);
-                // Calculated fiabilite from engine events
+                drawRow("A-Check dans",(md.nextCheckH||"--")+" h",(md.nextCheckH||0)>50);
+                drawRow("B-Check dans",(md.bCheckH||"--")+" h",!md.bCheckH||md.bCheckH>300);
+                drawRow("C-Check dans",(md.cCheckH||"--")+" h",!md.cCheckH||md.cCheckH>500);
                 const pFiab=md.fiabMoteurs||0;
                 drawRow("Fiabilite moteurs",(pFiab||"--")+"%",pFiab>=99.5);
-                // Calculated tech delay from flights
                 const pTechVols=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
                 const pDoneVols=flights.filter(f=>f.status==="Termine");
                 const pTechDelay=pDoneVols.length>0?Math.round((pTechVols.length/pDoneVols.length)*1000)/10:0;
