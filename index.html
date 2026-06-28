@@ -2250,21 +2250,22 @@ function ScreenFin({ finData }) {
         const maxLen=Math.max(revStr.length, margeStr.length);
         const fs=maxLen>7?"16px":maxLen>5?"20px":"26px";
         const tileStyle={background:C.card,borderRadius:12,padding:14,border:"1px solid "+C.border,height:100,boxSizing:"border-box"};
+        const annee=new Date().getFullYear();
         return (
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <div style={{...tileStyle,borderTop:"3px solid "+C.emerald}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <span style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>Revenus 2026</span>
+                <span style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>Revenus {annee}</span>
                 <span style={{fontSize:18}}>💰</span>
               </div>
-              <div style={{fontSize:fs,fontWeight:800,color:C.emerald,lineHeight:1.2}}>{revStr} <span style={{fontSize:11,color:C.slate}}>MAD</span></div>
+              <div style={{fontSize:fs,fontWeight:800,color:C.emerald,lineHeight:1.2,textAlign:"center"}}>{revStr} <span style={{fontSize:11,color:C.slate}}>MAD</span></div>
             </div>
             <div style={{...tileStyle,borderTop:"3px solid "+(marge>0?C.emerald:marge===0?C.warn:C.danger)}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <span style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.09em"}}>Marge brute</span>
                 <span style={{fontSize:18}}>📊</span>
               </div>
-              <div style={{fontSize:fs,fontWeight:800,color:marge>0?C.emerald:marge===0?C.warn:C.danger,lineHeight:1.2}}>{marge}<span style={{fontSize:11,color:C.slate}}> %</span></div>
+              <div style={{fontSize:fs,fontWeight:800,color:marge>0?C.emerald:marge===0?C.warn:C.danger,lineHeight:1.2,textAlign:"center"}}>{marge}<span style={{fontSize:11,color:C.slate}}> %</span></div>
             </div>
           </div>
         );
@@ -2457,7 +2458,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
         secRow("Inspections SAFA",tot.safa,"#7C3AED")
       );
     })()+
-    (fd.length>0?card(sec("Finances Cumul 2026","#7C3AED")+
+    (fd.length>0?card(sec("Finances Cumul "+now.getFullYear(),"#7C3AED")+
       row(fmtMAD(tRev)+" MAD","Revenus",G,fmtMAD(tCout)+" MAD","Couts",N,marge+"%","Marge brute",marge>0?G:O)+
       finRows
     ):"")+
@@ -2967,7 +2968,7 @@ function App() {
                   const tRev=fd.reduce((s,f)=>s+f.revenus,0);
                   const tCout=fd.reduce((s,f)=>s+f.couts,0);
                   const marge=tRev>0?Math.round((1-tCout/tRev)*100):0;
-                  drawSection("  FINANCES - CUMUL 2026",124,58,237);
+                  drawSection("  FINANCES - CUMUL "+now.getFullYear(),124,58,237);
                   drawRow("Revenus cumules",fmtMAD(tRev)+" MAD");
                   drawRow("Couts cumules",fmtMAD(tCout)+" MAD");
                   drawRow("Marge brute",marge+"%",marge>0,true);
