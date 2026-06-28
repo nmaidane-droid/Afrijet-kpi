@@ -992,6 +992,21 @@ const INIT_FLIGHTS = [
   {num:"AJS096",from:"CMN",to:"TNG",dep:"17:30",arr:"18:35",depReal:"17:30",arrReal:"18:39",status:"Termine",dureeMin:69,pax:13,load:72,date:"2026-06-21",cm1:"Rahimi Hassan",cm2:"Fassi Amine",cc:"Sebti Leila",carbDep:4187,carbArr:3103,consomme:1084,consoH:943,fuelPct:54,delayMin:0,nps:6}
 ];
 
+const INIT_AIRCRAFT = [
+  {
+    id:"AC001", immat:"CN-KTA", type:"EMB 135", sieges:18,
+    capa:5700, icao24:"020035",
+    ttaf:4218, nextCheckH:182, bCheckH:null, cCheckH:null,
+    evtMoteur:0, fiabMoteurs:99.8,
+    mels:[
+      {sys:"Passenger Address System", mel:"MEL 23-61", exp:"30/06/26", sev:"B"},
+      {sys:"No. 2 VHF Nav - ILS",      mel:"MEL 34-01", exp:"03/07/26", sev:"B"},
+      {sys:"Cabin Reading Light Row 3", mel:"MEL 33-11", exp:"10/07/26", sev:"B"},
+      {sys:"Galley Coffee Maker",       mel:"MEL 25-21", exp:"15/07/26", sev:"C"},
+    ],
+  },
+];
+
 const INIT_KPIS = {
   otp:92, loadFactor:89, delayMin:18,
   nps:7.2, consoH:850,
@@ -1033,23 +1048,26 @@ const INIT_FIN = [
 ];
 
 // ── Forms ────────────────────────────────────────────────────────────────────
-function FormVol({ onSubmit, crew }) {
+function FormVol({ onSubmit, crew, aircraft }) {
   const today=new Date().toISOString().slice(0,10);
-  const CAPA=5700;
+  const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
+  const ac=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{immat:"CN-KTA",type:"EMB 135",sieges:18,capa:5700,id:"AC001"};
+  const CAPA=ac.capa||5700;
+  const SIEGES=ac.sieges||18;
   const [num,setNum]=useState("");
   const [from_,setFrom]=useState("CMN");
   const [to,setTo]=useState("AGA");
   const [dep,setDep]=useState("");
   const [arr,setArr]=useState("");
-  const [pax,setPax]=useState("18");
+  const [pax,setPax]=useState(String(SIEGES));
   const [date,setDate]=useState(today);
   const [carbDep,setCDep]=useState("");
   const [cm1,setCm1]=useState("");
   const [cm2,setCm2]=useState("");
   const [cc,setCc]=useState("");
 
-  const pn=Math.min(18,Math.max(0,Number(pax)||0));
-  const load=Math.round(pn/18*100);
+  const pn=Math.min(SIEGES,Math.max(0,Number(pax)||0));
+  const load=Math.round(pn/SIEGES*100);
   const fPct=carbDep?Math.round(Number(carbDep)/CAPA*100):null;
   const fClr=fPct>=40?"#00936A":fPct>=25?"#D97706":"#DC2626";
 
@@ -1064,16 +1082,28 @@ function FormVol({ onSubmit, crew }) {
       if(diff>0) planDuree=diff;
     }
     onSubmit({num:num.trim().toUpperCase(),from:from_,to,dep,arr,depReal:"",arrReal:"",
-      status:"Planifie",pax:pn,load,date,
+      status:"Planifie",pax:pn,load,date,acId,sieges:SIEGES,
       carbDep:Number(carbDep)||0,carbArr:0,consomme:0,consoH:0,fuelPct:fPct||0,delayMin:0,
       cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0,dureeMin:planDuree});
-    setNum("");setDep("");setArr("");setPax("18");setCDep("");
+    setNum("");setDep("");setArr("");setPax(String(SIEGES));setCDep("");
     setCm1("");setCm2("");setCc("");
   };
   return (
     <Card accent="#0F1F3D">
       <FHeader icon="✈" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0F1F3D"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        {/* Aircraft selector */}
+        {aircraft&&aircraft.length>0&&(
+          <div>
+            <FLabel>Avion</FLabel>
+            <select value={acId} onChange={e=>setAcId(e.target.value)}
+              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.gold,borderRadius:10,padding:"0 14px",color:C.text,fontSize:13,outline:"none",appearance:"none",fontWeight:700}}>
+              {aircraft.map(a=>(
+                <option key={a.id} value={a.id}>{a.immat} — {a.type} ({a.sieges} sièges)</option>
+              ))}
+            </select>
+          </div>
+        )}
         <FGrid><FField label="N Vol *" value={num} onChange={setNum} placeholder="AJS07"/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
         <FSection title="Route" color="#0F1F3D"/>
         <FGrid><FAirport label="Depart" value={from_} onChange={setFrom}/><FAirport label="Arrivee" value={to} onChange={setTo}/></FGrid>
@@ -1081,7 +1111,7 @@ function FormVol({ onSubmit, crew }) {
         <FGrid><FField label="Depart prevu *" value={dep} onChange={setDep} type="time"/><FField label="Arrivee prevue *" value={arr} onChange={setArr} type="time"/></FGrid>
         <FSection title="Passagers prevus" color="#0F1F3D"/>
         <FGrid>
-          <FField label="PAX (0-18)" value={pax} onChange={v=>setPax(String(Math.min(18,Math.max(0,Number(v)||0))))} type="number" min={0} max={18}/>
+          <FField label={"PAX (0-"+SIEGES+")"} value={pax} onChange={v=>setPax(String(Math.min(SIEGES,Math.max(0,Number(v)||0))))} type="number" min={0} max={SIEGES}/>
           <FCalc label="Remplissage" value={load+"%"} color={load>=80?"#00936A":load>=60?"#D97706":"#DC2626"}/>
         </FGrid>
         <FSection title={"Carburant embarque — Capacite "+CAPA+" kg"} color="#0F1F3D"/>
@@ -1497,7 +1527,96 @@ function FormFin({ onSubmit }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport }) {
+function FormAircraft({ aircraft, onUpdate }) {
+  const [sel,setSel]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"new");
+  const [immat,setImmat]=useState("");
+  const [type,setType]=useState("");
+  const [sieges,setSieges]=useState("18");
+  const [capa,setCapa]=useState("5700");
+  const [icao24,setIcao24]=useState("");
+  const [msg,setMsg]=useState("");
+
+  React.useEffect(()=>{
+    if(sel==="new"){setImmat("");setType("");setSieges("18");setCapa("5700");setIcao24("");}
+    else{
+      const ac=aircraft.find(a=>a.id===sel);
+      if(ac){setImmat(ac.immat||"");setType(ac.type||"");setSieges(String(ac.sieges||18));setCapa(String(ac.capa||5700));setIcao24(ac.icao24||"");}
+    }
+  },[sel]);
+
+  const save=()=>{
+    if(!immat.trim()||!type.trim()){alert("Immatriculation et type requis");return;}
+    if(sel==="new"){
+      const newAc={id:"AC"+Date.now(),immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icao24.trim(),ttaf:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
+      onUpdate([...aircraft,newAc]);
+      setMsg("Avion ajouté ✅");
+    } else {
+      onUpdate(aircraft.map(a=>a.id===sel?{...a,immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icao24.trim()}:a));
+      setMsg("Avion mis à jour ✅");
+    }
+    setTimeout(()=>setMsg(""),3000);
+  };
+
+  const del=()=>{
+    if(aircraft.length<=1){alert("Impossible de supprimer le seul avion");return;}
+    if(window.confirm("Supprimer "+immat+" ?")){
+      onUpdate(aircraft.filter(a=>a.id!==sel));
+      setSel(aircraft.find(a=>a.id!==sel)?.id||"new");
+    }
+  };
+
+  return (
+    <Card accent="#0369A1">
+      <FHeader icon="🛩" title="Gestion de la flotte" subtitle="Ajouter ou modifier un avion" color="#0369A1"/>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <div>
+          <FLabel>Sélectionner un avion</FLabel>
+          <select value={sel} onChange={e=>setSel(e.target.value)}
+            style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:C.text,fontSize:13,outline:"none",appearance:"none"}}>
+            {aircraft.map(a=><option key={a.id} value={a.id}>{a.immat} — {a.type}</option>)}
+            <option value="new">➕ Nouvel avion</option>
+          </select>
+        </div>
+        <FGrid>
+          <FField label="Immatriculation *" value={immat} onChange={v=>setImmat(v.toUpperCase())} placeholder="CN-KTA"/>
+          <FField label="Type *" value={type} onChange={setType} placeholder="EMB 135"/>
+        </FGrid>
+        <FGrid>
+          <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999}/>
+          <FField label="Capacité carburant (kg)" value={capa} onChange={setCapa} type="number" min={0}/>
+        </FGrid>
+        <FField label="Code ICAO24 (transpondeur)" value={icao24} onChange={setIcao24} placeholder="ex: 020035"/>
+        {/* Summary of existing fleet */}
+        {aircraft.length>0&&(
+          <Card>
+            <SectionTitle>Flotte actuelle</SectionTitle>
+            {aircraft.map((a,i)=>(
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<aircraft.length-1?"1px solid "+C.border:"none"}}>
+                <span style={{fontSize:20}}>🛩</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:13,color:C.navy}}>{a.immat}</div>
+                  <div style={{fontSize:11,color:C.slate}}>{a.type} · {a.sieges} sièges · {a.capa} kg</div>
+                </div>
+                <span style={{fontSize:10,color:C.slateL,fontFamily:"monospace"}}>{a.icao24||"--"}</span>
+              </div>
+            ))}
+          </Card>
+        )}
+        {msg&&<div style={{background:"#D1FAE5",border:"1px solid #00936A",borderRadius:10,padding:"10px 14px",color:"#065F46",fontWeight:700,fontSize:13}}>{msg}</div>}
+        <div style={{display:"flex",gap:10}}>
+          {sel!=="new"&&aircraft.length>1&&(
+            <button onClick={del} style={{flex:1,height:48,background:"#FEE2E2",border:"1.5px solid #DC2626",borderRadius:10,color:"#DC2626",fontSize:13,fontWeight:700,cursor:"pointer"}}>🗑 Supprimer</button>
+          )}
+          <button onClick={save} style={{flex:2,height:48,background:"#0369A1",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+            {sel==="new"?"➕ Ajouter":"💾 Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft }) {
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
@@ -1558,6 +1677,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     {id:"secu",  icon:"🛡", label:"Sécurité",     color:"#DC2626"},
     {id:"fin",   icon:"💰", label:"Finances",     color:"#7C3AED"},
     {id:"crew",  icon:"👨‍✈️", label:"Equipage",     color:"#0369A1"},
+    {id:"avion", icon:"🛩", label:"Avion",        color:"#0369A1"},
   ];
   const f=FORMS.find(x=>x.id===active);
   return (
@@ -1631,11 +1751,12 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           <div>Satisfaction</div>
         </a>
       </div>
-      {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew}/>}
+      {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft}/>}
       {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew}/>}
       {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}}/>}
       {active==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights}/>}
       {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)}/>}
+      {active==="avion" && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft}/>}
     </div>
   );
 }
@@ -2390,7 +2511,9 @@ function ScreenPerf({ kpis, flights, finData }) {
 }
 
 
-function ScreenMaint({ kpis, maintData, flights }) {
+function ScreenMaint({ kpis, maintData, flights, aircraft }) {
+  const [selAc,setSelAc]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
+  const acInfo=aircraft?.find(a=>a.id===selAc)||aircraft?.[0]||{};
   const md=maintData||{};
   const mels=md.mels||[];
   // Calculate Tech Delay from flights
@@ -2408,8 +2531,17 @@ function ScreenMaint({ kpis, maintData, flights }) {
   const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* Aircraft selector */}
+      {aircraft&&aircraft.length>0&&(
+        <div>
+          <select value={selAc} onChange={e=>setSelAc(e.target.value)}
+            style={{width:"100%",height:44,boxSizing:"border-box",background:C.navy,border:"none",borderRadius:10,padding:"0 14px",color:"white",fontSize:13,fontWeight:700,outline:"none",appearance:"none"}}>
+            {aircraft.map(a=><option key={a.id} value={a.id} style={{background:"white",color:C.navy}}>{a.immat} — {a.type}</option>)}
+          </select>
+        </div>
+      )}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
+        <KpiTile title="TTAF" value={((acInfo.ttaf||md.ttaf||0)).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
         <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||"--"} unit={md.fiabMoteurs?"%":""} accent={(md.fiabMoteurs||0)>=99.5?C.emerald:(md.fiabMoteurs||0)>=98?C.warn:C.danger} icon="✈"
           info={"Formule :\n(Vols terminés − Événements moteur) / Vols terminés × 100\n\n🟢 ≥ 99.5%\n🟡 ≥ 98%\n🔴 < 98%"}/>
         <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
@@ -2719,6 +2851,7 @@ function App() {
   const [finData,setFin]     = usePersist("fin",INIT_FIN);
   const [safetyData,setSafety] = usePersist("safety",INIT_SAFETY);
   const [crew,setCrew]       = usePersist("crew",INIT_CREW);
+  const [aircraft,setAircraft] = usePersist("aircraft",INIT_AIRCRAFT);
   const [dismissed,setDism]  = usePersist("dismissed",[]);
   const [alertHist,setAlertHist] = usePersist("alertHist",[]);
   const [icao24,setIcao24]   = usePersist("icao24","020035");
@@ -2735,7 +2868,7 @@ function App() {
   useEffect(()=>{
     const t=setInterval(async()=>{
       if(window.storage){
-        const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist};
+        const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist,aircraft};
         await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
       }
       setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
@@ -2758,7 +2891,7 @@ function App() {
 
   const doSave = async () => {
     if(window.storage){
-      const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist};
+      const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist,aircraft};
       await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
     }
     setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
@@ -2767,7 +2900,7 @@ function App() {
   const doReset = async () => {
     clearStorage();
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
-    setCrew(INIT_CREW);setDism([]);setAlertHist([]);setReport(null);setReset(false);setTab("forms");
+    setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setReport(null);setReset(false);setTab("forms");
   };
 
   const allAlerts  = computeAlerts(kpis,flights,maintData);
@@ -2848,6 +2981,7 @@ function App() {
           onReset={()=>setReset(true)}
           flights={flights} crew={crew} setCrew={setCrew}
           maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed} safetyData={safetyData}
+          aircraft={aircraft} onUpdateAircraft={setAircraft}
           onImport={data=>{
             if(data.flights)   setFlights(data.flights);
             if(data.maintData) setMaint(data.maintData);
@@ -2857,6 +2991,7 @@ function App() {
             if(data.dismissed) setDism(data.dismissed);
             if(data.safetyData)setSafety(data.safetyData);
             if(data.alertHist) setAlertHist(data.alertHist);
+            if(data.aircraft)  setAircraft(data.aircraft);
           }}
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights}/>}
@@ -2864,7 +2999,7 @@ function App() {
         {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
-        {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights}/>}
+        {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
         {tab==="fin"     && <ScreenFin finData={finData}/>}
       </div>
 
