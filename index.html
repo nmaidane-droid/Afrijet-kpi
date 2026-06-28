@@ -528,26 +528,17 @@ function useMetar(iata) {
   React.useEffect(() => {
     const icao = IATA_TO_ICAO[iata];
     if(!icao) return;
-    const urls = [
-      `https://corsproxy.io/?${encodeURIComponent(`https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw`)}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw`)}`,
-    ];
-    let done = false;
-    urls.forEach(url => {
-      if(done) return;
-      fetch(url)
-        .then(r=>r.text())
-        .then(text=>{
-          if(done) return;
-          const line = text.trim().split("\n").find(l=>l.includes(icao)||l.startsWith("METAR"))||"";
-          if(line) {
-            done = true;
-            setRaw(line);
-            setFc(calcFlightCategory(line));
-          }
-        })
-        .catch(()=>{});
-    });
+    fetch(`https://api.checkwx.com/metar/${icao}/decoded`, {
+      headers: {"X-API-Key": "add2685cda494119a5465ec664852fed"}
+    })
+      .then(r=>r.json())
+      .then(data=>{
+        const m = data?.data?.[0];
+        if(!m) return;
+        setRaw(m.raw_text||"");
+        setFc(m.flight_category||calcFlightCategory(m.raw_text||""));
+      })
+      .catch(()=>setFc("?"));
   }, [iata]);
   return {fc, raw};
 }
