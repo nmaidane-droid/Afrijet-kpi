@@ -123,19 +123,46 @@ function Card({ children, accent }) {
   );
 }
 
-function KpiTile({ title, value, unit, sub, accent, icon }) {
+function KpiTile({ title, value, unit, sub, accent, icon, info }) {
+  const [show,setShow]=React.useState(false);
   return (
     <div style={{ background:C.card, borderRadius:12, padding:14,
-                  border:"1px solid "+C.border, borderTop:"3px solid "+(accent||C.slate) }}>
+                  border:"1px solid "+C.border, borderTop:"3px solid "+(accent||C.slate), position:"relative" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
         <span style={{ fontSize:10, fontWeight:700, color:C.slate,
-                       textTransform:"uppercase", letterSpacing:"0.09em" }}>{title}</span>
-        <span style={{ fontSize:18 }}>{icon}</span>
+                       textTransform:"uppercase", letterSpacing:"0.09em", flex:1 }}>{title}</span>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          {info&&(
+            <span onClick={e=>{e.stopPropagation();setShow(s=>!s);}}
+              style={{fontSize:12,color:C.slateL,cursor:"pointer",fontWeight:700,
+                background:C.bg,borderRadius:"50%",width:16,height:16,display:"flex",
+                alignItems:"center",justifyContent:"center",flexShrink:0,
+                border:"1px solid "+C.border,WebkitTapHighlightColor:"transparent"}}>ⓘ</span>
+          )}
+          <span style={{ fontSize:18 }}>{icon}</span>
+        </div>
       </div>
       <div style={{ fontSize:26, fontWeight:800, color:accent||C.navy, lineHeight:1 }}>
         {value}<span style={{ fontSize:13, color:C.slate }}> {unit}</span>
       </div>
       {sub && <div style={{ fontSize:10, color:C.slateL, marginTop:4 }}>{sub}</div>}
+      {show&&info&&(
+        <div onClick={()=>setShow(false)}
+          style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:999,background:"rgba(0,0,0,0.4)",
+            display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:"white",borderRadius:14,padding:18,maxWidth:300,width:"100%",
+              boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+            <div style={{fontWeight:800,fontSize:14,color:C.navy,marginBottom:10}}>{title}</div>
+            <div style={{fontSize:12,color:C.text,lineHeight:1.6,whiteSpace:"pre-line"}}>{info}</div>
+            <button onClick={()=>setShow(false)}
+              style={{marginTop:14,width:"100%",padding:"8px",background:C.navy,color:"white",
+                border:"none",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2053,11 +2080,15 @@ function ScreenPerf({ kpis, flights, finData }) {
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {/* KPI tiles */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <KpiTile title="OTP" value={otpVal} unit="%" accent={otpVal>=90?C.emerald:C.warn} icon="⏰"/>
-        <KpiTile title="Load Factor" value={lfVal} unit="%" accent={lfVal>=80?C.emerald:C.warn} icon="👥"/>
-        <KpiTile title="Retards moy." value={delayVal} unit="min" accent={delayVal>15?C.warn:C.emerald} icon="⚠"/>
+        <KpiTile title="OTP" value={otpVal} unit="%" accent={otpVal>=90?C.emerald:C.warn} icon="⏰"
+          info={"Formule :\nMoyenne pondérée :\n0 min = 100%\n1-15 min = 85%\n16-30 min = 70%\n31-45 min = 50%\n> 45 min = 25%\n\n🟢 ≥ 90%\n🟡 < 90%"}/>
+        <KpiTile title="Load Factor" value={lfVal} unit="%" accent={lfVal>=80?C.emerald:C.warn} icon="👥"
+          info={"Formule :\nMoyenne (PAX réels / 18 sièges) × 100\nSur vols terminés\n\n🟢 ≥ 80%\n🟡 < 80%"}/>
+        <KpiTile title="Retards moy." value={delayVal} unit="min" accent={delayVal>15?C.warn:C.emerald} icon="⚠"
+          info={"Formule :\nMoyenne des retards\n(vols avec retard > 0 min)\n\n🟢 ≤ 15 min\n🟡 > 15 min"}/>
         {(()=>{
-          return <KpiTile title="NPS moyen" value={npsVal} unit="%" accent={npsVal>=70?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}/>;
+          return <KpiTile title="NPS moyen" value={npsVal} unit="%" accent={npsVal>=70?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}
+            info={"Formule :\nMoyenne NPS saisi post-vol (0-100)\n\n🟢 ≥ 70\n🟡 < 70"}/>;
         })()}
       </div>
 
@@ -2116,11 +2147,15 @@ function ScreenMaint({ kpis, maintData, flights }) {
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
-        <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||"--"} unit={md.fiabMoteurs?"%":""} accent={(md.fiabMoteurs||0)>=99.5?C.emerald:(md.fiabMoteurs||0)>=98?C.warn:C.danger} icon="✈"/>
+        <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||"--"} unit={md.fiabMoteurs?"%":""} accent={(md.fiabMoteurs||0)>=99.5?C.emerald:(md.fiabMoteurs||0)>=98?C.warn:C.danger} icon="✈"
+          info={"Formule :\n(Vols terminés − Événements moteur) / Vols terminés × 100\n\n🟢 ≥ 99.5%\n🟡 ≥ 98%\n🔴 < 98%"}/>
         <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
-        <KpiTile title="Tech delay" value={techDelay} unit="%" accent={techDelay<2?C.emerald:techDelay<5?C.warn:C.danger} icon="⚙"/>
-        <KpiTile title="Dispatch Reliability" value={dispatchRel} unit="%" accent={dispatchRel>=99?C.emerald:dispatchRel>=95?C.warn:C.danger} icon="🛫"/>
-        <KpiTile title="Completion Factor" value={completionFactor} unit="%" accent={completionFactor>=99?C.emerald:completionFactor>=95?C.warn:C.danger} icon="✅"/>
+        <KpiTile title="Tech delay" value={techDelay} unit="%" accent={techDelay<2?C.emerald:techDelay<5?C.warn:C.danger} icon="⚙"
+          info={"Formule :\nVols retardés (cause Technique) / Vols terminés × 100\n\n🟢 < 2%\n🟡 < 5%\n🔴 ≥ 5%"}/>
+        <KpiTile title="Dispatch Reliability" value={dispatchRel} unit="%" accent={dispatchRel>=99?C.emerald:dispatchRel>=95?C.warn:C.danger} icon="🛫"
+          info={"Formule :\nVols terminés / Vols planifiés × 100\n\n🟢 ≥ 99%\n🟡 ≥ 95%\n🔴 < 95%"}/>
+        <KpiTile title="Completion Factor" value={completionFactor} unit="%" accent={completionFactor>=99?C.emerald:completionFactor>=95?C.warn:C.danger} icon="✅"
+          info={"Formule :\nVols terminés / (Vols planifiés − Annulations techniques) × 100\n\n🟢 ≥ 99%\n🟡 ≥ 95%\n🔴 < 95%"}/>
       </div>
       <Card>
         <SectionTitle>Visites périodiques</SectionTitle>
