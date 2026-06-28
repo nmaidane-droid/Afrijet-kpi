@@ -1968,29 +1968,52 @@ function ScreenCarte({ flights, ac, moroccoTraffic, icao24 }) {
   );
 }
 
-function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData }) {
+function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist }) {
   const all=computeAlerts(kpis,flights,maintData);
   const active=all.filter(a=>!dismissed.includes(a.id));
+  const [filter,setFilter]=React.useState("30j");
   const colors={danger:{bg:"#FEE2E2",border:"#DC2626",text:"#DC2626"},warn:{bg:"#FEF3C7",border:"#D97706",text:"#D97706"}};
+
+  // Filter history
+  const now=new Date();
+  const days=filter==="7j"?7:filter==="30j"?30:3650;
+  const hist=(alertHist||[]).filter(e=>{
+    const d=new Date(e.date);
+    return (now-d)/(1000*60*60*24)<=days;
+  });
+  const histResolved=hist.filter(e=>e.status==="resolue");
+  const histActive=hist.filter(e=>e.status==="active");
+
+  const fmtDate=iso=>{
+    const d=new Date(iso);
+    return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"2-digit"})+" "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+  };
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
         <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:14,textAlign:"center"}}>
           <div style={{fontSize:28,fontWeight:800,color:active.length>0?C.danger:C.emerald}}>{active.length}</div>
-          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Alertes actives</div>
+          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Actives</div>
         </div>
         <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:14,textAlign:"center"}}>
-          <div style={{fontSize:28,fontWeight:800,color:C.slate}}>{dismissed.length}</div>
-          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Ignores</div>
+          <div style={{fontSize:28,fontWeight:800,color:C.emerald}}>{histResolved.length}</div>
+          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Résolues</div>
+        </div>
+        <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:14,textAlign:"center"}}>
+          <div style={{fontSize:28,fontWeight:800,color:C.slate}}>{hist.length}</div>
+          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Total</div>
         </div>
       </div>
-      {active.length===0&&(
+
+      {/* Alertes actives */}
+      <SectionTitle>🔔 Alertes actives</SectionTitle>
+      {active.length===0?(
         <div style={{background:"#D1FAE5",border:"1px solid #00936A",borderRadius:12,padding:20,textAlign:"center"}}>
           <div style={{fontSize:32,marginBottom:8}}>✅</div>
           <div style={{fontWeight:700,color:"#065F46"}}>Aucune alerte active</div>
         </div>
-      )}
-      {active.map(a=>{
+      ):active.map(a=>{
         const cl=colors[a.sev]||colors.warn;
         return (
           <div key={a.id} style={{background:cl.bg,border:"1.5px solid "+cl.border,borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
@@ -1999,11 +2022,64 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData }) {
               <div style={{fontWeight:700,fontSize:13,color:cl.text}}>{a.msg}</div>
               <div style={{fontSize:10,color:C.slate,marginTop:2}}>{a.sev==="danger"?"CRITIQUE":"ATTENTION"}</div>
             </div>
-            <button onClick={()=>setDismissed(d=>[...d,a.id])}
-              style={{background:"none",border:"none",color:cl.text,fontSize:18,cursor:"pointer",padding:4,WebkitTapHighlightColor:"transparent"}}>x</button>
+            <button onClick={()=>setDismissed(a.id)}
+              style={{background:"none",border:"none",color:cl.text,fontSize:18,cursor:"pointer",padding:4,WebkitTapHighlightColor:"transparent"}}>✓</button>
           </div>
         );
       })}
+
+      {/* Historique */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
+        <SectionTitle>📋 Historique</SectionTitle>
+        <div style={{display:"flex",gap:6}}>
+          {["7j","30j","Tout"].map(f=>(
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{padding:"3px 10px",borderRadius:8,border:"1px solid "+C.border,
+                background:filter===f?C.navy:"white",color:filter===f?"white":C.slate,
+                fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              {f}
+            </button>
+          ))}
+          {(alertHist||[]).length>0&&(
+            <button onClick={()=>{if(window.confirm("Effacer tout l'historique ?"))setAlertHist([]);}}
+              style={{padding:"3px 10px",borderRadius:8,border:"1px solid #DC2626",
+                background:"white",color:"#DC2626",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+              🗑
+            </button>
+          )}
+        </div>
+      </div>
+
+      {hist.length===0?(
+        <div style={{background:C.bg,borderRadius:12,padding:20,textAlign:"center",color:C.slate,fontSize:12}}>
+          Aucun historique sur cette période
+        </div>
+      ):(
+        <Card>
+          {hist.map((e,i)=>{
+            const cl=colors[e.sev]||colors.warn;
+            const isResolved=e.status==="resolue";
+            return (
+              <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",
+                borderBottom:i<hist.length-1?"1px solid "+C.border:"none"}}>
+                <span style={{fontSize:18,flexShrink:0}}>{e.icon}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.msg}</div>
+                  <div style={{fontSize:10,color:C.slateL,marginTop:2}}>{fmtDate(e.date)}</div>
+                  {isResolved&&e.resolvedAt&&(
+                    <div style={{fontSize:10,color:C.emerald,marginTop:1}}>✓ Résolu {fmtDate(e.resolvedAt)}</div>
+                  )}
+                </div>
+                <span style={{
+                  background:isResolved?"#D1FAE5":cl.bg,
+                  color:isResolved?C.emerald:cl.text,
+                  padding:"2px 8px",borderRadius:6,fontSize:9,fontWeight:700,flexShrink:0
+                }}>{isResolved?"RÉSOLU":e.sev==="danger"?"CRITIQUE":"ATTENTION"}</span>
+              </div>
+            );
+          })}
+        </Card>
+      )}
     </div>
   );
 }
@@ -2598,6 +2674,7 @@ function App() {
   const [safetyData,setSafety] = usePersist("safety",INIT_SAFETY);
   const [crew,setCrew]       = usePersist("crew",INIT_CREW);
   const [dismissed,setDism]  = usePersist("dismissed",[]);
+  const [alertHist,setAlertHist] = usePersist("alertHist",[]);
   const [icao24,setIcao24]   = usePersist("icao24","020035");
   const [ac,setAc]           = useState(null);
   const [mTraffic,setMTraff] = useState([]);
@@ -2612,7 +2689,7 @@ function App() {
   useEffect(()=>{
     const t=setInterval(async()=>{
       if(window.storage){
-        const data={flights,kpis,maintData,finData,dismissed,icao24};
+        const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist};
         await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
       }
       setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
@@ -2635,7 +2712,7 @@ function App() {
 
   const doSave = async () => {
     if(window.storage){
-      const data={flights,kpis,maintData,finData,dismissed,icao24};
+      const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist};
       await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
     }
     setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
@@ -2644,11 +2721,31 @@ function App() {
   const doReset = async () => {
     clearStorage();
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
-    setCrew(INIT_CREW);setDism([]);setReport(null);setReset(false);setTab("forms");
+    setCrew(INIT_CREW);setDism([]);setAlertHist([]);setReport(null);setReset(false);setTab("forms");
   };
 
   const allAlerts  = computeAlerts(kpis,flights,maintData);
   const critCount  = allAlerts.filter(a=>!dismissed.includes(a.id)).length;
+
+  // Record new alerts in history
+  React.useEffect(()=>{
+    const now=new Date().toISOString();
+    setAlertHist(h=>{
+      const existing=new Set(h.map(e=>e.id+e.date.slice(0,10)));
+      const today=now.slice(0,10);
+      const newEntries=allAlerts
+        .filter(a=>!existing.has(a.id+today))
+        .map(a=>({id:a.id,icon:a.icon,msg:a.msg,sev:a.sev,date:now,status:"active"}));
+      return newEntries.length>0?[...newEntries,...h].slice(0,200):h;
+    });
+  },[allAlerts.map(a=>a.id).join(",")]);
+
+  // Dismiss handler that also updates history
+  const handleDismiss=(id)=>{
+    setDism(d=>[...d,id]);
+    setAlertHist(h=>h.map(e=>e.id===id&&e.status==="active"
+      ?{...e,status:"resolue",resolvedAt:new Date().toISOString()}:e));
+  };
   const timeStr    = now.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
 
   const TABS=[
@@ -2713,10 +2810,11 @@ function App() {
             if(data.kpis)      setKpis(data.kpis);
             if(data.dismissed) setDism(data.dismissed);
             if(data.safetyData)setSafety(data.safetyData);
+            if(data.alertHist) setAlertHist(data.alertHist);
           }}
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights}/>}
-        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism} maintData={maintData}/>}
+        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist}/>}
         {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
