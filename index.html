@@ -872,6 +872,21 @@ const INIT_MAINT = {
   ],
 };
 
+const INIT_SAFETY = [
+  {num:"AJS045",date:"2026-04-08",from:"FEZ",to:"CMN",approche:true, tcas:false,gpws:false,hardLanding:false,safa:false,timestamp:"2026-04-08T14:00:00Z"},
+  {num:"AJS079",date:"2026-04-08",from:"CMN",to:"FEZ",approche:false,tcas:true, gpws:false,hardLanding:false,safa:false,timestamp:"2026-04-08T16:00:00Z"},
+  {num:"AJS011",date:"2026-04-14",from:"AGA",to:"CMN",approche:false,tcas:false,gpws:true, hardLanding:false,safa:false,timestamp:"2026-04-14T10:00:00Z"},
+  {num:"AJS036",date:"2026-04-21",from:"CMN",to:"RAK",approche:true, tcas:false,gpws:false,hardLanding:true, safa:false,timestamp:"2026-04-21T09:00:00Z"},
+  {num:"AJS052",date:"2026-04-28",from:"CMN",to:"TNG",approche:false,tcas:false,gpws:false,hardLanding:false,safa:true, timestamp:"2026-04-28T11:00:00Z"},
+  {num:"AJS062",date:"2026-05-05",from:"CMN",to:"AGA",approche:true, tcas:false,gpws:false,hardLanding:false,safa:false,timestamp:"2026-05-05T08:00:00Z"},
+  {num:"AJS077",date:"2026-05-12",from:"OUD",to:"CMN",approche:false,tcas:true, gpws:false,hardLanding:false,safa:false,timestamp:"2026-05-12T15:00:00Z"},
+  {num:"AJS083",date:"2026-05-19",from:"CMN",to:"FEZ",approche:false,tcas:false,gpws:false,hardLanding:true, safa:true, timestamp:"2026-05-19T12:00:00Z"},
+  {num:"AJS091",date:"2026-05-26",from:"AGA",to:"CMN",approche:true, tcas:false,gpws:true, hardLanding:false,safa:false,timestamp:"2026-05-26T17:00:00Z"},
+  {num:"AJS030",date:"2026-06-02",from:"CMN",to:"OUD",approche:false,tcas:false,gpws:false,hardLanding:false,safa:true, timestamp:"2026-06-02T10:00:00Z"},
+  {num:"AJS040",date:"2026-06-09",from:"FEZ",to:"CMN",approche:true, tcas:false,gpws:false,hardLanding:false,safa:false,timestamp:"2026-06-09T14:00:00Z"},
+  {num:"AJS054",date:"2026-06-22",from:"CMN",to:"TNG",approche:false,tcas:false,gpws:true, hardLanding:false,safa:false,timestamp:"2026-06-22T09:00:00Z"},
+];
+
 const INIT_FIN = [
   {mois:"Janvier",  revenus:850000,  couts:720000,  revenuVol:24000, coutCarbu:4000, billetMoyen:1150},
   {mois:"Fevrier",  revenus:920000,  couts:760000,  revenuVol:25000, coutCarbu:4100, billetMoyen:1200},
@@ -1246,6 +1261,76 @@ function FormMaint({ onSubmit, maintData }) {
   );
 }
 
+function FormSafety({ onSubmit, flights }) {
+  // Get terminated flights of current week
+  const now=new Date();
+  const day=now.getDay()||7;
+  const monday=new Date(now);monday.setDate(now.getDate()-day+1);monday.setHours(0,0,0,0);
+  const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);sunday.setHours(23,59,59,999);
+  const weekFlights=flights.filter(f=>f.status==="Termine"&&f.date&&new Date(f.date)>=monday&&new Date(f.date)<=sunday);
+
+  const [volNum,setVolNum]=useState("");
+  const [approche,setApproche]=useState(false);
+  const [tcas,setTcas]=useState(false);
+  const [gpws,setGpws]=useState(false);
+  const [hardLanding,setHardLanding]=useState(false);
+  const [safa,setSafa]=useState(false);
+
+  const reset=()=>{setVolNum("");setApproche(false);setTcas(false);setGpws(false);setHardLanding(false);setSafa(false);};
+
+  const submit=()=>{
+    if(!volNum)return;
+    const f=flights.find(f=>f.num===volNum);
+    onSubmit({
+      num:volNum, date:f?.date||new Date().toISOString().slice(0,10),
+      from:f?.from||"", to:f?.to||"",
+      approche,tcas,gpws,hardLanding,safa,
+      timestamp:new Date().toISOString()
+    });
+    reset();
+  };
+
+  const Check=({label,value,onChange,color="#DC2626"})=>(
+    <div onClick={()=>onChange(!value)}
+      style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:value?color+"15":"white",
+        border:"1.5px solid "+(value?color:C.border),borderRadius:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+      <div style={{width:22,height:22,borderRadius:6,border:"2px solid "+(value?color:C.border),
+        background:value?color:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        {value&&<span style={{color:"white",fontSize:14,fontWeight:800}}>✓</span>}
+      </div>
+      <span style={{fontSize:13,fontWeight:600,color:value?color:C.text}}>{label}</span>
+    </div>
+  );
+
+  return (
+    <Card accent="#DC2626">
+      <FHeader icon="🛡" title="Événements Sécurité" subtitle="Rapport post-vol CN-KTA" color="#DC2626"/>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <FSection title="Numéro de vol" color="#DC2626"/>
+        <select value={volNum} onChange={e=>setVolNum(e.target.value)}
+          style={{width:"100%",height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",fontSize:14,color:C.text,outline:"none"}}>
+          <option value="">-- Sélectionner un vol --</option>
+          {weekFlights.map(f=>(
+            <option key={f.num} value={f.num}>{f.num} — {f.from}→{f.to} ({f.date?.slice(8)}/{f.date?.slice(5,7)})</option>
+          ))}
+        </select>
+        {weekFlights.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12}}>Aucun vol terminé cette semaine</div>}
+
+        <FSection title="Événements" color="#DC2626"/>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <Check label="Approche instable" value={approche} onChange={setApproche}/>
+          <Check label="TCAS RA" value={tcas} onChange={setTcas}/>
+          <Check label="GPWS Warning" value={gpws} onChange={setGpws}/>
+          <Check label="Hard Landing" value={hardLanding} onChange={setHardLanding}/>
+          <Check label="Inspection SAFA" value={safa} onChange={setSafa} color="#7C3AED"/>
+        </div>
+
+        <FSubmit label="Enregistrer événements" color="#DC2626" onClick={submit}/>
+      </div>
+    </Card>
+  );
+}
+
 function FormFin({ onSubmit }) {
   const MOIS=["Janvier","Fevrier","Mars","Avril","Mai","Juin","Juillet","Aout","Septembre","Octobre","Novembre","Decembre"];
   const [mois,setMois]=useState("Juin");
@@ -1281,7 +1366,7 @@ function FormFin({ onSubmit }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, onImport }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, onImport }) {
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
@@ -1296,6 +1381,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights
       finData,
       kpis,
       dismissed,
+      safetyData,
     };
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
@@ -1338,6 +1424,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights
   const FORMS=[
     {id:"vol",   icon:"✈",  label:"Vol",         color:"#0F1F3D"},
     {id:"maint", icon:"🔧", label:"Maintenance",  color:"#00936A"},
+    {id:"secu",  icon:"🛡", label:"Sécurité",     color:"#DC2626"},
     {id:"fin",   icon:"💰", label:"Finances",     color:"#7C3AED"},
     {id:"crew",  icon:"👨‍✈️", label:"Equipage",     color:"#0369A1"},
   ];
@@ -1410,6 +1497,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights
       {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew}/>}
       {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew}/>}
       {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}}/>}
+      {active==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights}/>}
       {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)}/>}
     </div>
   );
@@ -1757,6 +1845,105 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData }) {
   );
 }
 
+function ScreenSecu({ safetyData, flights }) {
+  const now=new Date();
+  const day=now.getDay()||7;
+  const monday=new Date(now);monday.setDate(now.getDate()-day+1);monday.setHours(0,0,0,0);
+
+  // Group by week for charts
+  const byWeek={};
+  safetyData.forEach(e=>{
+    const d=new Date(e.date);
+    const mon=new Date(d);const wd=d.getDay()||7;mon.setDate(d.getDate()-wd+1);
+    const wk=mon.toISOString().slice(5,10);
+    if(!byWeek[wk])byWeek[wk]={date:wk,approche:0,tcas:0,gpws:0,hardLanding:0,safa:0,total:0};
+    if(e.approche)byWeek[wk].approche++;
+    if(e.tcas)byWeek[wk].tcas++;
+    if(e.gpws)byWeek[wk].gpws++;
+    if(e.hardLanding)byWeek[wk].hardLanding++;
+    if(e.safa)byWeek[wk].safa++;
+    byWeek[wk].total++;
+  });
+  const weeks=Object.values(byWeek).sort((a,b)=>a.date.localeCompare(b.date));
+  const volsDone=flights.filter(f=>f.status==="Termine").length||1;
+
+  const totals={
+    approche:safetyData.filter(e=>e.approche).length,
+    tcas:safetyData.filter(e=>e.tcas).length,
+    gpws:safetyData.filter(e=>e.gpws).length,
+    hardLanding:safetyData.filter(e=>e.hardLanding).length,
+    safa:safetyData.filter(e=>e.safa).length,
+  };
+
+  const SecuTile=({label,count,icon,color})=>{
+    const pct=Math.round(count/volsDone*100*10)/10;
+    return (
+      <div style={{background:"white",borderRadius:12,border:"1.5px solid "+(count>0?color:C.border),padding:"12px",textAlign:"center"}}>
+        <div style={{fontSize:20,marginBottom:4}}>{icon}</div>
+        <div style={{fontSize:22,fontWeight:800,color:count>0?color:C.emerald}}>{count}</div>
+        <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase",marginTop:2}}>{label}</div>
+        <div style={{fontSize:10,color:C.slateL,marginTop:2}}>{pct}% des vols</div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <SecuTile label="Approche instable" count={totals.approche} icon="⚠️" color="#DC2626"/>
+        <SecuTile label="TCAS RA" count={totals.tcas} icon="📡" color="#DC2626"/>
+        <SecuTile label="GPWS Warning" count={totals.gpws} icon="🔔" color="#D97706"/>
+        <SecuTile label="Hard Landing" count={totals.hardLanding} icon="✈️" color="#D97706"/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
+        <SecuTile label="Inspection SAFA" count={totals.safa} icon="🛡" color="#7C3AED"/>
+      </div>
+
+      {safetyData.length===0&&(
+        <Card><div style={{textAlign:"center",color:C.slateL,fontSize:13,padding:16}}>Aucun événement enregistré</div></Card>
+      )}
+
+      {weeks.length>=2&&(
+        <Card>
+          <SectionTitle>Évolution hebdomadaire</SectionTitle>
+          {[
+            {key:"approche",label:"Approches instables",color:C.danger},
+            {key:"tcas",label:"TCAS RA",color:C.danger},
+            {key:"gpws",label:"GPWS Warnings",color:C.warn},
+            {key:"hardLanding",label:"Hard Landings",color:C.warn},
+            {key:"safa",label:"Inspections SAFA",color:"#7C3AED"},
+          ].map(({key,label,color})=>{
+            const data=weeks.map(w=>({label:w.date,val:w[key]}));
+            return <ChartCard key={key} title={label} icon="📈" data={data} color={color} minVal={0} unit=""/>;
+          })}
+        </Card>
+      )}
+
+      {safetyData.length>0&&(
+        <Card>
+          <SectionTitle>Historique événements</SectionTitle>
+          {[...safetyData].reverse().map((e,i)=>(
+            <div key={i} style={{padding:"10px 0",borderBottom:i<safetyData.length-1?"1px solid "+C.border:"none"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                <span style={{fontWeight:700,fontSize:12,color:C.navy}}>{e.num}</span>
+                <span style={{fontSize:11,color:C.slate}}>{e.from}→{e.to}</span>
+                <span style={{fontSize:10,color:C.slateL,marginLeft:"auto"}}>{e.date?.slice(8)}/{e.date?.slice(5,7)}</span>
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {e.approche&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Approche instable</span>}
+                {e.tcas&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>TCAS RA</span>}
+                {e.gpws&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>GPWS Warning</span>}
+                {e.hardLanding&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Hard Landing</span>}
+                {e.safa&&<span style={{background:"#EDE9FE",color:"#7C3AED",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>SAFA</span>}
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function ScreenPerf({ kpis, flights, finData }) {
   const vols = flights.filter(f=>f.status==="Termine"&&f.consoH>0);
   const consoMoy = vols.length>0 ? Math.round(vols.reduce((s,f)=>s+f.consoH,0)/vols.length) : kpis.consoH||0;
@@ -2018,7 +2205,7 @@ function ScreenFin({ finData }) {
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
-function buildReport(flights, kpis, now, finData, maintData) {
+function buildReport(flights, kpis, now, finData, maintData, safetyData) {
   const ds=now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
   const G="#00936A",O="#D97706",N="#0F1F3D";
 
@@ -2130,6 +2317,20 @@ function buildReport(flights, kpis, now, finData, maintData) {
       })()+
       melRows
     )+
+    (()=>{
+      const sd=safetyData||[];
+      if(sd.length===0)return "";
+      const tot={approche:sd.filter(e=>e.approche).length,tcas:sd.filter(e=>e.tcas).length,gpws:sd.filter(e=>e.gpws).length,hardLanding:sd.filter(e=>e.hardLanding).length,safa:sd.filter(e=>e.safa).length};
+      const vd=flights.filter(f=>f.status==="Termine").length||1;
+      const secRow=(label,count,color)=>"<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'><div style='flex:1;font-size:12px;color:#475569'>"+label+"</div><div style='font-weight:800;font-size:13px;color:"+(count>0?color:"#00936A")+";padding-right:8px'>"+count+"</div><span style='background:"+(count>0?"#FEE2E2":"#D1FAE5")+";color:"+(count>0?color:"#065F46")+";padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700'>"+(Math.round(count/vd*1000)/10)+"%</span></div>";
+      return card(sec("Sécurité Opérationnelle","#DC2626")+
+        secRow("Approches instables",tot.approche,"#DC2626")+
+        secRow("TCAS RA",tot.tcas,"#DC2626")+
+        secRow("GPWS Warnings",tot.gpws,"#D97706")+
+        secRow("Hard Landings",tot.hardLanding,"#D97706")+
+        secRow("Inspections SAFA",tot.safa,"#7C3AED")
+      );
+    })()+
     (fd.length>0?card(sec("Finances Cumul 2026","#7C3AED")+
       row(Math.round(tRev/1000)+"K","Revenus (MAD)",G,Math.round(tCout/1000)+"K","Couts (MAD)",N,marge+"%","Marge brute",marge>=20?G:O)+
       finRows
@@ -2153,6 +2354,7 @@ function App() {
   const [kpis,setKpis]       = usePersist("kpis",INIT_KPIS);
   const [maintData,setMaint] = usePersist("maint",INIT_MAINT);
   const [finData,setFin]     = usePersist("fin",INIT_FIN);
+  const [safetyData,setSafety] = usePersist("safety",INIT_SAFETY);
   const [crew,setCrew]       = usePersist("crew",INIT_CREW);
   const [dismissed,setDism]  = usePersist("dismissed",[]);
   const [icao24,setIcao24]   = usePersist("icao24","020035");
@@ -2200,7 +2402,7 @@ function App() {
 
   const doReset = async () => {
     clearStorage();
-    setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);
+    setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
     setDism([]);setReport(null);setReset(false);setTab("forms");
   };
 
@@ -2214,6 +2416,7 @@ function App() {
     {id:"alertes",icon:"🔔",label:"Alertes"},
     {id:"ops",  icon:"✈", label:"Ops."},
     {id:"perf", icon:"📊",label:"Perf."},
+    {id:"secu", icon:"🛡",label:"Sécurité"},
     {id:"maint",icon:"🔧",label:"Maint."},
     {id:"fin",  icon:"💰",label:"Finances"},
   ];
@@ -2244,7 +2447,7 @@ function App() {
             style={{width:36,height:36,background:saveOk?C.emerald:C.navy,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
             {saveOk?"✓":"💾"}
           </button>
-          <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData))}
+          <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData,safetyData))}
             style={{width:36,height:36,background:C.emerald,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
             📋
           </button>
@@ -2257,6 +2460,7 @@ function App() {
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
           onSubmitMaint={setMaint}
           onSubmitFin={d=>setFin(f=>[...f,d])}
+          onSubmitSafety={d=>setSafety(s=>[...s,d])}
           onReset={()=>setReset(true)}
           flights={flights} crew={crew} setCrew={setCrew}
           maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed}
@@ -2267,12 +2471,14 @@ function App() {
             if(data.finData)   setFin(data.finData);
             if(data.kpis)      setKpis(data.kpis);
             if(data.dismissed) setDism(data.dismissed);
+            if(data.safetyData)setSafety(data.safetyData);
           }}
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism} maintData={maintData}/>}
         {tab==="ops"     && <ScreenOps flights={flights} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
+        {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights}/>}
         {tab==="fin"     && <ScreenFin finData={finData}/>}
       </div>
@@ -2561,6 +2767,25 @@ function App() {
                 const pTechDelay=pDoneVols.length>0?Math.round((pTechVols.length/pDoneVols.length)*1000)/10:0;
                 drawRow("Tech delay",pTechDelay+"%",pTechDelay<2,true);
                 y+=4;
+
+                // ── Sécurité ──
+                const sd=safetyData||[];
+                if(sd.length>0){
+                  drawSection("  SECURITE OPERATIONNELLE",220,38,38);
+                  const vdP=flights.filter(f=>f.status==="Termine").length||1;
+                  const secItems=[
+                    ["Approches instables",sd.filter(e=>e.approche).length],
+                    ["TCAS RA",sd.filter(e=>e.tcas).length],
+                    ["GPWS Warnings",sd.filter(e=>e.gpws).length],
+                    ["Hard Landings",sd.filter(e=>e.hardLanding).length],
+                    ["Inspections SAFA",sd.filter(e=>e.safa).length],
+                  ];
+                  secItems.forEach(([label,count],i)=>{
+                    const pct=Math.round(count/vdP*1000)/10;
+                    drawRow(label,count+" ("+pct+"%)",count===0,i===secItems.length-1);
+                  });
+                  y+=4;
+                }
 
                 // ── Finances ──
                 const fd=finData||[];
