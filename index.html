@@ -1174,7 +1174,7 @@ function FormMaint({ onSubmit, maintData }) {
           />
         </FGrid>
         <FGrid>
-          <FField label="Tech delay (%)" value={techD} onChange={setTechD} type="number" min={0} max={100}/>
+          <FField label="Tech delay (%)" value={techD} onChange={setTechD} type="number" min={0} max={100} placeholder="Calculé auto depuis Ops."/>
           <FCalc label="Statut tech delay" value={Number(techD)===0?"OK":Number(techD)<2?"Surveille":"CRITIQUE"} color={Number(techD)===0?C.emerald:Number(techD)<2?C.warn:C.danger}/>
         </FGrid>
 
@@ -1588,6 +1588,24 @@ function ScreenOps({ flights, onUpdateFlight }) {
                       onChange={e=>setEdit({...edit,nps:Math.min(100,Math.max(0,Number(e.target.value)||0))})}
                       style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
                   </div>
+                  {(edit.depReal&&edit.arrReal&&(()=>{
+                    const[ph,pm]=(edit.arr||"00:00").split(":").map(Number);
+                    const[rh,rm]=(edit.arrReal||"00:00").split(":").map(Number);
+                    return (rh*60+rm)-(ph*60+pm)>15;
+                  })())&&(
+                    <div style={{gridColumn:"1 / -1"}}>
+                      <FLabel>Cause du retard</FLabel>
+                      <select value={edit.causeRetard||""} onChange={e=>setEdit({...edit,causeRetard:e.target.value})}
+                        style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box",color:C.text}}>
+                        <option value="">-- Sélectionner --</option>
+                        <option value="Technique">Technique</option>
+                        <option value="Météo">Météo</option>
+                        <option value="ATC">ATC</option>
+                        <option value="Passagers">Passagers</option>
+                        <option value="Autre">Autre</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
                 {edit.carbDep>0&&edit.carbArr>0&&(()=>{
                   const c=calcEdit(edit);
@@ -1913,9 +1931,13 @@ function ScreenPerf({ kpis, flights, finData }) {
 }
 
 
-function ScreenMaint({ kpis, maintData }) {
+function ScreenMaint({ kpis, maintData, flights }) {
   const md=maintData||{};
   const mels=md.mels||[];
+  // Calculate Tech Delay from flights
+  const volsDone=flights.filter(f=>f.status==="Termine");
+  const techVols=volsDone.filter(f=>f.causeRetard==="Technique");
+  const techDelay=volsDone.length>0?Math.round((techVols.length/volsDone.length)*1000)/10:0;
   const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
   const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
   return (
@@ -1924,7 +1946,7 @@ function ScreenMaint({ kpis, maintData }) {
         <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
         <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||"--"} unit={md.fiabMoteurs?"%":""} accent={(md.fiabMoteurs||0)>=99.5?C.emerald:(md.fiabMoteurs||0)>=98?C.warn:C.danger} icon="✈"/>
         <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
-        <KpiTile title="Tech delay" value={md.techDelay||0} unit="%" accent={(md.techDelay||0)<2?C.emerald:C.danger} icon="⏱"/>
+        <KpiTile title="Tech delay" value={techDelay} unit="%" accent={techDelay<2?C.emerald:techDelay<5?C.warn:C.danger} icon="⚙"/>
       </div>
       <Card>
         <SectionTitle>Visites périodiques</SectionTitle>
@@ -2242,7 +2264,7 @@ function App() {
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={setDism} maintData={maintData}/>}
         {tab==="ops"     && <ScreenOps flights={flights} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
-        {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData}/>}
+        {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights}/>}
         {tab==="fin"     && <ScreenFin finData={finData}/>}
       </div>
 
