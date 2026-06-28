@@ -1573,7 +1573,7 @@ function FormAircraft({ aircraft, onUpdate }) {
           <FLabel>Sélectionner un avion</FLabel>
           <select value={sel} onChange={e=>setSel(e.target.value)}
             style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:C.text,fontSize:13,outline:"none",appearance:"none"}}>
-            {aircraft.map(a=><option key={a.id} value={a.id}>{a.immat} — {a.type}</option>)}
+            {aircraft.map(a=><option key={a.id} value={a.id}>{a.immat} · {a.type}</option>)}
             <option value="new">➕ Nouvel avion</option>
           </select>
         </div>
@@ -1583,7 +1583,7 @@ function FormAircraft({ aircraft, onUpdate }) {
         </FGrid>
         <FGrid>
           <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999}/>
-          <FField label="Capacité carburant (kg)" value={capa} onChange={setCapa} type="number" min={0}/>
+          <FField label="Capacité carbu. (kg)" value={capa} onChange={setCapa} type="number" min={0}/>
         </FGrid>
         <FField label="Code ICAO24 (transpondeur)" value={icao24} onChange={setIcao24} placeholder="ex: 020035"/>
         {/* Summary of existing fleet */}
