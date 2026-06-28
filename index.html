@@ -3403,6 +3403,8 @@ function App() {
                 const pCFBase=pPlanned.length-pTechCan.length;
                 const pCF=pCFBase>0?Math.round((pDoneVols.length/pCFBase)*1000)/10:0;
                 drawSection("  INDICATEURS FLOTTE",15,31,61);
+                const pFiab=(pAcList[0]?.fiabMoteurs)||0;
+                drawRow("Fiabilite moteurs",(pFiab||"--")+"%",pFiab>=99.5);
                 drawRow("Tech delay",pTechDelay+"%",pTechDelay<2);
                 drawRow("Dispatch Reliability",pDR+"%",pDR>=99);
                 drawRow("Completion Factor",pCF+"%",pCF>=99,true);
