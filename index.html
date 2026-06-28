@@ -2575,19 +2575,6 @@ function ScreenMaint({ kpis, maintData, flights, aircraft }) {
         <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
         <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
       </div>
-      <div style={{background:C.navy,borderRadius:10,padding:"8px 14px"}}>
-        <span style={{fontSize:10,fontWeight:700,color:"white",textTransform:"uppercase",letterSpacing:"0.08em"}}>📊 Indicateurs Flotte</span>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||"--"} unit={md.fiabMoteurs?"%":""} accent={(md.fiabMoteurs||0)>=99.5?C.emerald:(md.fiabMoteurs||0)>=98?C.warn:C.danger} icon="✈"
-          info={"Formule :\n(Vols terminés − Événements moteur) / Vols terminés × 100\n\n🟢 ≥ 99.5%\n🟡 ≥ 98%\n🔴 < 98%"}/>
-        <KpiTile title="Tech delay" value={techDelay} unit="%" accent={techDelay<2?C.emerald:techDelay<5?C.warn:C.danger} icon="⚙"
-          info={"Formule :\nVols retardés (cause Technique) / Vols terminés × 100\n\n🟢 < 2%\n🟡 < 5%\n🔴 ≥ 5%"}/>
-        <KpiTile title="Dispatch Reliability" value={dispatchRel} unit="%" accent={dispatchRel>=99?C.emerald:dispatchRel>=95?C.warn:C.danger} icon="🛫"
-          info={"Formule :\nVols terminés / Vols planifiés × 100\n\n🟢 ≥ 99%\n🟡 ≥ 95%\n🔴 < 95%"}/>
-        <KpiTile title="Completion Factor" value={completionFactor} unit="%" accent={completionFactor>=99?C.emerald:completionFactor>=95?C.warn:C.danger} icon="✅"
-          info={"Formule :\nVols terminés / (Vols planifiés − Annulations techniques) × 100\n\n🟢 ≥ 99%\n🟡 ≥ 95%\n🔴 < 95%"}/>
-      </div>
       <Card>
         <SectionTitle>Visites périodiques</SectionTitle>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
@@ -2836,10 +2823,38 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
     card(sec("Rotations semaine du "+weekLabel+" — "+weekFlights.length+" vols","#0F1F3D")+fRows)+
     card(sec("Maintenance CAMO","#00936A")+
       acList.map(ac=>{
-        const acPrefix=acList.length>1?"<div style='font-size:11px;font-weight:800;color:#0F1F3D;padding:6px 12px;background:#EEF2F8'>🛩 "+ac.immat+" — "+ac.type+"</div>":"";
-        return acPrefix+
-          row((ac.ttaf||0)+"h","TTAF",N,(ac.mels||[]).length,"MEL actifs",(ac.mels||[]).length>0?O:G,"",""," ")+
-          row((ac.nextCheckH||"--")+(ac.nextCheckH?"h":""),"A-Check dans",(ac.nextCheckH||999)<50?"#DC2626":(ac.nextCheckH||999)<100?O:G,(ac.bCheckH||"--")+(ac.bCheckH?"h":""),"B-Check dans",!ac.bCheckH||ac.bCheckH>300?G:ac.bCheckH>100?O:"#DC2626",(ac.cCheckH||"--")+(ac.cCheckH?"h":""),"C-Check dans",!ac.cCheckH||ac.cCheckH>500?G:ac.cCheckH>200?O:"#DC2626");
+        const acTitle="<div style='display:flex;align-items:center;gap:8px;padding:8px 12px;background:#EEF2F8;border-bottom:2px solid #00936A'>"+
+          "<span style='font-size:16px'>🛩</span>"+
+          "<div><div style='font-size:13px;font-weight:800;color:#0F1F3D'>"+ac.immat+"</div>"+
+          "<div style='font-size:10px;color:#64748B'>"+ac.type+"</div></div></div>";
+        const acMels=(ac.mels||[]);
+        const melSection=acMels.length===0
+          ?"<div style='padding:6px 12px 10px;font-size:10px;color:#94A3B8;font-style:italic'>Aucun MEL actif</div>"
+          : "<div style='padding:6px 12px 4px;font-size:10px;font-weight:800;color:#0F1F3D;text-transform:uppercase;letter-spacing:0.08em'>MEL Actifs — "+ac.immat+"</div>"+
+            acMels.map(m=>{
+              const today=new Date();
+              const parts=(m.exp||"").split("/");
+              const year=parts.length===3?(parts[2].length===2?"20"+parts[2]:parts[2]):null;
+              const exp=year?new Date(year+"-"+parts[1]+"-"+parts[0]):null;
+              const daysLeft=exp&&!isNaN(exp)?Math.ceil((exp-today)/(1000*60*60*24)):null;
+              const expColor=daysLeft===null?"#64748B":daysLeft<7?"#DC2626":daysLeft<30?"#D97706":"#00936A";
+              const expBg=daysLeft===null?"#F1F5F9":daysLeft<7?"#FEE2E2":daysLeft<30?"#FEF3C7":"#D1FAE5";
+              const catColor=m.sev==="A"?"#DC2626":m.sev==="B"?"#D97706":"#64748B";
+              const catBg=m.sev==="A"?"#FEE2E2":m.sev==="B"?"#FEF3C7":"#F1F5F9";
+              const daysStr=daysLeft===null?"":daysLeft<0?"EXPIRÉ":daysLeft===0?"Auj.":daysLeft+"j";
+              return "<div style='padding:8px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center'>"+
+                "<span style='background:"+catBg+";color:"+catColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700;flex-shrink:0'>Cat."+m.sev+"</span>"+
+                "<div style='flex:1'><div style='font-size:11px;font-weight:600;color:#0F1F3D'>"+m.sys+"</div>"+
+                "<div style='font-size:9px;color:#64748B;margin-top:1px'>"+(m.mel||"")+"</div></div>"+
+                "<div style='text-align:right;flex-shrink:0'>"+
+                "<div style='background:"+expBg+";color:"+expColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700'>"+(m.exp||"--")+"</div>"+
+                (daysStr?"<div style='font-size:8px;color:"+expColor+";margin-top:2px;text-align:center'>"+daysStr+"</div>":"")+
+                "</div></div>";
+            }).join("");
+        return acTitle+
+          row((ac.ttaf||0)+"h","TTAF",N,(acMels).length,"MEL actifs",(acMels).length>0?O:G,"",""," ")+
+          row((ac.nextCheckH||"--")+(ac.nextCheckH?"h":""),"A-Check dans",(ac.nextCheckH||999)<50?"#DC2626":(ac.nextCheckH||999)<100?O:G,(ac.bCheckH||"--")+(ac.bCheckH?"h":""),"B-Check dans",!ac.bCheckH||ac.bCheckH>300?G:ac.bCheckH>100?O:"#DC2626",(ac.cCheckH||"--")+(ac.cCheckH?"h":""),"C-Check dans",!ac.cCheckH||ac.cCheckH>500?G:ac.cCheckH>200?O:"#DC2626")+
+          melSection;
       }).join("")+
       (()=>{
         const fiab=md.fiabMoteurs||0;
@@ -2854,8 +2869,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
         return sec("Indicateurs Flotte","#0F1F3D")+
                row(fiab+"%","Fiabilite moteurs",fiab>=99.5?G:O,td+"%","Tech Delay",td<2?G:O,"",""," ")+
                row(dr+"%","Dispatch Reliability",dr>=99?G:dr>=95?O:"#DC2626",cf+"%","Completion Factor",cf>=99?G:cf>=95?O:"#DC2626","",""," ");
-      })()+
-      melRows
+      })()
     )+
     (()=>{
       const sd=safetyData||[];
@@ -3326,21 +3340,59 @@ function App() {
                 const md=pAcList[0]||maintData||{};
                 drawSection("  MAINTENANCE CAMO",0,147,106);
                 pAcList.forEach((ac,acIdx)=>{
-                  if(pAcList.length>1){
-                    doc.setFillColor(238,242,248);
-                    doc.rect(M,y-3,CW,5,"F");
-                    doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(8);
-                    doc.text("🛩 "+ac.immat+" — "+ac.type,M+2,y);
-                    y+=6;
-                  }
+                  if(y>250){doc.addPage();y=15;}
+                  // Aircraft header
+                  doc.setFillColor(238,242,248);
+                  doc.rect(M,y-4,CW,8,"F");
+                  doc.setFillColor(0,147,106);
+                  doc.rect(M,y-4,3,8,"F");
+                  doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(10);
+                  doc.text(ac.immat||"--",M+6,y);
+                  doc.setTextColor(100,116,139);doc.setFont("helvetica","normal");doc.setFontSize(8);
+                  doc.text(ac.type||"",M+6,y+4);
+                  y+=10;
                   drawRow("TTAF actuel",(ac.ttaf||"--")+" h");
                   drawRow("MEL actifs",(ac.mels||[]).length+" item(s)",(ac.mels||[]).length===0);
                   drawRow("A-Check dans",(ac.nextCheckH||"--")+" h",(ac.nextCheckH||0)>50);
                   drawRow("B-Check dans",(ac.bCheckH||"--")+" h",!ac.bCheckH||ac.bCheckH>300);
-                  drawRow("C-Check dans",(ac.cCheckH||"--")+" h",!ac.cCheckH||ac.cCheckH>500);
-                  const pFiab=ac.fiabMoteurs||0;
-                  drawRow("Fiabilite moteurs",(pFiab||"--")+"%",pFiab>=99.5,acIdx===pAcList.length-1);
-                  y+=2;
+                  drawRow("C-Check dans",(ac.cCheckH||"--")+" h",!ac.cCheckH||ac.cCheckH>500,true);
+                  y+=3;
+                  // MEL per aircraft
+                  const acMels=ac.mels||[];
+                  if(acMels.length>0){
+                    // MEL title
+                    doc.setFillColor(254,243,199);
+                    doc.rect(M,y-3,CW,6,"F");
+                    doc.setTextColor(160,114,10);doc.setFont("helvetica","bold");doc.setFontSize(8);
+                    doc.text("MEL ACTIFS — "+(ac.immat||""),M+3,y);
+                    y+=6;
+                    acMels.forEach((m,i)=>{
+                      if(y>270){doc.addPage();y=15;}
+                      const today=new Date();
+                      const expDate=(()=>{if(!m.exp)return null;const p=m.exp.split("/");if(p.length!==3)return null;const yr=p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]);return new Date(yr,parseInt(p[1])-1,parseInt(p[0]));})();
+                      const daysLeft=expDate?Math.ceil((expDate-today)/(1000*60*60*24)):null;
+                      const catColor=m.sev==="A"?[220,38,38]:m.sev==="B"?[217,119,6]:[100,116,139];
+                      doc.setFillColor(...catColor);
+                      doc.roundedRect(M,y-3.5,10,5,1,1,"F");
+                      doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(6);
+                      doc.text("Cat."+m.sev,M+5,y,{align:"center"});
+                      doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(8);
+                      doc.text(m.sys||"--",M+12,y);
+                      doc.setTextColor(100,116,139);doc.setFont("helvetica","normal");doc.setFontSize(6.5);
+                      doc.text(m.mel||"",M+12,y+3.5);
+                      const expColor=daysLeft===null?[100,116,139]:daysLeft<7?[220,38,38]:daysLeft<30?[217,119,6]:[0,147,106];
+                      doc.setTextColor(...expColor);doc.setFont("helvetica","bold");doc.setFontSize(7.5);
+                      const daysStr=daysLeft===null?"":daysLeft<0?" (EXPIRÉ)":daysLeft===0?" (Auj.)":` (${daysLeft}j)`;
+                      doc.text((m.exp||"--")+daysStr,M+CW,y,{align:"right"});
+                      if(i<acMels.length-1){
+                        doc.setDrawColor(238,242,248);doc.setLineWidth(0.2);
+                        doc.line(M,y+5,M+CW,y+5);
+                      }
+                      y+=8;
+                    });
+                    y+=3;
+                  }
+                  if(acIdx<pAcList.length-1) y+=4;
                 });
                 const pTechVols=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
                 const pDoneVols=flights.filter(f=>f.status==="Termine");
