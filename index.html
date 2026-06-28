@@ -857,7 +857,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
 
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
-function computeAlerts(kpis, flights, maintData) {
+function computeAlerts(kpis, flights, maintData, aircraft) {
   const a=[];
   // Calculate real OTP from flights
   const volsDone=flights.filter(f=>f.status==="Termine");
@@ -871,19 +871,21 @@ function computeAlerts(kpis, flights, maintData) {
   else if(delayMin>15)a.push({id:"del",sev:"warn",msg:"Retards: "+delayMin+" min",icon:"⚠"});
   const lfVal=volsDone.length>0?Math.round(volsDone.reduce((s,f)=>s+f.load,0)/volsDone.length):kpis.loadFactor||0;
   if(lfVal<70)a.push({id:"lf",sev:"warn",msg:"Load Factor: "+lfVal+"%",icon:"💺"});
-  // Use maintData for check alerts
-  const md=maintData||{};
-  if((md.nextCheckH||999)<50)a.push({id:"achk",sev:"danger",msg:"A-Check dans "+(md.nextCheckH||0)+"h",icon:"🔧"});
-  else if((md.nextCheckH||999)<100)a.push({id:"achk",sev:"warn",msg:"A-Check dans "+(md.nextCheckH||0)+"h",icon:"🔧"});
-  if(md.bCheckH&&md.bCheckH<100)a.push({id:"bchk",sev:"danger",msg:"B-Check dans "+md.bCheckH+"h",icon:"🔩"});
-  else if(md.bCheckH&&md.bCheckH<300)a.push({id:"bchk",sev:"warn",msg:"B-Check dans "+md.bCheckH+"h",icon:"🔩"});
-  if(md.cCheckH&&md.cCheckH<200)a.push({id:"cchk",sev:"danger",msg:"C-Check dans "+md.cCheckH+"h",icon:"🛠"});
-  else if(md.cCheckH&&md.cCheckH<500)a.push({id:"cchk",sev:"warn",msg:"C-Check dans "+md.cCheckH+"h",icon:"🛠"});
-  // MEL alerts per item
-  const mels=(md.mels||[]);
-  mels.forEach((m,i)=>{
-    const sev=m.sev==="A"?"danger":m.sev==="B"?"danger":"warn";
-    a.push({id:"mel_"+i,sev,msg:"MEL Cat."+m.sev+" — "+m.sys+" ("+(m.mel||m.ref||"")+") · Exp: "+m.exp,icon:"🔧"});
+  // Per-aircraft checks and MEL alerts
+  const acList=aircraft&&aircraft.length>0?aircraft:[maintData||{}];
+  acList.forEach(ac=>{
+    const prefix=aircraft&&aircraft.length>1?"["+ac.immat+"] ":"";
+    const id_prefix=ac.id||"ac";
+    if((ac.nextCheckH||999)<50)a.push({id:id_prefix+"_achk",sev:"danger",msg:prefix+"A-Check dans "+(ac.nextCheckH||0)+"h",icon:"🔧"});
+    else if((ac.nextCheckH||999)<100)a.push({id:id_prefix+"_achk",sev:"warn",msg:prefix+"A-Check dans "+(ac.nextCheckH||0)+"h",icon:"🔧"});
+    if(ac.bCheckH&&ac.bCheckH<100)a.push({id:id_prefix+"_bchk",sev:"danger",msg:prefix+"B-Check dans "+ac.bCheckH+"h",icon:"🔩"});
+    else if(ac.bCheckH&&ac.bCheckH<300)a.push({id:id_prefix+"_bchk",sev:"warn",msg:prefix+"B-Check dans "+ac.bCheckH+"h",icon:"🔩"});
+    if(ac.cCheckH&&ac.cCheckH<200)a.push({id:id_prefix+"_cchk",sev:"danger",msg:prefix+"C-Check dans "+ac.cCheckH+"h",icon:"🛠"});
+    else if(ac.cCheckH&&ac.cCheckH<500)a.push({id:id_prefix+"_cchk",sev:"warn",msg:prefix+"C-Check dans "+ac.cCheckH+"h",icon:"🛠"});
+    (ac.mels||[]).forEach((m,i)=>{
+      const sev=m.sev==="A"?"danger":m.sev==="B"?"danger":"warn";
+      a.push({id:id_prefix+"_mel_"+i,sev,msg:prefix+"MEL Cat."+m.sev+" — "+m.sys+" ("+(m.mel||m.ref||"")+") · Exp: "+m.exp,icon:"🔧"});
+    });
   });
   return a;
 }
@@ -1544,7 +1546,7 @@ function FormAircraft({ aircraft, onUpdate }) {
   const [type,setType]=useState("");
   const [sieges,setSieges]=useState("18");
   const [capa,setCapa]=useState("5700");
-  const [icao24,setIcao24]=useState("");
+  const [icao24,setIcao24]=useState(()=>aircraft&&aircraft.length>0?aircraft[0].icao24||"":"");
   const [msg,setMsg]=useState("");
 
   React.useEffect(()=>{
@@ -1773,11 +1775,25 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
 }
 
 // ── Screens ──────────────────────────────────────────────────────────────────
-function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading, flights }) {
+function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading, flights, aircraft }) {
+  const selAc = aircraft?.find(a=>a.icao24===icao24)||aircraft?.[0];
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* Aircraft selector */}
+      {aircraft&&aircraft.length>0&&(
+        <div>
+          <select value={icao24} onChange={e=>setIcao24(e.target.value)}
+            style={{width:"100%",height:44,boxSizing:"border-box",background:C.navy,border:"none",borderRadius:10,padding:"0 14px",color:"white",fontSize:13,fontWeight:700,outline:"none",appearance:"none"}}>
+            {aircraft.map(a=>(
+              <option key={a.id} value={a.icao24||""} style={{background:"white",color:C.navy}}>
+                {a.immat} · {a.type} {a.icao24?"("+a.icao24+")":"(ICAO24 non défini)"}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <Card>
-        <SectionTitle>Données du vol — CN-KTA</SectionTitle>
+        <SectionTitle>Données du vol — {selAc?.immat||"--"}</SectionTitle>
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
           {[["Altitude",ac?.alt_ft?ac.alt_ft.toLocaleString()+" ft":"--",C.navy],
             ["Vitesse",ac?.speed_kt?ac.speed_kt+" kt":"--",C.navy],
@@ -1791,7 +1807,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
           ))}
         </div>
         <div style={{marginTop:8,fontSize:11,color:C.slateL,textAlign:"center"}}>
-          {ac?.simulated?"Mode simulation — code ICAO24 CN-KTA à confirmer":"ADS-B Live"}
+          {ac?.simulated?"Mode simulation — ICAO24 à confirmer":"ADS-B Live"}
         </div>
       </Card>
       <Card>
@@ -2100,8 +2116,8 @@ function ScreenCarte({ flights, ac, moroccoTraffic, icao24 }) {
   );
 }
 
-function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist }) {
-  const all=computeAlerts(kpis,flights,maintData);
+function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft }) {
+  const all=computeAlerts(kpis,flights,maintData,aircraft);
   const active=all.filter(a=>!dismissed.includes(a.id));
   const [filter,setFilter]=React.useState("30j");
   const colors={danger:{bg:"#FEE2E2",border:"#DC2626",text:"#DC2626"},warn:{bg:"#FEF3C7",border:"#D97706",text:"#D97706"}};
@@ -2525,17 +2541,20 @@ function ScreenPerf({ kpis, flights, finData }) {
 function ScreenMaint({ kpis, maintData, flights, aircraft }) {
   const [selAc,setSelAc]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
   const acInfo=aircraft?.find(a=>a.id===selAc)||aircraft?.[0]||{};
-  const md=maintData||{};
+  // Use per-aircraft data if available, fallback to global maintData
+  const md=Object.keys(acInfo).length>0?acInfo:(maintData||{});
   const mels=md.mels||[];
+  // Filter flights by selected aircraft
+  const acFlights=aircraft&&aircraft.length>1?flights.filter(f=>f.acId===selAc):flights;
   // Calculate Tech Delay from flights
-  const volsDone=flights.filter(f=>f.status==="Termine");
+  const volsDone=acFlights.filter(f=>f.status==="Termine");
   const techVols=volsDone.filter(f=>f.causeRetard==="Technique");
   const techDelay=volsDone.length>0?Math.round((techVols.length/volsDone.length)*1000)/10:0;
-  // Dispatch Reliability = vols terminés / vols planifiés × 100
-  const volsPlanned=flights.filter(f=>f.status!=="Annule");
+  // Dispatch Reliability
+  const volsPlanned=acFlights.filter(f=>f.status!=="Annule");
   const dispatchRel=volsPlanned.length>0?Math.round((volsDone.length/volsPlanned.length)*1000)/10:0;
-  // Completion Factor = vols terminés / (vols planifiés - annulations techniques) × 100
-  const techCancels=flights.filter(f=>f.status==="Annule"&&f.causeRetard==="Technique");
+  // Completion Factor
+  const techCancels=acFlights.filter(f=>f.status==="Annule"&&f.causeRetard==="Technique");
   const compBase=volsPlanned.length-techCancels.length;
   const completionFactor=compBase>0?Math.round((volsDone.length/compBase)*1000)/10:0;
   const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
@@ -2552,7 +2571,7 @@ function ScreenMaint({ kpis, maintData, flights, aircraft }) {
         </div>
       )}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <KpiTile title="TTAF" value={((acInfo.ttaf||md.ttaf||0)).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
+        <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
         <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||"--"} unit={md.fiabMoteurs?"%":""} accent={(md.fiabMoteurs||0)>=99.5?C.emerald:(md.fiabMoteurs||0)>=98?C.warn:C.danger} icon="✈"
           info={"Formule :\n(Vols terminés − Événements moteur) / Vols terminés × 100\n\n🟢 ≥ 99.5%\n🟡 ≥ 98%\n🔴 < 98%"}/>
         <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
@@ -2679,7 +2698,7 @@ function ScreenFin({ finData }) {
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
-function buildReport(flights, kpis, now, finData, maintData, safetyData) {
+function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraft) {
   const ds=now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
   const G="#00936A",O="#D97706",N="#0F1F3D";
 
@@ -2697,8 +2716,10 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
   const volsDoneR=weekFlights.filter(f=>f.status==="Termine");
   const done=volsDoneR.length;
   const tPax=weekFlights.reduce((s,f)=>s+f.pax,0);
-  const md=maintData||{};
-  const mels=(md.mels||[]);
+  // Use first aircraft data if available, fallback to maintData
+  const acList=aircraft&&aircraft.length>0?aircraft:[maintData||{}];
+  const md=acList[0]||maintData||{};
+  const mels=acList.reduce((all,ac)=>[...all,...(ac.mels||[])],[]);
   const fd=finData||[];
   const tRev=fd.reduce((s,f)=>s+f.revenus,0);
   const tCout=fd.reduce((s,f)=>s+f.couts,0);
@@ -2763,9 +2784,10 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
       +"</div>";
   }).join("");
 
+  const allMelsForReport=acList.reduce((all,ac)=>[...all,...(ac.mels||[]).map(m=>({...m,acImmat:acList.length>1?ac.immat:null}))],[]);
   const melRows=(()=>{
-    if(mels.length===0) return "<div style='padding:8px 12px;font-size:11px;color:#94A3B8;text-align:center'>Aucun MEL actif</div>";
-    return mels.map(m=>{
+    if(allMelsForReport.length===0) return "<div style='padding:8px 12px;font-size:11px;color:#94A3B8;text-align:center'>Aucun MEL actif</div>";
+    return allMelsForReport.map(m=>{
       const today=new Date();
       const parts=(m.exp||"").split("/");
       const year=parts.length===3?(parts[2].length===2?"20"+parts[2]:parts[2]):null;
@@ -2780,10 +2802,10 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
         "<span style='background:"+catBg+";color:"+catColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700;flex-shrink:0'>Cat."+m.sev+"</span>"+
         "<div style='flex:1'>"+
           "<div style='font-size:11px;font-weight:600;color:#0F1F3D'>"+m.sys+"</div>"+
-          (m.mel?"<div style='font-size:9px;color:#64748B;margin-top:1px'>"+m.mel+"</div>":"")+
+          "<div style='font-size:9px;color:#64748B;margin-top:1px'>"+(m.mel||"")+(m.acImmat?" · "+m.acImmat:"")+"</div>"+
         "</div>"+
         "<div style='text-align:right;flex-shrink:0'>"+
-          "<div style='background:"+expBg+";color:"+expColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700'>"+m.exp+"</div>"+
+          "<div style='background:"+expBg+";color:"+expColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700'>"+(m.exp||"--")+"</div>"+
           (daysStr?"<div style='font-size:8px;color:"+expColor+";margin-top:2px;text-align:center'>"+daysStr+"</div>":"")+
         "</div>"+
       "</div>";
@@ -2807,8 +2829,12 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
     )+
     card(sec("Rotations semaine du "+weekLabel+" — "+weekFlights.length+" vols","#0F1F3D")+fRows)+
     card(sec("Maintenance CAMO","#00936A")+
-      row((md.ttaf||0)+"h","TTAF",N,(md.mels||[]).length,"MEL actifs",(md.mels||[]).length>0?O:G,"",""," ")+
-      row((md.nextCheckH||"--")+(md.nextCheckH?"h":""),"A-Check dans",(md.nextCheckH||999)<50?"#DC2626":(md.nextCheckH||999)<100?O:G,(md.bCheckH||"--")+(md.bCheckH?"h":""),"B-Check dans",!md.bCheckH||md.bCheckH>300?G:md.bCheckH>100?O:"#DC2626",(md.cCheckH||"--")+(md.cCheckH?"h":""),"C-Check dans",!md.cCheckH||md.cCheckH>500?G:md.cCheckH>200?O:"#DC2626")+
+      acList.map(ac=>{
+        const acPrefix=acList.length>1?"<div style='font-size:11px;font-weight:800;color:#0F1F3D;padding:6px 12px;background:#EEF2F8'>🛩 "+ac.immat+" — "+ac.type+"</div>":"";
+        return acPrefix+
+          row((ac.ttaf||0)+"h","TTAF",N,(ac.mels||[]).length,"MEL actifs",(ac.mels||[]).length>0?O:G,"",""," ")+
+          row((ac.nextCheckH||"--")+(ac.nextCheckH?"h":""),"A-Check dans",(ac.nextCheckH||999)<50?"#DC2626":(ac.nextCheckH||999)<100?O:G,(ac.bCheckH||"--")+(ac.bCheckH?"h":""),"B-Check dans",!ac.bCheckH||ac.bCheckH>300?G:ac.bCheckH>100?O:"#DC2626",(ac.cCheckH||"--")+(ac.cCheckH?"h":""),"C-Check dans",!ac.cCheckH||ac.cCheckH>500?G:ac.cCheckH>200?O:"#DC2626");
+      }).join("")+
       (()=>{
         const fiab=md.fiabMoteurs||0;
         const techV=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
@@ -2914,7 +2940,7 @@ function App() {
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setReport(null);setReset(false);setTab("forms");
   };
 
-  const allAlerts  = computeAlerts(kpis,flights,maintData);
+  const allAlerts  = computeAlerts(kpis,flights,maintData,aircraft);
   const critCount  = allAlerts.filter(a=>!dismissed.includes(a.id)).length;
 
   // Record new alerts in history
@@ -2974,7 +3000,7 @@ function App() {
             style={{width:36,height:36,background:saveOk?C.emerald:C.navy,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
             {saveOk?"✓":"💾"}
           </button>
-          <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData,safetyData))}
+          <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData,safetyData,aircraft))}
             style={{width:36,height:36,background:C.emerald,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
             📋
           </button>
@@ -2985,7 +3011,13 @@ function App() {
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
         {tab==="forms"   && <ScreenForms
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
-          onSubmitMaint={setMaint}
+          onSubmitMaint={d=>{
+            if(d.acId){
+              setAircraft(prev=>prev.map(a=>a.id===d.acId?{...a,...d}:a));
+            } else {
+              setMaint(d);
+            }
+          }}
           onSubmitFin={d=>setFin(f=>[...f,d])}
           onSubmitSafety={d=>setSafety(s=>[...s,d])}
           onReset={()=>setReset(true)}
@@ -3004,8 +3036,8 @@ function App() {
             if(data.aircraft)  setAircraft(data.aircraft);
           }}
         />}
-        {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights}/>}
-        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist}/>}
+        {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
+        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft}/>}
         {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
@@ -3283,15 +3315,26 @@ function App() {
                 y=15;
 
                 // ── Maintenance ──
-                const md=maintData||{};
+                const pAcList=aircraft&&aircraft.length>0?aircraft:[maintData||{}];
+                const md=pAcList[0]||maintData||{};
                 drawSection("  MAINTENANCE CAMO",0,147,106);
-                drawRow("TTAF actuel",(md.ttaf||"--")+" h");
-                drawRow("MEL actifs",(md.mels||[]).length+" item(s)",(md.mels||[]).length===0);
-                drawRow("A-Check dans",(md.nextCheckH||"--")+" h",(md.nextCheckH||0)>50);
-                drawRow("B-Check dans",(md.bCheckH||"--")+" h",!md.bCheckH||md.bCheckH>300);
-                drawRow("C-Check dans",(md.cCheckH||"--")+" h",!md.cCheckH||md.cCheckH>500);
-                const pFiab=md.fiabMoteurs||0;
-                drawRow("Fiabilite moteurs",(pFiab||"--")+"%",pFiab>=99.5);
+                pAcList.forEach((ac,acIdx)=>{
+                  if(pAcList.length>1){
+                    doc.setFillColor(238,242,248);
+                    doc.rect(M,y-3,CW,5,"F");
+                    doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(8);
+                    doc.text("🛩 "+ac.immat+" — "+ac.type,M+2,y);
+                    y+=6;
+                  }
+                  drawRow("TTAF actuel",(ac.ttaf||"--")+" h");
+                  drawRow("MEL actifs",(ac.mels||[]).length+" item(s)",(ac.mels||[]).length===0);
+                  drawRow("A-Check dans",(ac.nextCheckH||"--")+" h",(ac.nextCheckH||0)>50);
+                  drawRow("B-Check dans",(ac.bCheckH||"--")+" h",!ac.bCheckH||ac.bCheckH>300);
+                  drawRow("C-Check dans",(ac.cCheckH||"--")+" h",!ac.cCheckH||ac.cCheckH>500);
+                  const pFiab=ac.fiabMoteurs||0;
+                  drawRow("Fiabilite moteurs",(pFiab||"--")+"%",pFiab>=99.5,acIdx===pAcList.length-1);
+                  y+=2;
+                });
                 const pTechVols=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
                 const pDoneVols=flights.filter(f=>f.status==="Termine");
                 const pTechDelay=pDoneVols.length>0?Math.round((pTechVols.length/pDoneVols.length)*1000)/10:0;
@@ -3306,9 +3349,10 @@ function App() {
                 y+=4;
 
                 // ── MEL detail ──
-                if((md.mels||[]).length>0){
+                const allMels=pAcList.reduce((all,ac)=>[...all,...(ac.mels||[]).map(m=>({...m,acImmat:ac.immat}))],[]);
+                if(allMels.length>0){
                   drawSection("  DETAIL MEL ACTIFS",0,147,106);
-                  (md.mels||[]).forEach((m,i)=>{
+                  allMels.forEach((m,i)=>{
                     if(y>270){doc.addPage();y=15;}
                     const today=new Date();
                     const expDate=(()=>{if(!m.exp)return null;const p=m.exp.split("/");if(p.length!==3)return null;const yr=p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]);return new Date(yr,parseInt(p[1])-1,parseInt(p[0]));})();
