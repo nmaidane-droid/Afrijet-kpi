@@ -1266,8 +1266,10 @@ function FormEquipage({ crew, setCrew }) {
   );
 }
 
-function FormMaint({ onSubmit, maintData }) {
+function FormMaint({ onSubmit, maintData, aircraft }) {
   const md=maintData||{};
+  const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
+  const acInfo=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{};
   const [ttaf,setTtaf]=useState(String(md.ttaf||"4218"));
   const [nextH,setNextH]=useState(String(md.nextCheckH||"182"));
   const [bCheckH,setBCheckH]=useState(String(md.bCheckH||""));
@@ -1305,7 +1307,7 @@ function FormMaint({ onSubmit, maintData }) {
     const volsDone=Number(md.volsDone||0);
     const evt=Number(evtMoteur)||0;
     const fiabCalc=volsDone>0?Math.round(((volsDone-evt)/volsDone)*1000)/10:0;
-    onSubmit({ttaf:Number(ttaf)||0,melCount:mels.length,nextCheckH:Number(nextH)||0,
+    onSubmit({acId,ttaf:Number(ttaf)||0,melCount:mels.length,nextCheckH:Number(nextH)||0,
       bCheckH:Number(bCheckH)||0,cCheckH:Number(cCheckH)||0,
       evtMoteur:evt,fiabMoteurs:fiabCalc,mels});
   };
@@ -1314,6 +1316,15 @@ function FormMaint({ onSubmit, maintData }) {
     <Card accent="#00936A">
       <FHeader icon="🔧" title="Maintenance CAMO" subtitle="Rapport hebdomadaire CAMO" color="#00936A"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        {aircraft&&aircraft.length>0&&(
+          <div>
+            <FLabel>Avion</FLabel>
+            <select value={acId} onChange={e=>setAcId(e.target.value)}
+              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid #00936A",borderRadius:10,padding:"0 14px",color:C.text,fontSize:13,fontWeight:700,outline:"none",appearance:"none"}}>
+              {aircraft.map(a=><option key={a.id} value={a.id}>{a.immat} · {a.type}</option>)}
+            </select>
+          </div>
+        )}
         <FSection title="Cellule" color="#00936A"/>
         <FGrid>
           <FField label="TTAF (heures)" value={ttaf} onChange={setTtaf} type="number" min={0}/>
@@ -1753,7 +1764,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       </div>
       {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft}/>}
       {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew}/>}
-      {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}}/>}
+      {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft}/>}
       {active==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights}/>}
       {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)}/>}
       {active==="avion" && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft}/>}
@@ -2950,7 +2961,6 @@ function App() {
           </div>
           <div style={{minWidth:0}}>
             <div style={{fontWeight:800,fontSize:13,color:C.navy,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>AFRIJET SAHARA</div>
-            <div style={{fontSize:9,color:C.gold,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em"}}>EMB 135 · CN-KTA</div>
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
