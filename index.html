@@ -1347,16 +1347,6 @@ function FormFin({ onSubmit }) {
           <FField label="Revenus (MAD)" value={rev} onChange={setRev} type="number" min={0} placeholder="1240000"/>
           <FField label="Couts totaux (MAD)" value={cout} onChange={setCout} type="number" min={0} placeholder="910000"/>
         </FGrid>
-        {(revN>0||coutN>0)&&(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            {revN>0&&<div style={{fontSize:11,color:"#00936A",fontWeight:600,textAlign:"center",background:"#D1FAE5",borderRadius:8,padding:"4px 8px"}}>
-              {fmtMAD(revN)} MAD
-            </div>}
-            {coutN>0&&<div style={{fontSize:11,color:"#0369A1",fontWeight:600,textAlign:"center",background:"#DBEAFE",borderRadius:8,padding:"4px 8px"}}>
-              {fmtMAD(coutN)} MAD
-            </div>}
-          </div>
-        )}
         <FGrid>
           <FField label="Cout carburant (MAD)" value={cCarbu} onChange={setCCarbu} type="number" min={0}/>
           <FCalc label="Marge brute" value={marge!==null?marge+"%":"--"} color={marge!==null?marge>0?"#00936A":marge===0?"#D97706":"#DC2626":"#94A3B8"}/>
