@@ -1173,11 +1173,6 @@ function FormMaint({ onSubmit, maintData }) {
             })()}
           />
         </FGrid>
-        <FGrid>
-          <FField label="Tech delay (%)" value={techD} onChange={setTechD} type="number" min={0} max={100} placeholder="Calculé auto depuis Ops."/>
-          <FCalc label="Statut tech delay" value={Number(techD)===0?"OK":Number(techD)<2?"Surveille":"CRITIQUE"} color={Number(techD)===0?C.emerald:Number(techD)<2?C.warn:C.danger}/>
-        </FGrid>
-
         <FSection title={"MEL actifs ("+mels.length+")"} color="#00936A"/>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12,padding:"8px 0"}}>Aucun MEL — appuyez sur + pour ajouter</div>}
