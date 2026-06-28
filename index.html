@@ -1912,9 +1912,23 @@ function ScreenSecu({ safetyData, flights }) {
             {key:"gpws",label:"GPWS Warnings",color:C.warn},
             {key:"hardLanding",label:"Hard Landings",color:C.warn},
             {key:"safa",label:"Inspections SAFA",color:"#7C3AED"},
-          ].map(({key,label,color})=>{
-            const data=weeks.map(w=>({label:w.date,val:w[key]}));
-            return <ChartCard key={key} title={label} icon="📈" data={data} color={color} minVal={0} unit=""/>;
+          ].filter(({key})=>weeks.some(w=>w[key]>0)).map(({key,label,color})=>{
+            const maxV=Math.max(...weeks.map(w=>w[key]),1);
+            return (
+              <div key={key} style={{marginBottom:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",marginBottom:6}}>{label}</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:4,height:40}}>
+                  {weeks.map((w,i)=>(
+                    <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                      <div style={{fontSize:8,color,fontWeight:700}}>{w[key]>0?w[key]:""}</div>
+                      <div style={{width:"100%",background:w[key]>0?color:C.border,borderRadius:3,
+                        height:Math.max(3,Math.round((w[key]/maxV)*28))}}/>
+                      <div style={{fontSize:7,color:C.slateL,transform:"rotate(-45deg)",transformOrigin:"top left",whiteSpace:"nowrap"}}>{w.date}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
           })}
         </Card>
       )}
