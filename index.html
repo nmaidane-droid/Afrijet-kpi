@@ -2544,8 +2544,9 @@ function ScreenMaint({ kpis, maintData, flights, aircraft }) {
   // Use per-aircraft data if available, fallback to global maintData
   const md=Object.keys(acInfo).length>0?acInfo:(maintData||{});
   const mels=md.mels||[];
-  // Filter flights by selected aircraft
-  const acFlights=aircraft&&aircraft.length>1?flights.filter(f=>f.acId===selAc):flights;
+  // Filter flights by selected aircraft - if only 1 aircraft or flights have no acId, use all flights
+  const hasAcIds=flights.some(f=>f.acId);
+  const acFlights=aircraft&&aircraft.length>1&&hasAcIds?flights.filter(f=>f.acId===selAc||!f.acId):flights;
   // Calculate Tech Delay from flights
   const volsDone=acFlights.filter(f=>f.status==="Termine");
   const techVols=volsDone.filter(f=>f.causeRetard==="Technique");
