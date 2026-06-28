@@ -2103,6 +2103,13 @@ function ScreenMaint({ kpis, maintData, flights }) {
   const volsDone=flights.filter(f=>f.status==="Termine");
   const techVols=volsDone.filter(f=>f.causeRetard==="Technique");
   const techDelay=volsDone.length>0?Math.round((techVols.length/volsDone.length)*1000)/10:0;
+  // Dispatch Reliability = vols terminés / vols planifiés × 100
+  const volsPlanned=flights.filter(f=>f.status!=="Annule");
+  const dispatchRel=volsPlanned.length>0?Math.round((volsDone.length/volsPlanned.length)*1000)/10:0;
+  // Completion Factor = vols terminés / (vols planifiés - annulations techniques) × 100
+  const techCancels=flights.filter(f=>f.status==="Annule"&&f.causeRetard==="Technique");
+  const compBase=volsPlanned.length-techCancels.length;
+  const completionFactor=compBase>0?Math.round((volsDone.length/compBase)*1000)/10:0;
   const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
   const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
   return (
@@ -2112,6 +2119,8 @@ function ScreenMaint({ kpis, maintData, flights }) {
         <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||"--"} unit={md.fiabMoteurs?"%":""} accent={(md.fiabMoteurs||0)>=99.5?C.emerald:(md.fiabMoteurs||0)>=98?C.warn:C.danger} icon="✈"/>
         <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
         <KpiTile title="Tech delay" value={techDelay} unit="%" accent={techDelay<2?C.emerald:techDelay<5?C.warn:C.danger} icon="⚙"/>
+        <KpiTile title="Dispatch Reliability" value={dispatchRel} unit="%" accent={dispatchRel>=99?C.emerald:dispatchRel>=95?C.warn:C.danger} icon="🛫"/>
+        <KpiTile title="Completion Factor" value={completionFactor} unit="%" accent={completionFactor>=99?C.emerald:completionFactor>=95?C.warn:C.danger} icon="✅"/>
       </div>
       <Card>
         <SectionTitle>Visites périodiques</SectionTitle>
@@ -2302,7 +2311,13 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
         const techV=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
         const doneV=flights.filter(f=>f.status==="Termine");
         const td=doneV.length>0?Math.round((techV.length/doneV.length)*1000)/10:0;
-        return row(fiab+"%","Fiabilite moteurs",fiab>=99.5?G:O,td+"%","Tech Delay",td<2?G:O,"",""," ");
+        const planned=flights.filter(f=>f.status!=="Annule");
+        const dr=planned.length>0?Math.round((doneV.length/planned.length)*1000)/10:0;
+        const techCan=flights.filter(f=>f.status==="Annule"&&f.causeRetard==="Technique");
+        const compBase=planned.length-techCan.length;
+        const cf=compBase>0?Math.round((doneV.length/compBase)*1000)/10:0;
+        return row(fiab+"%","Fiabilite moteurs",fiab>=99.5?G:O,td+"%","Tech Delay",td<2?G:O,"",""," ")+
+               row(dr+"%","Dispatch Reliability",dr>=99?G:dr>=95?O:"#DC2626",cf+"%","Completion Factor",cf>=99?G:cf>=95?O:"#DC2626","",""," ");
       })()+
       melRows
     )+
@@ -2753,7 +2768,14 @@ function App() {
                 const pTechVols=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
                 const pDoneVols=flights.filter(f=>f.status==="Termine");
                 const pTechDelay=pDoneVols.length>0?Math.round((pTechVols.length/pDoneVols.length)*1000)/10:0;
-                drawRow("Tech delay",pTechDelay+"%",pTechDelay<2,true);
+                drawRow("Tech delay",pTechDelay+"%",pTechDelay<2);
+                const pPlanned=flights.filter(f=>f.status!=="Annule");
+                const pDR=pPlanned.length>0?Math.round((pDoneVols.length/pPlanned.length)*1000)/10:0;
+                const pTechCan=flights.filter(f=>f.status==="Annule"&&f.causeRetard==="Technique");
+                const pCFBase=pPlanned.length-pTechCan.length;
+                const pCF=pCFBase>0?Math.round((pDoneVols.length/pCFBase)*1000)/10:0;
+                drawRow("Dispatch Reliability",pDR+"%",pDR>=99);
+                drawRow("Completion Factor",pCF+"%",pCF>=99,true);
                 y+=4;
 
                 // ── Sécurité ──
