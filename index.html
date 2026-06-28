@@ -2412,7 +2412,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
   }).join("");
 
   return (
-    "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px;display:flex;align-items:center;gap:12px'><img src='"+LOGO_B64+"' alt='Afrijet' style='width:48px;height:34px;object-fit:contain;background:white;border-radius:6px;padding:2px;flex-shrink:0'/><div><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Journalier</div><div style='color:#94A3B8;font-size:11px'>EMB 135 CN-KTA \u00B7 18 sieges Business \u00B7 "+ds+"</div></div></div>"+
+    "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px;display:flex;align-items:center;gap:12px'><img src='"+LOGO_B64+"' alt='Afrijet' style='width:48px;height:34px;object-fit:contain;background:white;border-radius:6px;padding:2px;flex-shrink:0'/><div><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Opérationnel</div><div style='color:#94A3B8;font-size:11px'>EMB 135 CN-KTA \u00B7 18 sieges Business \u00B7 "+ds+"</div></div></div>"+
     card(row(done,"Termines",G,flights.filter(f=>f.status==="En vol").length,"En vol",O,tPax,"PAX total",N))+
     card(sec("Performance","#0F1F3D")+
       kpiLine("OTP (ponctualite)",rOtp+"%","90%",rOtp>=90)+
@@ -2684,7 +2684,7 @@ function App() {
                 doc.setTextColor(255,255,255);
                 doc.setFontSize(15);
                 doc.setFont("helvetica","bold");
-                doc.text("RAPPORT KPI JOURNALIER",M+42,13);
+                doc.text("RAPPORT KPI OPÉRATIONNEL",M+42,13);
                 doc.setFontSize(8);
                 doc.setFont("helvetica","normal");
                 doc.setTextColor(148,163,184);
