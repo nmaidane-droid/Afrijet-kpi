@@ -418,7 +418,7 @@ function FAirport({ label, value, onChange }) {
     ? WORLD_AIRPORTS.filter(a=>a.c.toUpperCase().startsWith(q.toUpperCase())||a.n.toLowerCase().includes(q.toLowerCase())).slice(0,8)
     : [];
   const pick = c => { onChange(c); setQ(c); setO(false); };
-  const icaoKnown = IATA_TO_ICAO[q.toUpperCase()];
+  const icaoKnown = q.length >= 3;
   return (
     <div style={{ position:"relative" }}>
       <FLabel>{label}</FLabel>
@@ -483,13 +483,6 @@ const AIRPORTS_DATA = [
 ];
 
 
-const IATA_TO_ICAO = {
-  CMN:"GMMN", RAK:"GMMX", AGA:"GMAD", TNG:"GMTT", FEZ:"GMFF",
-  OUD:"GMFO", RBA:"GMME", NDR:"GMMW", AHU:"GMTA", TTU:"GMTN",
-  ESU:"GMMZ", OZZ:"GMMZ", ERH:"GMFK", EUN:"GSAI", VIL:"GQPD",
-  ZGR:"GMAZ", TTA:"GMAT", SMW:"GMMA", SII:"GMMI", GLN:"GMAG",
-};
-
 const FC_INFO = {
   VFR:  {color:"#00936A", bg:"#D1FAE5", label:"VFR"},
   MVFR: {color:"#D97706", bg:"#FEF3C7", label:"MVFR"},
@@ -526,9 +519,9 @@ function useMetar(iata) {
   const [fc, setFc] = React.useState("?");
   const [raw, setRaw] = React.useState("");
   React.useEffect(() => {
-    const icao = IATA_TO_ICAO[iata];
-    if(!icao) return;
-    fetch(`https://api.checkwx.com/metar/${icao}/decoded`, {
+    if(!iata||iata.length<3) return;
+    setFc("?"); setRaw("");
+    fetch(`https://api.checkwx.com/metar/${iata}/decoded`, {
       headers: {"X-API-Key": "add2685cda494119a5465ec664852fed"}
     })
       .then(r=>r.json())
