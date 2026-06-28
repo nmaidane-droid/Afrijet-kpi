@@ -1091,7 +1091,7 @@ function FormMaint({ onSubmit, maintData }) {
   const [nextH,setNextH]=useState(String(md.nextCheckH||"182"));
   const [bCheckH,setBCheckH]=useState(String(md.bCheckH||""));
   const [cCheckH,setCCheckH]=useState(String(md.cCheckH||""));
-  const [fiab,setFiab]=useState(String(md.fiabMoteurs||"99.8"));
+  const [evtMoteur,setEvtMoteur]=useState(String(md.evtMoteur||"0"));
   const [techD,setTechD]=useState(String(md.techDelay||"0.4"));
   const [aog,setAog]=useState(String(md.aog||"0"));
   const [mels,setMels]=useState(()=>(maintData?.mels||[]));
@@ -1101,7 +1101,7 @@ function FormMaint({ onSubmit, maintData }) {
     if(maintData?.nextCheckH) setNextH(String(maintData.nextCheckH));
     if(maintData?.bCheckH!==undefined) setBCheckH(String(maintData.bCheckH||""));
     if(maintData?.cCheckH!==undefined) setCCheckH(String(maintData.cCheckH||""));
-    if(maintData?.fiabMoteurs) setFiab(String(maintData.fiabMoteurs));
+    if(maintData?.evtMoteur!==undefined) setEvtMoteur(String(maintData.evtMoteur||"0"));
     if(maintData?.techDelay!==undefined) setTechD(String(maintData.techDelay));
     if(maintData?.aog!==undefined) setAog(String(maintData.aog));
   },[maintData]);
@@ -1125,9 +1125,13 @@ function FormMaint({ onSubmit, maintData }) {
   const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
 
   const submit=()=>{
+    const volsDone=Number(md.volsDone||0);
+    const evt=Number(evtMoteur)||0;
+    const fiabCalc=volsDone>0?Math.round(((volsDone-evt)/volsDone)*1000)/10:0;
     onSubmit({ttaf:Number(ttaf)||0,melCount:mels.length,nextCheckH:Number(nextH)||0,
       bCheckH:Number(bCheckH)||0,cCheckH:Number(cCheckH)||0,
-      fiabMoteurs:Number(fiab)||0,techDelay:Number(techD)||0,aog:Number(aog)||0,mels});
+      evtMoteur:evt,fiabMoteurs:fiabCalc,
+      techDelay:Number(techD)||0,aog:Number(aog)||0,mels});
   };
 
   return (
@@ -1154,12 +1158,24 @@ function FormMaint({ onSubmit, maintData }) {
         </FGrid>
         <FSection title="Fiabilite" color="#00936A"/>
         <FGrid>
-          <FField label="Fiabilite moteurs (%)" value={fiab} onChange={setFiab} type="number" min={0} max={100}/>
-          <FField label="Tech delay (%)" value={techD} onChange={setTechD} type="number" min={0} max={100}/>
+          <FField label="Evenements moteur" value={evtMoteur} onChange={setEvtMoteur} type="number" min={0}/>
+          <FCalc label="Fiabilite calculee"
+            value={(()=>{
+              const v=Number(md.volsDone||0);
+              const e=Number(evtMoteur)||0;
+              return v>0?(Math.round(((v-e)/v)*1000)/10)+"%":"--";
+            })()}
+            color={(()=>{
+              const v=Number(md.volsDone||0);
+              const e=Number(evtMoteur)||0;
+              const f=v>0?((v-e)/v)*100:100;
+              return f>=99.5?C.emerald:f>=98?C.warn:C.danger;
+            })()}
+          />
         </FGrid>
         <FGrid>
-          <FField label="AOG (jours)" value={aog} onChange={setAog} type="number" min={0}/>
-          <FCalc label="Statut MEL" value={mels.length===0?"OK":mels.length<=2?"Surveille":"CRITIQUE"} color={mels.length===0?"#00936A":mels.length<=2?"#D97706":"#DC2626"}/>
+          <FField label="Tech delay (%)" value={techD} onChange={setTechD} type="number" min={0} max={100}/>
+          <FCalc label="Statut tech delay" value={Number(techD)===0?"OK":Number(techD)<2?"Surveille":"CRITIQUE"} color={Number(techD)===0?C.emerald:Number(techD)<2?C.warn:C.danger}/>
         </FGrid>
 
         <FSection title={"MEL actifs ("+mels.length+")"} color="#00936A"/>
@@ -1398,7 +1414,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onReset, flights
       </div>
       {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew}/>}
       {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew}/>}
-      {active==="maint" && <FormMaint onSubmit={ok(onSubmitMaint)} maintData={maintData}/>}
+      {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}}/>}
       {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)}/>}
     </div>
   );
@@ -1906,7 +1922,9 @@ function ScreenMaint({ kpis, maintData }) {
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
+        <KpiTile title="Fiabilite moteurs" value={md.fiabMoteurs||"--"} unit={md.fiabMoteurs?"%":""} accent={(md.fiabMoteurs||0)>=99.5?C.emerald:(md.fiabMoteurs||0)>=98?C.warn:C.danger} icon="✈"/>
         <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
+        <KpiTile title="Tech delay" value={md.techDelay||0} unit="%" accent={(md.techDelay||0)<2?C.emerald:C.danger} icon="⏱"/>
       </div>
       <Card>
         <SectionTitle>Visites périodiques</SectionTitle>
