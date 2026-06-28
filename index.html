@@ -516,15 +516,28 @@ function calcFlightCategory(metar) {
 }
 
 const IATA_TO_ICAO = {
-  CMN:"GMMN", RAK:"GMMX", AGA:"GMAD", TNG:"GMTT", FEZ:"GMFF",
-  OUD:"GMFO", RBA:"GMME", NDR:"GMMW", AHU:"GMTA", TTU:"GMTN",
-  ESU:"GMMZ", OZZ:"GMMZ", ERH:"GMFK", EUN:"GSAI", VIL:"GQPD",
-  ZGR:"GMAZ", TTA:"GMAT", SMW:"GMMA", SII:"GMMI", GLN:"GMAG",
-  // International
-  LBV:"FOOL", DLA:"FKKD", NSI:"FKYS", ABJ:"DIAP", DKR:"GOOY",
-  NKC:"GQNN", BKO:"GABS", OUA:"DFFD", ACC:"DGAA", LOS:"DNMM",
-  CDG:"LFPG", LHR:"EGLL", MAD:"LEMD", BCN:"LEBL", FCO:"LIRF",
-  JFK:"KJFK", DXB:"OMDB", DOH:"OTHH", IST:"LTFM",
+  "AAE":"DABB","ABJ":"DIAP","ABS":"HEBL","ABV":"DNAA","ACC":"DGAA","ACE":"GCRR","ADB":"LTBJ","ADD":"HAAB","AGA":"GMAD","AGP":"LEMG","AHU":"GMTA","AJA":"LFKJ","AJN":"FMCN","ALC":"LEAL","ALG":"DAAG","AMS":"EHAM","ARN":"ESSA","ASM":"HHAS","ASW":"HESN","ATH":"LGAV","ATR":"GQPA","AYT":"LTAI",
+  "BCN":"LEBL","BEG":"LYBE","BEN":"HLLB","BER":"EDDB","BEW":"FQBR","BFN":"FABL","BFX":"FKKB","BGO":"ENBR","BGY":"LIME","BHX":"EGBB","BIA":"LFKB","BIO":"LEBB","BIQ":"LFBZ","BJA":"DAAE","BJM":"HBBA","BKO":"GABS","BKY":"FZMA","BLQ":"LIPE","BLZ":"FWCL","BOD":"LFBD","BOY":"DFOO","BRE":"EDDW","BRI":"LIBD","BRS":"EGGD","BRU":"EBBR","BSG":"FGBT","BSK":"DAUB","BSL":"LFSB","BTS":"LZIB","BUD":"LHBP","BUG":"FNBG","BUQ":"FVBU","BVC":"GVBA","BYK":"DIBK","BZV":"FCBB",
+  "CAG":"LIEE","CAI":"HECA","CDG":"LFPG","CFU":"LGKR","CGN":"EDDK","CKY":"GUCY","CLJ":"LRCL","CMN":"GMMN","COO":"DBBB","CPH":"EKCH","CPT":"FACT","CRL":"EBCI","CTA":"LICC","CZL":"DABC",
+  "DAR":"HTDA","DIE":"FMND","DIR":"HADR","DIS":"FCBD","DJE":"DTTJ","DKR":"GOOY","DLA":"FKKD","DME":"UUDD","DUB":"EIDW","DUR":"FALE","DUS":"EDDL","DZA":"FMCZ",
+  "EBB":"HUEN","EDI":"EGPH","EIN":"EHEH","ELS":"FAEL","ERH":"GMFK","ESB":"LTAC","ESU":"GMMZ","EUN":"GSAI",
+  "FAO":"LPFR","FBM":"FZQA","FCO":"LIRF","FEZ":"GMFF","FIH":"FZAA","FKI":"FZIC","FLR":"LIRQ","FNA":"GFLL","FNC":"LPMA","FRA":"EDDF","FRW":"FBFT","FSC":"LFKS","FUE":"GCFV",
+  "GAE":"DTTB","GAF":"DTTG","GAO":"GAGO","GBE":"FBSK","GHA":"DAUG","GJL":"DABG","GLA":"EGPF","GLN":"GMAG","GOT":"ESGG","GOU":"FKKN","GRJ":"FAGG","GRZ":"LOWG","GVA":"LSGG","GZT":"LTAJ",
+  "HAH":"FMCH","HAJ":"EDDV","HAM":"EDDH","HEL":"EFHK","HER":"LGIR","HME":"DAUH","HOR":"LPHR","HRE":"FVHA","HRG":"HEGN",
+  "IAM":"DAUZ","IBZ":"LEIB","INH":"FQIN","INN":"LOWI","INZ":"DAUI","IST":"LTFM",
+  "JIB":"HDAM","JIM":"HAJM","JMK":"LGMK","JNB":"FAOR","JRO":"HTKJ",
+  "KAN":"DNKN","KBP":"UKBB","KEF":"BIKF","KGL":"HRYR","KGS":"LGKO","KIS":"HKKI","KMS":"DGSI","KRK":"EPKK","KRT":"HSSS",
+  "LAD":"FNLU","LBV":"FOOL","LCA":"LCLK","LCY":"EGLC","LED":"ULLI","LEJ":"EDDP","LFW":"DXXX","LGG":"EBLG","LGW":"EGKK","LHR":"EGLL","LIL":"LFQQ","LIN":"LIML","LIS":"LPPT","LJU":"LJLJ","LLW":"FWKI","LOS":"DNMM","LPA":"GCLP","LTN":"EGGW","LUN":"FLLS","LUX":"ELLX","LVI":"FLLV","LXR":"HELX","LYS":"LFLL",
+  "MAD":"LEMD","MAH":"LEMH","MAN":"EGCC","MBA":"HKMO","MGQ":"HCMM","MIR":"DTMB","MJI":"HLLM","MJN":"FMNM","MLA":"LMML","MPL":"LFMT","MPM":"FQMA","MQP":"FAKN","MQX":"HAMK","MRS":"LFML","MRU":"FIMP","MUC":"EDDM","MVB":"FOON","MVR":"FKKL","MWZ":"HTMW","MXP":"LIMC",
+  "NAP":"LIRN","NBE":"DTNZ","NBO":"HKJK","NCE":"LFMN","NDJ":"FTTJ","NDR":"GMMW","NIM":"DRRN","NKC":"GQNN","NLA":"FLND","NSI":"FKYS","NTE":"LFRS","NUE":"EDDN",
+  "OGX":"DAUU","OPO":"LPPR","ORK":"EICK","ORN":"DAOO","ORY":"LFPO","OSL":"ENGM","OTP":"LROP","OUA":"DFFD","OUD":"GMFO","OUL":"EFOU","OZZ":"GMMZ",
+  "PDL":"LPPD","PFO":"LCPH","PGF":"LFMP","PHC":"DNPO","PLZ":"FAPE","PMI":"LEPA","PMO":"LICJ","POG":"FOOG","PRG":"LKPR","PSA":"LIRP","PZU":"HSPN",
+  "RAK":"GMMX","RBA":"GMME","RHO":"LGRP","RMF":"HEMA","RNS":"LFRN","ROB":"GLRB","RTM":"EHRD","RUN":"FMEE",
+  "SAW":"LTFJ","SCQ":"LEST","SEB":"HLLS","SEZ":"FSIA","SFA":"DTTX","SID":"GVNP","SII":"GMMI","SKG":"LGTS","SKP":"LWSK","SMW":"GMMA","SNN":"EINN","SOF":"LBSF","SSG":"FGSL","SSH":"HESH","STN":"EGSS","STR":"EDDS","SVG":"ENZV","SVO":"UUEE","SVQ":"LEZL","SXB":"LFST","SZG":"LOWS",
+  "TBJ":"DTKA","TER":"LPLA","TET":"FQTT","TFN":"GCXO","TFS":"GCTS","TGR":"DAUK","TIA":"LATI","TIP":"HLLT","TLM":"DAON","TLS":"LFBO","TMP":"EFTP","TMR":"DAAT","TMS":"FPST","TMX":"DAUT","TNG":"GMTT","TNR":"FMMI","TOE":"DTTZ","TOM":"GATO","TRD":"ENVA","TRN":"LIMF","TSR":"LRTR","TTA":"GMAT","TTU":"GMTN","TUN":"DTTA","TZX":"LTCG",
+  "VCE":"LIPZ","VFA":"FVFA","VIE":"LOWW","VIL":"GQPD","VLC":"LEVC","VXE":"GVSV",
+  "WAW":"EPWA","WDH":"FYWH","WVB":"FYWB",
+  "ZAG":"LDZA","ZAZ":"LEZG","ZGR":"GMAZ","ZIG":"GOGS","ZND":"DRZD","ZNZ":"HTZA","ZRH":"LSZH","ZTH":"LGZA",
 };
 
 function useMetar(iata) {
@@ -544,7 +557,7 @@ function useMetar(iata) {
         setRaw(m.raw_text||"");
         setFc(m.flight_category||calcFlightCategory(m.raw_text||""));
       })
-      .catch(e=>{console.error("CheckWX error:",e);setFc("?");});
+      .catch(()=>setFc("?"));
   }, [iata]);
   return {fc, raw};
 }
