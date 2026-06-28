@@ -2274,8 +2274,10 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
   const rNpsVols=volsDoneR.filter(f=>f.nps>0);
   const rNps=rNpsVols.length>0?Math.round(rNpsVols.reduce((s,f)=>s+f.nps,0)/rNpsVols.length):kpis.nps||0;
 
-  const row=(v1,l1,c1,v2,l2,c2,v3,l3,c3)=>
-    "<div style='display:grid;grid-template-columns:1fr 1fr 1fr'><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c1+"'>"+v1+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l1+"</div></div><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:20px;font-weight:800;color:"+c2+"'>"+v2+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l2+"</div></div><div style='text-align:center;padding:10px 4px'><div style='font-size:20px;font-weight:800;color:"+c3+"'>"+v3+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l3+"</div></div></div>";
+  const row=(v1,l1,c1,v2,l2,c2,v3,l3,c3)=>{
+    const fs=n=>String(n).length>8?"13px":String(n).length>5?"16px":"20px";
+    return "<div style='display:grid;grid-template-columns:1fr 1fr 1fr'><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:"+fs(v1)+";font-weight:800;color:"+c1+"'>"+v1+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l1+"</div></div><div style='text-align:center;padding:10px 4px;border-right:1px solid #EEF2F8'><div style='font-size:"+fs(v2)+";font-weight:800;color:"+c2+"'>"+v2+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l2+"</div></div><div style='text-align:center;padding:10px 4px'><div style='font-size:"+fs(v3)+";font-weight:800;color:"+c3+"'>"+v3+"</div><div style='font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase'>"+l3+"</div></div></div>";
+  };
 
   const kpiLine=(l,v,o,ok)=>
     "<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'><div style='flex:1;font-size:12px;color:#475569'>"+l+"<div style='font-size:10px;color:#94A3B8'>Objectif: "+o+"</div></div><div style='font-weight:800;font-size:13px;color:"+N+";padding-right:8px'>"+v+"</div><span style='background:"+(ok?"#D1FAE5":"#FEF3C7")+";color:"+(ok?"#065F46":"#92400E")+";padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700'>"+(ok?"OK":"Att.")+"</span></div>";
@@ -2322,21 +2324,23 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
     if(mels.length===0) return "<div style='padding:8px 12px;font-size:11px;color:#94A3B8;text-align:center'>Aucun MEL actif</div>";
     return mels.map(m=>{
       const today=new Date();
-      const exp=m.exp?new Date(m.exp.split("/").reverse().join("-")):null;
-      const daysLeft=exp?Math.ceil((exp-today)/(1000*60*60*24)):null;
+      const parts=(m.exp||"").split("/");
+      const exp=parts.length===3?new Date(parts[2]+"-"+parts[1]+"-"+parts[0]):null;
+      const daysLeft=exp&&!isNaN(exp)?Math.ceil((exp-today)/(1000*60*60*24)):null;
       const expColor=daysLeft===null?"#64748B":daysLeft<7?"#DC2626":daysLeft<30?"#D97706":"#00936A";
       const expBg=daysLeft===null?"#F1F5F9":daysLeft<7?"#FEE2E2":daysLeft<30?"#FEF3C7":"#D1FAE5";
       const catColor=m.sev==="A"?"#DC2626":m.sev==="B"?"#D97706":"#64748B";
       const catBg=m.sev==="A"?"#FEE2E2":m.sev==="B"?"#FEF3C7":"#F1F5F9";
+      const daysStr=daysLeft===null?"":daysLeft<0?"EXPIRÉ":daysLeft===0?"Auj.":daysLeft+"j";
       return "<div style='padding:8px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center'>"+
         "<span style='background:"+catBg+";color:"+catColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700;flex-shrink:0'>Cat."+m.sev+"</span>"+
         "<div style='flex:1'>"+
           "<div style='font-size:11px;font-weight:600;color:#0F1F3D'>"+m.sys+"</div>"+
-          "<div style='font-size:9px;color:#64748B;margin-top:1px'>"+m.ref+"</div>"+
+          (m.mel?"<div style='font-size:9px;color:#64748B;margin-top:1px'>"+m.mel+"</div>":"")+
         "</div>"+
         "<div style='text-align:right;flex-shrink:0'>"+
           "<div style='background:"+expBg+";color:"+expColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700'>"+m.exp+"</div>"+
-          (daysLeft!==null?"<div style='font-size:8px;color:"+expColor+";margin-top:2px;text-align:center'>"+(daysLeft<0?"EXPIRÉ":daysLeft===0?"Auj.":daysLeft+"j")+"</div>":"")+
+          (daysStr?"<div style='font-size:8px;color:"+expColor+";margin-top:2px;text-align:center'>"+daysStr+"</div>":"")+
         "</div>"+
       "</div>";
     }).join("");
@@ -2380,7 +2384,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData) {
       const sd=safetyData||[];
       const tot={approche:sd.filter(e=>e.approche).length,tcas:sd.filter(e=>e.tcas).length,gpws:sd.filter(e=>e.gpws).length,hardLanding:sd.filter(e=>e.hardLanding).length,safa:sd.filter(e=>e.safa).length};
       const vd=flights.filter(f=>f.status==="Termine").length||1;
-      const secRow=(label,count,color)=>"<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'><div style='flex:1;font-size:12px;color:#475569'>"+label+"</div><div style='font-weight:800;font-size:13px;color:'"+(count>0?color:"#00936A")+"';padding-right:8px'>"+count+"</div><span style='background:"+(count>0?"#FEE2E2":"#D1FAE5")+";color:"+(count>0?color:"#065F46")+";padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700'>"+(Math.round(count/vd*1000)/10)+"%</span></div>";
+      const secRow=(label,count,color)=>"<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'><div style='flex:1;font-size:12px;color:#475569'>"+label+"</div><div style='font-weight:800;font-size:13px;color:"+(count>0?color:"#00936A")+";min-width:28px;text-align:right;padding-right:12px'>"+count+"</div><span style='background:"+(count>0?"#FEE2E2":"#D1FAE5")+";color:"+(count>0?color:"#065F46")+";padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;min-width:52px;text-align:center;display:inline-block'>"+(Math.round(count/vd*1000)/10)+"%</span></div>";
       return card(sec("Sécurité Opérationnelle","#DC2626")+
         secRow("Approches instables",tot.approche,"#DC2626")+
         secRow("TCAS RA",tot.tcas,"#DC2626")+
@@ -2839,7 +2843,7 @@ function App() {
                   (md.mels||[]).forEach((m,i)=>{
                     if(y>270){doc.addPage();y=15;}
                     const today=new Date();
-                    const expDate=m.exp?new Date(m.exp.split("/").reverse().join("-")):null;
+                    const expDate=(()=>{if(!m.exp)return null;const p=m.exp.split("/");return p.length===3?new Date(p[2],p[1]-1,p[0]):null;})();
                     const daysLeft=expDate?Math.ceil((expDate-today)/(1000*60*60*24)):null;
                     // Cat badge
                     const catColor=m.sev==="A"?[220,38,38]:m.sev==="B"?[217,119,6]:[100,116,139];
@@ -2858,7 +2862,7 @@ function App() {
                     doc.setTextColor(100,116,139);
                     doc.setFont("helvetica","normal");
                     doc.setFontSize(6.5);
-                    doc.text(m.ref||"",M+12,y+3.5);
+                    doc.text(m.mel||m.ref||"",M+12,y+3.5);
                     // Expiration with color
                     const expColor=daysLeft===null?[100,116,139]:daysLeft<7?[220,38,38]:daysLeft<30?[217,119,6]:[0,147,106];
                     doc.setTextColor(...expColor);
