@@ -528,14 +528,26 @@ function useMetar(iata) {
   React.useEffect(() => {
     const icao = IATA_TO_ICAO[iata];
     if(!icao) return;
-    fetch(`https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw`)
-      .then(r=>r.text())
-      .then(text=>{
-        const line = text.trim().split("\n").find(l=>l.startsWith("METAR")||l.startsWith(icao))||"";
-        setRaw(line);
-        setFc(calcFlightCategory(line));
-      })
-      .catch(()=>setFc("?"));
+    const urls = [
+      `https://corsproxy.io/?${encodeURIComponent(`https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw`)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw`)}`,
+    ];
+    let done = false;
+    urls.forEach(url => {
+      if(done) return;
+      fetch(url)
+        .then(r=>r.text())
+        .then(text=>{
+          if(done) return;
+          const line = text.trim().split("\n").find(l=>l.includes(icao)||l.startsWith("METAR"))||"";
+          if(line) {
+            done = true;
+            setRaw(line);
+            setFc(calcFlightCategory(line));
+          }
+        })
+        .catch(()=>{});
+    });
   }, [iata]);
   return {fc, raw};
 }
