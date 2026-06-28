@@ -3408,51 +3408,7 @@ function App() {
                 drawRow("Tech delay",pTechDelay+"%",pTechDelay<2);
                 drawRow("Dispatch Reliability",pDR+"%",pDR>=99);
                 drawRow("Completion Factor",pCF+"%",pCF>=99,true);
-                y+=4;
-
-                // ── MEL detail ──
-                const allMels=pAcList.reduce((all,ac)=>[...all,...(ac.mels||[]).map(m=>({...m,acImmat:ac.immat}))],[]);
-                if(allMels.length>0){
-                  drawSection("  DETAIL MEL ACTIFS",0,147,106);
-                  allMels.forEach((m,i)=>{
-                    if(y>270){doc.addPage();y=15;}
-                    const today=new Date();
-                    const expDate=(()=>{if(!m.exp)return null;const p=m.exp.split("/");if(p.length!==3)return null;const yr=p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]);return new Date(yr,parseInt(p[1])-1,parseInt(p[0]));})();
-                    const daysLeft=expDate?Math.ceil((expDate-today)/(1000*60*60*24)):null;
-                    // Cat badge
-                    const catColor=m.sev==="A"?[220,38,38]:m.sev==="B"?[217,119,6]:[100,116,139];
-                    doc.setFillColor(...catColor);
-                    doc.roundedRect(M,y-3.5,10,5,1,1,"F");
-                    doc.setTextColor(255,255,255);
-                    doc.setFont("helvetica","bold");
-                    doc.setFontSize(6);
-                    doc.text("Cat."+m.sev,M+5,y,{align:"center"});
-                    // System name
-                    doc.setTextColor(15,31,61);
-                    doc.setFont("helvetica","bold");
-                    doc.setFontSize(8);
-                    doc.text(m.sys||"--",M+12,y);
-                    // Ref
-                    doc.setTextColor(100,116,139);
-                    doc.setFont("helvetica","normal");
-                    doc.setFontSize(6.5);
-                    doc.text(m.mel||m.ref||"",M+12,y+3.5);
-                    // Expiration with color
-                    const expColor=daysLeft===null?[100,116,139]:daysLeft<7?[220,38,38]:daysLeft<30?[217,119,6]:[0,147,106];
-                    doc.setTextColor(...expColor);
-                    doc.setFont("helvetica","bold");
-                    doc.setFontSize(7.5);
-                    const daysStr=daysLeft===null?"":daysLeft<0?" (EXPIRÉ)":daysLeft===0?" (Auj.)":` (${daysLeft}j)`;
-                    doc.text((m.exp||"--")+daysStr,M+CW,y,{align:"right"});
-                    if(i<(md.mels||[]).length-1){
-                      doc.setDrawColor(238,242,248);
-                      doc.setLineWidth(0.2);
-                      doc.line(M,y+5,M+CW,y+5);
-                    }
-                    y+=8;
-                  });
-                  y+=4;
-                }
+                y+=6;
 
                 // ── Sécurité ──
                 const sd=safetyData||[];
@@ -3477,10 +3433,28 @@ function App() {
                   const tRev=fd.reduce((s,f)=>s+f.revenus,0);
                   const tCout=fd.reduce((s,f)=>s+f.couts,0);
                   const marge=tRev>0?Math.round((1-tCout/tRev)*100):0;
+                  if(y>240){doc.addPage();y=15;}
                   drawSection("  FINANCES - CUMUL "+now.getFullYear(),124,58,237);
                   drawRow("Revenus cumules",fmtMAD(tRev)+" MAD");
                   drawRow("Couts cumules",fmtMAD(tCout)+" MAD");
-                  drawRow("Marge brute",marge+"%",marge>0,true);
+                  drawRow("Marge brute",marge+"%",marge>0);
+                  y+=3;
+                  // Monthly rows
+                  fd.forEach((f,i)=>{
+                    if(y>275){doc.addPage();y=15;}
+                    const fm=f.revenus>0?Math.round((1-f.couts/f.revenus)*100):0;
+                    doc.setFillColor(i%2===0?248:255,i%2===0?250:255,i%2===0?252:255);
+                    doc.rect(M,y-3,CW,6,"F");
+                    doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(7.5);
+                    doc.text(f.mois,M+3,y);
+                    doc.setFont("helvetica","normal");doc.setTextColor(71,85,105);
+                    doc.text(fmtMAD(f.revenus)+" MAD",M+CW*0.45,y);
+                    const mc=fm>0?[0,147,106]:fm===0?[217,119,6]:[220,38,38];
+                    doc.setTextColor(...mc);doc.setFont("helvetica","bold");
+                    doc.text(fm+"%",M+CW-3,y,"right");
+                    if(i<fd.length-1){doc.setDrawColor(226,232,240);doc.setLineWidth(0.2);doc.line(M,y+3,M+CW,y+3);}
+                    y+=6;
+                  });
                   y+=4;
                 }
 
