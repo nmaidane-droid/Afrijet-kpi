@@ -750,7 +750,8 @@ function computeAlerts(kpis, flights, maintData) {
   else if(otp<90)a.push({id:"otp",sev:"warn",msg:"OTP en baisse: "+otp+"%",icon:"⏰"});
   if(delayMin>30)a.push({id:"del",sev:"danger",msg:"Retards: "+delayMin+" min",icon:"⚠"});
   else if(delayMin>15)a.push({id:"del",sev:"warn",msg:"Retards: "+delayMin+" min",icon:"⚠"});
-  if(kpis.loadFactor<70)a.push({id:"lf",sev:"warn",msg:"Load Factor: "+kpis.loadFactor+"%",icon:"💺"});
+  const lfVal=volsDone.length>0?Math.round(volsDone.reduce((s,f)=>s+f.load,0)/volsDone.length):kpis.loadFactor||0;
+  if(lfVal<70)a.push({id:"lf",sev:"warn",msg:"Load Factor: "+lfVal+"%",icon:"💺"});
   // Use maintData for check alerts
   const md=maintData||{};
   if((md.nextCheckH||999)<50)a.push({id:"achk",sev:"danger",msg:"A-Check dans "+(md.nextCheckH||0)+"h",icon:"🔧"});
@@ -767,18 +768,6 @@ function computeAlerts(kpis, flights, maintData) {
   });
   return a;
 }
-
-const TABS = [
-  {id:"forms",   icon:"📝", label:"Formulaires"},
-  {id:"live",    icon:"📡", label:"Live"      },
-  {id:"carte",   icon:"🗺", label:"Carte"     },
-  {id:"alertes", icon:"🔔", label:"Alertes"   },
-  {id:"ops",     icon:"✈",    label:"Ops."      },
-  {id:"perf",    icon:"📊", label:"Perf."     },
-  {id:"maint",   icon:"🔧", label:"Maint."    },
-  {id:"fin",     icon:"💰", label:"Finances"  },
-];
-
 
 const INIT_CREW = [
   {id:1, nom:"Alami",    prenom:"Karim",   role:"CM1", licence:"ATPL-A 12345"},
@@ -890,7 +879,7 @@ const INIT_KPIS = {
 };
 
 const INIT_MAINT = {
-  melCount:4, nextCheckH:182, ttaf:4218,
+  nextCheckH:182, ttaf:4218,
   fiabMoteurs:99.8, evtMoteur:0,
   mels:[
     {sys:"Passenger Address System", mel:"MEL 23-61", exp:"30/06/26", sev:"B"},
@@ -916,12 +905,12 @@ const INIT_SAFETY = [
 ];
 
 const INIT_FIN = [
-  {mois:"Janvier",  revenus:850000,  couts:720000,  revenuVol:24000, coutCarbu:4000, billetMoyen:1150},
-  {mois:"Fevrier",  revenus:920000,  couts:760000,  revenuVol:25000, coutCarbu:4100, billetMoyen:1200},
-  {mois:"Mars",     revenus:980000,  couts:790000,  revenuVol:26000, coutCarbu:4050, billetMoyen:1220},
-  {mois:"Avril",    revenus:1050000, couts:820000,  revenuVol:27000, coutCarbu:4200, billetMoyen:1250},
-  {mois:"Mai",      revenus:1140000, couts:870000,  revenuVol:28000, coutCarbu:4150, billetMoyen:1270},
-  {mois:"Juin",     revenus:1240000, couts:910000,  revenuVol:28500, coutCarbu:4200, billetMoyen:1285},
+  {mois:"Janvier",  revenus:850000,  couts:720000},
+  {mois:"Fevrier",  revenus:920000,  couts:760000},
+  {mois:"Mars",     revenus:980000,  couts:790000},
+  {mois:"Avril",    revenus:1050000, couts:820000},
+  {mois:"Mai",      revenus:1140000, couts:870000},
+  {mois:"Juin",     revenus:1240000, couts:910000},
 ];
 
 // ── Forms ────────────────────────────────────────────────────────────────────
@@ -1135,8 +1124,6 @@ function FormMaint({ onSubmit, maintData }) {
   const [bCheckH,setBCheckH]=useState(String(md.bCheckH||""));
   const [cCheckH,setCCheckH]=useState(String(md.cCheckH||""));
   const [evtMoteur,setEvtMoteur]=useState(String(md.evtMoteur||"0"));
-  const [techD,setTechD]=useState(String(md.techDelay||"0.4"));
-  const [aog,setAog]=useState(String(md.aog||"0"));
   const [mels,setMels]=useState(()=>(maintData?.mels||[]));
   useEffect(()=>{
     if(maintData?.mels) setMels(maintData.mels);
@@ -1145,8 +1132,6 @@ function FormMaint({ onSubmit, maintData }) {
     if(maintData?.bCheckH!==undefined) setBCheckH(String(maintData.bCheckH||""));
     if(maintData?.cCheckH!==undefined) setCCheckH(String(maintData.cCheckH||""));
     if(maintData?.evtMoteur!==undefined) setEvtMoteur(String(maintData.evtMoteur||"0"));
-    if(maintData?.techDelay!==undefined) setTechD(String(maintData.techDelay));
-    if(maintData?.aog!==undefined) setAog(String(maintData.aog));
   },[maintData]);
   const [showMelForm,setShowMelForm]=useState(false);
   const [editIdx,setEditIdx]=useState(null);
@@ -1173,8 +1158,7 @@ function FormMaint({ onSubmit, maintData }) {
     const fiabCalc=volsDone>0?Math.round(((volsDone-evt)/volsDone)*1000)/10:0;
     onSubmit({ttaf:Number(ttaf)||0,melCount:mels.length,nextCheckH:Number(nextH)||0,
       bCheckH:Number(bCheckH)||0,cCheckH:Number(cCheckH)||0,
-      evtMoteur:evt,fiabMoteurs:fiabCalc,
-      techDelay:Number(techD)||0,aog:Number(aog)||0,mels});
+      evtMoteur:evt,fiabMoteurs:fiabCalc,mels});
   };
 
   return (
@@ -2155,9 +2139,9 @@ function ScreenPerf({ kpis, flights, finData }) {
       {/* Bar trends */}
       <Card>
         <SectionTitle>Indicateurs du jour</SectionTitle>
-        <Bar label="OTP" value={kpis.otp} max={100} unit="%" color={kpis.otp>=90?C.emerald:C.warn} sub="Objectif: 90%"/>
-        <Bar label="Load Factor" value={kpis.loadFactor} max={100} unit="%" color={kpis.loadFactor>=80?C.emerald:C.warn} sub="Objectif: 80%"/>
-        <Bar label="Retards" value={kpis.delayMin} max={60} unit=" min" color={kpis.delayMin<=15?C.emerald:C.danger} sub="Seuil: 15 min"/>
+        <Bar label="OTP" value={otpVal} max={100} unit="%" color={otpVal>=90?C.emerald:C.warn} sub="Objectif: 90%"/>
+        <Bar label="Load Factor" value={lfVal} max={100} unit="%" color={lfVal>=80?C.emerald:C.warn} sub="Objectif: 80%"/>
+        <Bar label="Retards" value={delayVal} max={60} unit=" min" color={delayVal<=15?C.emerald:C.danger} sub="Seuil: 15 min"/>
         <Bar label="Conso. carburant moyenne" value={consoMoy} max={1000} unit=" kg/h" color={consoMoy<900?C.emerald:C.danger} sub={consoLabel+" · Seuil 900 kg/h"}/>
       </Card>
     </div>
@@ -2235,7 +2219,7 @@ function ScreenMaint({ kpis, maintData, flights }) {
       <Card>
         <SectionTitle>Indicateurs CAMO</SectionTitle>
         <Bar label="Fiabilite moteurs" value={md.fiabMoteurs||0} max={100} unit="%" color={(md.fiabMoteurs||0)>=99.5?C.emerald:C.warn} sub="Objectif: 99.5%"/>
-        <Bar label="Tech delay" value={md.techDelay||0} max={5} unit="%" color={(md.techDelay||0)<2?C.emerald:C.danger} sub="Seuil: 2%"/>
+        <Bar label="Tech delay" value={techDelay} max={5} unit="%" color={techDelay<2?C.emerald:C.danger} sub="Seuil: 2%"/>
       </Card>
     </div>
   );
@@ -2541,7 +2525,7 @@ function App() {
   const doReset = async () => {
     clearStorage();
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
-    setDism([]);setReport(null);setReset(false);setTab("forms");
+    setCrew(INIT_CREW);setDism([]);setReport(null);setReset(false);setTab("forms");
   };
 
   const allAlerts  = computeAlerts(kpis,flights,maintData);
