@@ -1220,7 +1220,10 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
 
 
 // ── Registre Equipage ────────────────────────────────────────────────────────
-function FormEquipage({ crew, setCrew, saved }) {
+function FormEquipage({ crew, setCrew, saved: parentSaved }) {
+  const [localSaved, setLocalSaved] = useState(false);
+  const saved = localSaved;
+  const triggerSaved = () => { setLocalSaved(true); setTimeout(()=>setLocalSaved(false),2500); };
   const ROLES = ["CM1","CM2","CC"];
   const [nom,setNom]       = useState("");
   const [prenom,setPrenom] = useState("");
@@ -1240,6 +1243,7 @@ function FormEquipage({ crew, setCrew, saved }) {
       setCrew(c => [...c, {id:newId,nom:nom.trim(),prenom:prenom.trim(),role,licence:licence.trim()}]);
     }
     setNom("");setPrenom("");setRole("CM1");setLic("");
+    triggerSaved();
   };
 
   const startEdit = m => {
@@ -1275,8 +1279,8 @@ function FormEquipage({ crew, setCrew, saved }) {
               </button>
             )}
             <button onClick={addOrUpdate}
-              style={{flex:2,height:48,background:"#0369A1",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-              {editing!==null?"Enregistrer modifications":"+ Ajouter"}
+              style={{flex:2,height:48,background:saved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.3s"}}>
+              {saved?"✅ Enregistré":editing!==null?"Enregistrer modifications":"+ Ajouter"}
             </button>
           </div>
         </div>
