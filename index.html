@@ -1831,7 +1831,9 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
               </button>
             </div>
             <iframe src="https://afrijet-kpi.vercel.app/Satisfaction_Passager_Afrijet_v2.pdf"
-              style={{flex:1,border:"none",width:"100%"}}/>
+              sandbox="allow-same-origin allow-scripts"
+              style={{flex:1,border:"none",width:"100%",display:"block"}}
+              scrolling="yes"/>
           </div>
         )}
         {/iPad|iPhone|iPod/.test(navigator.userAgent) ? (
