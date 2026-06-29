@@ -1821,12 +1821,33 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
             <div>{fm.label}</div>
           </button>
         ))}
-        <a href="https://afrijet-kpi.vercel.app/Satisfaction_Passager_Afrijet_v2.pdf"
-          target="_blank" rel="noopener noreferrer"
-          style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:C.border,background:"white",color:C.slate,textDecoration:"none",textAlign:"center",display:"block"}}>
-          <div style={{fontSize:16,marginBottom:2}}>📋</div>
-          <div>Satisfaction</div>
-        </a>
+        {showSat&&(
+          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:9999,background:"white",display:"flex",flexDirection:"column"}}>
+            <div style={{background:C.navy,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+              <span style={{color:"white",fontWeight:700,fontSize:14}}>📋 Formulaire Satisfaction</span>
+              <button onClick={()=>setShowSat(false)}
+                style={{background:"none",border:"1.5px solid white",color:"white",borderRadius:8,padding:"4px 12px",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                ✕ Fermer
+              </button>
+            </div>
+            <iframe src="https://afrijet-kpi.vercel.app/Satisfaction_Passager_Afrijet_v2.pdf"
+              style={{flex:1,border:"none",width:"100%"}}/>
+          </div>
+        )}
+        {/iPad|iPhone|iPod/.test(navigator.userAgent) ? (
+          <button onClick={()=>setShowSat(true)}
+            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:C.border,background:"white",color:C.slate,textAlign:"center",display:"block",width:"100%"}}>
+            <div style={{fontSize:16,marginBottom:2}}>📋</div>
+            <div>Satisfaction</div>
+          </button>
+        ) : (
+          <a href="https://afrijet-kpi.vercel.app/Satisfaction_Passager_Afrijet_v2.pdf"
+            target="_blank" rel="noopener noreferrer"
+            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:C.border,background:"white",color:C.slate,textDecoration:"none",textAlign:"center",display:"block"}}>
+            <div style={{fontSize:16,marginBottom:2}}>📋</div>
+            <div>Satisfaction</div>
+          </a>
+        )}
       </div>
       {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved}/>}
       {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
