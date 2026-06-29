@@ -815,19 +815,17 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
     // SVG avion pointant vers le haut (nord=0°), rotation selon cap
     el.innerHTML = `<svg width="36" height="36" viewBox="0 0 100 100" style="transform:rotate(${heading}deg);transition:transform 1s" xmlns="http://www.w3.org/2000/svg">
       <!-- Fuselage -->
-      <ellipse cx="50" cy="50" rx="7" ry="42" fill="${color}" stroke="white" stroke-width="2"/>
-      <!-- Nez arrondi -->
-      <ellipse cx="50" cy="12" rx="6" ry="8" fill="${color}"/>
+      <ellipse cx="50" cy="55" rx="7" ry="38" fill="${color}" stroke="white" stroke-width="2"/>
+      <!-- Nez effilé -->
+      <polygon points="50,2 44,22 56,22" fill="${color}" stroke="white" stroke-width="1"/>
       <!-- Ailes principales grandes -->
       <polygon points="50,38 8,68 92,68 50,38" fill="${color}" stroke="white" stroke-width="1.5"/>
-      <!-- Réacteurs gauche -->
+      <!-- Réacteur gauche -->
       <ellipse cx="22" cy="65" rx="5" ry="8" fill="${color}" stroke="white" stroke-width="1.5"/>
-      <!-- Réacteurs droit -->
+      <!-- Réacteur droit -->
       <ellipse cx="78" cy="65" rx="5" ry="8" fill="${color}" stroke="white" stroke-width="1.5"/>
       <!-- Empennage horizontal -->
       <polygon points="50,78 28,92 72,92 50,78" fill="${color}" stroke="white" stroke-width="1.5"/>
-      <!-- Dérive verticale -->
-      <ellipse cx="50" cy="85" rx="3" ry="7" fill="${color}"/>
     </svg>`;
     const popup = new window.mapboxgl.Popup({offset:20}).setHTML(
       "<div style='font-family:Arial;padding:6px 8px'>" +
