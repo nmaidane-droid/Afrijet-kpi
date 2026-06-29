@@ -810,7 +810,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
     if (!window.mapboxgl || !acData?.lat) return;
     const color = acData.simulated ? "#A0720A" : "#00936A";
     const el = document.createElement("div");
-    el.style.cssText = "font-size:28px;color:"+color+";filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));transform:rotate("+(acData.heading||0)+"deg);line-height:1;cursor:pointer;transition:transform 1s";
+    el.style.cssText = "font-size:28px;color:"+color+";filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));transform:rotate("+((acData.heading||0)-90)+"deg);line-height:1;cursor:pointer;transition:transform 1s";
     el.textContent = "✈";
     const popup = new window.mapboxgl.Popup({offset:20}).setHTML(
       "<div style='font-family:Arial;padding:6px 8px'>" +
@@ -820,7 +820,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
       "<div style='font-size:11px;line-height:1.8'>" +
       "Alt: <b>"+(acData.alt_ft?acData.alt_ft.toLocaleString():"--")+" ft</b><br>" +
       "Vitesse: <b>"+(acData.speed_kt||"--")+" kt</b><br>" +
-      "Cap: <b>"+Math.round(acData.heading||0)+"</b>" +
+      "Cap: <b>"+Math.round(acData.heading||0)+"°</b>" +
       "</div></div>"
     );
     if (markRef.current) markRef.current.remove();
@@ -828,11 +828,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
       .setLngLat([acData.lon, acData.lat])
       .setPopup(popup)
       .addTo(map);
-    // Center map on aircraft on first placement
-    if (!markRef._centered) {
-      map.flyTo({center:[acData.lon, acData.lat], zoom:7, speed:1.2});
-      markRef._centered = true;
-    }
+    map.flyTo({center:[acData.lon, acData.lat], zoom:7, speed:1.2});
   };
 
   // Update CN-KTA marker when ac changes
@@ -870,7 +866,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
           <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,
             background:ac.simulated?"linear-gradient(135deg,#A0720A,#C9A84C)":"linear-gradient(135deg,#007A4D,#00A86B)",
             display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"white",
-            transform:"rotate("+(ac.heading||0)+"deg)",transition:"transform 1s ease"}}>&#x2708;</div>
+            transform:"rotate("+((ac.heading||0)-90)+"deg)",transition:"transform 1s ease"}}>&#x2708;</div>
           <div style={{flex:1}}>
             <div style={{fontWeight:700,fontSize:12,color:C.navy}}>{selAc?.immat||"--"} — {ac.simulated?"Simulation":"ADS-B Live"}</div>
             <div style={{fontSize:10,color:C.slate}}>{ac.lat.toFixed(4)}N {Math.abs(ac.lon).toFixed(4)}W {ac.alt_ft?(" · "+ac.alt_ft.toLocaleString()+" ft"):""} {ac.speed_kt?(" · "+ac.speed_kt+" kt"):""} {ac.heading?(" · Cap "+Math.round(ac.heading)):""}</div>
