@@ -626,41 +626,60 @@ function FlightCatBadge({ iata }) {
 }
 
 function simulateFlightState(icao24) {
-  const now       = Date.now();
-  const seed      = Math.sin(now / 8000);   // slow oscillation
-  const seed2     = Math.cos(now / 6000);
-  const seed3     = Math.sin(now / 4000);
+  const now = Date.now();
+  const seed  = Math.sin(now / 8000);
+  const seed2 = Math.cos(now / 6000);
+  const seed3 = Math.sin(now / 4000);
 
-  // Progress 0->1 on a 55-min loop
-  const elapsed   = (now % (55 * 60 * 1000)) / (55 * 60 * 1000);
+  // CN-KTB (020036) — CMN → VIL (Dakhla), 2h15 loop
+  if(icao24 === "020036") {
+    const elapsed = (now % (135 * 60 * 1000)) / (135 * 60 * 1000);
+    // CMN (33.3675, -7.5900) → VIL/Dakhla (23.7183, -15.9320)
+    const lat = 33.3675 + (23.7183 - 33.3675) * elapsed;
+    const lon = -7.5900 + (-15.9320 - (-7.5900)) * elapsed;
+    const cruiseAlt = 9144; // FL300
+    let altM;
+    if(elapsed < 0.12)      altM = cruiseAlt * (elapsed / 0.12);
+    else if(elapsed > 0.88) altM = cruiseAlt * ((1 - elapsed) / 0.12);
+    else                    altM = cruiseAlt + seed * 80;
+    const speed_ms = 220 + seed2 * 8;
+    const heading  = 200 + seed3 * 4; // SSW toward Dakhla
+    return {
+      icao24,
+      callsign:    "AJS07",
+      country:     "Morocco",
+      lat, lon,
+      onGround:    false,
+      heading,
+      vertRate_ms: elapsed < 0.12 ? 8.5 : elapsed > 0.88 ? -7.2 : seed * 0.5,
+      squawk:      "2342",
+      lastContact: Math.floor(now / 1000),
+      speed_kt:    Math.round(speed_ms * 1.94384),
+      alt_ft:      Math.round(altM * 3.28084),
+      flightLevel: Math.round(altM * 3.28084 / 100),
+      simulated:   true,
+    };
+  }
 
-  // Interpolate lat/lon along CMN->FEZ great circle
+  // CN-KTA (020035) — CMN → FEZ, 55-min loop
+  const elapsed = (now % (55 * 60 * 1000)) / (55 * 60 * 1000);
   const lat = 33.3675 + (33.9273 - 33.3675) * elapsed;
   const lon = -7.5900 + (-4.9778 - (-7.5900)) * elapsed;
-
-  // Realistic EMB 135 cruise: FL280, 440-460 kt
-  const cruiseAlt  = 8534;  // meters ~ FL280
-  // Climb/cruise/descend profile
+  const cruiseAlt = 8534; // FL280
   let altM;
-  if (elapsed < 0.15)       altM = cruiseAlt * (elapsed / 0.15);
-  else if (elapsed > 0.85)  altM = cruiseAlt * ((1 - elapsed) / 0.15);
-  else                      altM = cruiseAlt + seed * 80;
-
-  const speed_ms   = 225 + seed2 * 8;          // ~440-460 kt in m/s
-  const heading    = 72 + seed3 * 3;            // ENE toward FEZ, slight wobble
-  const vertRate   = elapsed < 0.15 ? 8.5
-                   : elapsed > 0.85 ? -7.2
-                   : seed * 0.5;
-
+  if(elapsed < 0.15)      altM = cruiseAlt * (elapsed / 0.15);
+  else if(elapsed > 0.85) altM = cruiseAlt * ((1 - elapsed) / 0.15);
+  else                    altM = cruiseAlt + seed * 80;
+  const speed_ms = 225 + seed2 * 8;
+  const heading  = 72 + seed3 * 3;
   return {
     icao24:      icao24 || "020035",
     callsign:    "AJS03",
     country:     "Morocco",
-    lat,
-    lon,
+    lat, lon,
     onGround:    false,
     heading,
-    vertRate_ms: vertRate,
+    vertRate_ms: elapsed < 0.15 ? 8.5 : elapsed > 0.85 ? -7.2 : seed * 0.5,
     squawk:      "2341",
     lastContact: Math.floor(now / 1000),
     speed_kt:    Math.round(speed_ms * 1.94384),
