@@ -241,14 +241,15 @@ function FField({ label, value, onChange, type="text", min, max, placeholder, st
   );
 }
 
-function FSelect({ label, value, onChange, options }) {
+function FSelect({ label, value, onChange, options, placeholder }) {
   return (
     <div>
       <FLabel>{label}</FLabel>
       <select value={value} onChange={e=>onChange(e.target.value)}
         style={{ width:"100%", height:48, boxSizing:"border-box", background:C.bg,
                  border:"1.5px solid "+C.border, borderRadius:10, padding:"0 14px",
-                 color:C.text, fontSize:14, outline:"none", appearance:"none" }}>
+                 color:value?C.text:C.slateL, fontSize:14, outline:"none", appearance:"none" }}>
+        {placeholder&&<option value="">-- Choisir --</option>}
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
@@ -1253,7 +1254,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   const ROLES = ["TRI","CM1","CM2","CC"];
   const [nom,setNom]       = useState("");
   const [prenom,setPrenom] = useState("");
-  const [role,setRole]     = useState("TRI");
+  const [role,setRole]     = useState("");
   const [licence,setLic]   = useState("");
   const [editing,setEditing] = useState(null); // id en cours d edition
 
@@ -1268,7 +1269,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
       const newId = Math.max(0,...(crew||[]).map(m=>m.id))+1;
       setCrew(c => [...c, {id:newId,nom:nom.trim(),prenom:prenom.trim(),role,licence:licence.trim()}]);
     }
-    setNom("");setPrenom("");setRole("CM1");setLic("");
+    setNom("");setPrenom("");setRole("");setLic("");
     triggerSaved();
   };
 
@@ -1278,7 +1279,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   };
 
   const remove = id => setCrew(c => c.filter(m => m.id!==id));
-  const cancel = () => { setEditing(null);setNom("");setPrenom("");setRole("CM1");setLic(""); };
+  const cancel = () => { setEditing(null);setNom("");setPrenom("");setRole("");setLic(""); };
 
   const roleColor = r => r==="TRI"?"#7C3AED":r==="CM1"?"#0F1F3D":r==="CM2"?"#0369A1":"#00936A";
   const roleBg    = r => r==="TRI"?"#EDE9FE":r==="CM1"?"#E0E7FF":r==="CM2"?"#E0F2FE":"#D1FAE5";
@@ -1293,7 +1294,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
             <FField label="Prenom *" value={prenom} onChange={setPrenom}/>
           </FGrid>
           <FGrid>
-            <FSelect label="Role" value={role} onChange={setRole}
+            <FSelect label="Role" value={role} onChange={setRole} placeholder={true}
               options={ROLES.map(r=>({value:r,label:r==="TRI"?"TRI — Type Rating Instructor":r==="CM1"?"CM1 — Commandant":r==="CM2"?"CM2 — Copilote":"CC — Hotesse"}))}/>
             <FField label="Licence / Matricule" value={licence} onChange={setLic}/>
           </FGrid>
