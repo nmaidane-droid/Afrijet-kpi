@@ -1499,11 +1499,11 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
               </div>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>openEdit(m,i)}
-                  style={{background:"white",border:"1.5px solid "+C.border,borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",color:C.slate,WebkitTapHighlightColor:"transparent"}}>
+                  style={{background:"white",border:"1.5px solid "+C.border,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer",color:C.slate,WebkitTapHighlightColor:"transparent"}}>
                   ✏ Modifier
                 </button>
                 <button onClick={()=>openResolve(m,i)}
-                  style={{background:"#00936A",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,color:"white",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  style={{background:"#00936A",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,color:"white",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
                   ✓ Résoudre
                 </button>
               </div>
@@ -2562,7 +2562,7 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, aler
       {/* ── Historique MEL résolus ── */}
       <Card>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-          <SectionTitle>🔧 Historique MEL résolus ({filteredMelHist.length})</SectionTitle>
+          <div style={{fontSize:11,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:"0.08em"}}>🔧 MEL Résolus</div>
           <div style={{display:"flex",gap:6}}>
             {["7j","30j","Tout"].map(f=>(
               <button key={f} onClick={()=>setMelFilter(f)}
