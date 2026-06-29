@@ -1194,7 +1194,7 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
         )}
         <FGrid><FField label="N Vol *" value={num} onChange={setNum}/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
         <FSection title="Route" color="#0F1F3D"/>
-        <FGrid><FAirport label="Depart" value={from_} onChange={setFrom}/><FAirport label="Arrivee" value={to} onChange={setTo}/></FGrid>
+        <FGrid><FAirport label="Depart — Code IATA" value={from_} onChange={setFrom}/><FAirport label="Arrivee — Code IATA" value={to} onChange={setTo}/></FGrid>
         <FSection title="Horaires planifies" color="#0F1F3D"/>
         <FGrid><FField label="Depart prevu *" value={dep} onChange={setDep} type="time"/></FGrid>
         <FSection title="Passagers prevus" color="#0F1F3D"/>
