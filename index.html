@@ -1497,9 +1497,16 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                 <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
                 <div style={{fontSize:10,color:C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}</div>
               </div>
-              <button onClick={()=>openResolve(m,i)} style={{background:"#00936A",border:"none",borderRadius:8,padding:"4px 8px",fontSize:10,fontWeight:700,color:"white",cursor:"pointer",WebkitTapHighlightColor:"transparent",flexShrink:0}}>✓ Résoudre</button>
-              <button onClick={()=>openEdit(m,i)} style={{background:"none",border:"none",fontSize:15,cursor:"pointer",color:C.slate,padding:"4px",WebkitTapHighlightColor:"transparent"}}>✏</button>
-              <button onClick={()=>deleteMel(i)} style={{background:"none",border:"none",fontSize:15,cursor:"pointer",color:C.danger,padding:"4px",WebkitTapHighlightColor:"transparent"}}>🗑</button>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button onClick={()=>openEdit(m,i)}
+                  style={{background:"white",border:"1.5px solid "+C.border,borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",color:C.slate,WebkitTapHighlightColor:"transparent"}}>
+                  ✏ Modifier
+                </button>
+                <button onClick={()=>openResolve(m,i)}
+                  style={{background:"#00936A",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,color:"white",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  ✓ Résoudre
+                </button>
+              </div>
             </div>
           ))}
           <button onClick={openAdd}
@@ -2509,38 +2516,26 @@ function ScreenCarte({ flights, ac, moroccoTraffic, icao24 }) {
 function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist }) {
   const all=computeAlerts(kpis,flights,maintData,aircraft);
   const active=all.filter(a=>!dismissed.includes(a.id));
-  const [filter,setFilter]=React.useState("30j");
   const colors={danger:{bg:"#FEE2E2",border:"#DC2626",text:"#DC2626"},warn:{bg:"#FEF3C7",border:"#D97706",text:"#D97706"}};
-
-  // Filter history
+  const [melFilter,setMelFilter]=React.useState("Tout");
   const now=new Date();
-  const days=filter==="7j"?7:filter==="30j"?30:3650;
-  const hist=(alertHist||[]).filter(e=>{
-    const d=new Date(e.date);
+  const filteredMelHist=(melHist||[]).filter(m=>{
+    if(melFilter==="Tout") return true;
+    const days=melFilter==="7j"?7:30;
+    const d=new Date(m.resolvedAt||m.dateResolution);
     return (now-d)/(1000*60*60*24)<=days;
   });
-  const histResolved=hist.filter(e=>e.status==="resolue");
-  const histActive=hist.filter(e=>e.status==="active");
-
-  const fmtDate=iso=>{
-    const d=new Date(iso);
-    return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"2-digit"})+" "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
-  };
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:14,textAlign:"center"}}>
           <div style={{fontSize:28,fontWeight:800,color:active.length>0?C.danger:C.emerald}}>{active.length}</div>
-          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Actives</div>
+          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>MEL Actifs</div>
         </div>
         <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:14,textAlign:"center"}}>
-          <div style={{fontSize:28,fontWeight:800,color:C.emerald}}>{histResolved.length}</div>
-          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Résolues</div>
-        </div>
-        <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:14,textAlign:"center"}}>
-          <div style={{fontSize:28,fontWeight:800,color:C.slate}}>{hist.length}</div>
-          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>Total</div>
+          <div style={{fontSize:28,fontWeight:800,color:C.emerald}}>{(melHist||[]).length}</div>
+          <div style={{fontSize:10,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>MEL Résolus</div>
         </div>
       </div>
 
@@ -2560,73 +2555,30 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, aler
               <div style={{fontWeight:700,fontSize:13,color:cl.text}}>{a.msg}</div>
               <div style={{fontSize:10,color:C.slate,marginTop:2}}>{a.sev==="danger"?"CRITIQUE":"ATTENTION"}</div>
             </div>
-            <button onClick={()=>setDismissed(a.id)}
-              style={{background:"none",border:"none",color:cl.text,fontSize:18,cursor:"pointer",padding:4,WebkitTapHighlightColor:"transparent"}}>✓</button>
           </div>
         );
       })}
 
-      {/* Historique */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
-        <SectionTitle>📋 Historique</SectionTitle>
-        <div style={{display:"flex",gap:6}}>
-          {["7j","30j","Tout"].map(f=>(
-            <button key={f} onClick={()=>setFilter(f)}
-              style={{padding:"3px 10px",borderRadius:8,border:"1px solid "+C.border,
-                background:filter===f?C.navy:"white",color:filter===f?"white":C.slate,
-                fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-              {f}
-            </button>
-          ))}
-          {(alertHist||[]).length>0&&(
-            <button onClick={()=>{if(window.confirm("Effacer tout l'historique ?"))setAlertHist([]);}}
-              style={{padding:"3px 10px",borderRadius:8,border:"1px solid #DC2626",
-                background:"white",color:"#DC2626",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-              🗑
-            </button>
-          )}
-        </div>
-      </div>
-
-      {hist.length===0?(
-        <div style={{background:C.bg,borderRadius:12,padding:20,textAlign:"center",color:C.slate,fontSize:12}}>
-          Aucun historique sur cette période
-        </div>
-      ):(
-        <Card>
-          {hist.map((e,i)=>{
-            const cl=colors[e.sev]||colors.warn;
-            const isResolved=e.status==="resolue";
-            return (
-              <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",
-                borderBottom:i<hist.length-1?"1px solid "+C.border:"none"}}>
-                <span style={{fontSize:18,flexShrink:0}}>{e.icon}</span>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:11,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.msg}</div>
-                  <div style={{fontSize:10,color:C.slateL,marginTop:2}}>{fmtDate(e.date)}</div>
-                  {isResolved&&e.resolvedAt&&(
-                    <div style={{fontSize:10,color:C.emerald,marginTop:1}}>✓ Résolu {fmtDate(e.resolvedAt)}</div>
-                  )}
-                </div>
-                <span style={{
-                  background:isResolved?"#D1FAE5":cl.bg,
-                  color:isResolved?C.emerald:cl.text,
-                  padding:"2px 8px",borderRadius:6,fontSize:9,fontWeight:700,flexShrink:0
-                }}>{isResolved?"RÉSOLU":e.sev==="danger"?"CRITIQUE":"ATTENTION"}</span>
-              </div>
-            );
-          })}
-        </Card>
-      )}
-
       {/* ── Historique MEL résolus ── */}
       <Card>
-        <SectionTitle>Historique MEL résolus ({(melHist||[]).length})</SectionTitle>
-        {(melHist||[]).length===0?(
-          <div style={{textAlign:"center",color:C.slateL,fontSize:12,padding:"12px 0"}}>Aucun MEL résolu</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+          <SectionTitle>🔧 Historique MEL résolus ({filteredMelHist.length})</SectionTitle>
+          <div style={{display:"flex",gap:6}}>
+            {["7j","30j","Tout"].map(f=>(
+              <button key={f} onClick={()=>setMelFilter(f)}
+                style={{padding:"3px 10px",borderRadius:8,border:"1px solid "+C.border,
+                  background:melFilter===f?C.navy:"white",color:melFilter===f?"white":C.slate,
+                  fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+        {filteredMelHist.length===0?(
+          <div style={{textAlign:"center",color:C.slateL,fontSize:12,padding:"12px 0"}}>Aucun MEL résolu sur cette période</div>
         ):(
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {(melHist||[]).map((m,i)=>{
+            {filteredMelHist.map((m,i)=>{
               const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
               const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
               const [expanded,setExpanded]=React.useState(false);
