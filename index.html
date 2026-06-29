@@ -825,7 +825,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
     );
     if (markRef.current) markRef.current.remove();
     // rotation Mapbox : 0° = nord, sens horaire — emoji ✈ pointe est (90°) donc on soustrait 90
-    markRef.current = new window.mapboxgl.Marker({element:el, rotation:(acData.heading||0)-90, rotationAlignment:"map"})
+    markRef.current = new window.mapboxgl.Marker({element:el, rotation:(acData.heading||0)-90, rotationAlignment:"viewport"})
       .setLngLat([acData.lon, acData.lat])
       .setPopup(popup)
       .addTo(map);
