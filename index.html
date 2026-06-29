@@ -810,7 +810,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
     if (!window.mapboxgl || !acData?.lat) return;
     const color = acData.simulated ? "#A0720A" : "#00936A";
     const el = document.createElement("div");
-    el.style.cssText = "font-size:28px;color:"+color+";filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));transform:rotate("+((acData.heading||0)-90)+"deg);line-height:1;cursor:pointer;transition:transform 1s";
+    el.style.cssText = "font-size:28px;color:"+color+";filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));line-height:1;cursor:pointer;";
     el.textContent = "✈";
     const popup = new window.mapboxgl.Popup({offset:20}).setHTML(
       "<div style='font-family:Arial;padding:6px 8px'>" +
@@ -824,7 +824,8 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
       "</div></div>"
     );
     if (markRef.current) markRef.current.remove();
-    markRef.current = new window.mapboxgl.Marker({element:el})
+    // rotation Mapbox : 0° = nord, sens horaire — emoji ✈ pointe est (90°) donc on soustrait 90
+    markRef.current = new window.mapboxgl.Marker({element:el, rotation:(acData.heading||0)-90, rotationAlignment:"map"})
       .setLngLat([acData.lon, acData.lat])
       .setPopup(popup)
       .addTo(map);
