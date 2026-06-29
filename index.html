@@ -1822,34 +1822,75 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           </button>
         ))}
         {showSat&&(
-          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:9999,background:"white",display:"flex",flexDirection:"column"}}>
-            <div style={{background:C.navy,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-              <span style={{color:"white",fontWeight:700,fontSize:14}}>📋 Formulaire Satisfaction</span>
+          <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",flexDirection:"column",background:"#0F1F3D"}}>
+            <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"2px solid #A0720A"}}>
+              <div>
+                <div style={{color:"white",fontWeight:800,fontSize:14}}>📋 Formulaire Satisfaction</div>
+                <div style={{color:"#A0720A",fontSize:10}}>Afrijet Sahara</div>
+              </div>
               <button onClick={()=>setShowSat(false)}
-                style={{background:"none",border:"1.5px solid white",color:"white",borderRadius:8,padding:"4px 12px",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-                ✕ Fermer
+                style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"8px 16px",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                Fermer
               </button>
             </div>
-            <iframe src="https://afrijet-kpi.vercel.app/Satisfaction_Passager_Afrijet_v2.pdf"
-              sandbox="allow-same-origin allow-scripts"
-              style={{flex:1,border:"none",width:"100%",display:"block"}}
-              scrolling="yes"/>
+            <div style={{flex:1,overflowY:"auto",background:"white"}}>
+              <a href="https://afrijet-kpi.vercel.app/Satisfaction_Passager_Afrijet_v2.pdf"
+                target="_blank" rel="noopener noreferrer"
+                style={{display:"block",margin:"12px 16px",padding:"12px",background:"#7C3AED",borderRadius:10,color:"white",textDecoration:"none",textAlign:"center",fontWeight:700,fontSize:14}}>
+                📥 Télécharger le formulaire PDF
+              </a>
+              <div style={{padding:"16px",fontFamily:"Arial,sans-serif"}}>
+                <div style={{background:"linear-gradient(135deg,#0F1F3D,#1D3461)",padding:"16px",borderRadius:10,marginBottom:16}}>
+                  <div style={{color:"#A0720A",fontSize:9,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Afrijet Sahara</div>
+                  <div style={{color:"white",fontSize:18,fontWeight:800}}>Enquête de Satisfaction Passager</div>
+                  <div style={{color:"#94A3B8",fontSize:11,marginTop:4}}>EMB 135 · CN-KTA · Votre avis améliore nos services</div>
+                </div>
+                {[
+                  {num:"1",title:"Embarquement & Enregistrement",color:"#0F1F3D",items:["Accueil au sol","Rapidité de l'enregistrement","Information sur le vol","Processus d'embarquement"]},
+                  {num:"2",title:"Confort à Bord",color:"#1D4ED8",items:["Confort du siège","Propreté de la cabine","Température & ventilation","Niveau sonore"]},
+                  {num:"3",title:"Service Cabin Crew",color:"#00936A",items:["Accueil à bord","Courtoisie & professionnalisme","Réactivité aux demandes","Qualité du service en vol","Annonces & communication"]},
+                  {num:"4",title:"Ponctualité & Opérations",color:"#7C3AED",items:["Respect de l'horaire","Communication en cas de retard"]},
+                ].map(sec=>(
+                  <div key={sec.num} style={{marginBottom:16}}>
+                    <div style={{background:sec.color,color:"white",padding:"8px 12px",borderRadius:"8px 8px 0 0",fontWeight:700,fontSize:12}}>{sec.num}. {sec.title.toUpperCase()}</div>
+                    {sec.items.map(item=>(
+                      <div key={item} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",borderBottom:"1px solid #EEF2F8",background:"white"}}>
+                        <span style={{fontSize:11,color:"#0F1F3D",fontWeight:600}}>{item}</span>
+                        <div style={{display:"flex",gap:6}}>
+                          {[1,2,3,4,5].map(n=>(
+                            <div key={n} style={{width:20,height:20,border:"1.5px solid #DDE3ED",borderRadius:3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#94A3B8"}}>{n}</div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <div style={{marginBottom:16}}>
+                  <div style={{background:"#DC2626",color:"white",padding:"8px 12px",borderRadius:"8px 8px 0 0",fontWeight:700,fontSize:12}}>5. SATISFACTION GLOBALE & NPS</div>
+                  <div style={{padding:"12px",background:"white",border:"1px solid #EEF2F8"}}>
+                    <div style={{fontSize:11,color:"#0F1F3D",fontWeight:600,marginBottom:8}}>Sur une échelle de 0 à 10, recommanderiez-vous Afrijet Sahara ?</div>
+                    <div style={{display:"flex",gap:4}}>
+                      {[0,1,2,3,4,5,6,7,8,9,10].map(n=>(
+                        <div key={n} style={{flex:1,padding:"6px 0",textAlign:"center",background:n<=6?"#FEE2E2":n<=8?"#FEF3C7":"#D1FAE5",borderRadius:4,fontSize:10,fontWeight:700,color:"#0F1F3D"}}>{n}</div>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                      <span style={{fontSize:8,color:"#DC2626"}}>Détracteurs (0-6)</span>
+                      <span style={{fontSize:8,color:"#D97706"}}>Passifs (7-8)</span>
+                      <span style={{fontSize:8,color:"#00936A"}}>Promoteurs (9-10)</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{textAlign:"center",padding:"12px",fontSize:9,color:"#94A3B8"}}>Afrijet Sahara · Formulaire confidentiel</div>
+              </div>
+            </div>
           </div>
         )}
-        {/iPad|iPhone|iPod/.test(navigator.userAgent) ? (
-          <button onClick={()=>setShowSat(true)}
-            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:C.border,background:"white",color:C.slate,textAlign:"center",display:"block",width:"100%"}}>
-            <div style={{fontSize:16,marginBottom:2}}>📋</div>
-            <div>Satisfaction</div>
-          </button>
-        ) : (
-          <a href="https://afrijet-kpi.vercel.app/Satisfaction_Passager_Afrijet_v2.pdf"
-            target="_blank" rel="noopener noreferrer"
-            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:C.border,background:"white",color:C.slate,textDecoration:"none",textAlign:"center",display:"block"}}>
-            <div style={{fontSize:16,marginBottom:2}}>📋</div>
-            <div>Satisfaction</div>
-          </a>
-        )}
+        <button onClick={()=>setShowSat(true)}
+          style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:C.border,background:"white",color:C.slate,textAlign:"center",display:"block",width:"100%"}}>
+          <div style={{fontSize:16,marginBottom:2}}>📋</div>
+          <div>Satisfaction</div>
+        </button>
       </div>
       {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved}/>}
       {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
