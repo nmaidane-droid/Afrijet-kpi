@@ -3446,10 +3446,13 @@ function App() {
                     const fm=f.revenus>0?Math.round((1-f.couts/f.revenus)*100):0;
                     doc.setFillColor(i%2===0?248:255,i%2===0?250:255,i%2===0?252:255);
                     doc.rect(M,y-3,CW,6,"F");
+                    // Mois — left
                     doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(7.5);
                     doc.text(f.mois,M+3,y);
+                    // Revenus — right aligned to col2
                     doc.setFont("helvetica","normal");doc.setTextColor(71,85,105);
-                    doc.text(fmtMAD(f.revenus)+" MAD",M+CW*0.45,y);
+                    doc.text(fmtMAD(f.revenus)+" MAD",M+CW-28,y,"right");
+                    // Marge — far right
                     const mc=fm>0?[0,147,106]:fm===0?[217,119,6]:[220,38,38];
                     doc.setTextColor(...mc);doc.setFont("helvetica","bold");
                     doc.text(fm+"%",M+CW-3,y,"right");
