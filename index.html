@@ -213,7 +213,7 @@ function FField({ label, value, onChange, type="text", min, max, placeholder, st
     <div>
       <FLabel>{label}</FLabel>
       <input type={type} value={value} min={min} max={max} step={step} placeholder={placeholder}
-        onChange={handleChange}
+        onChange={handleChange} autoComplete="off" autoCorrect="off"
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={{ width:"100%", height:48, boxSizing:"border-box",
                  background:focused?"#FFF":C.bg, border:"1.5px solid "+(focused?C.gold:C.border),
