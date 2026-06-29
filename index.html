@@ -1309,18 +1309,18 @@ function FormEquipage({ crew, setCrew, saved }) {
 
 function FormMaint({ onSubmit, maintData, aircraft, saved }) {
   const md=maintData||{};
-  const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
-  const acInfo=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{};
-  const [ttaf,setTtaf]=useState(String(acInfo.ttaf||""));
-  const [nextH,setNextH]=useState(String(acInfo.nextCheckH||""));
-  const [bCheckH,setBCheckH]=useState(String(acInfo.bCheckH||""));
-  const [cCheckH,setCCheckH]=useState(String(acInfo.cCheckH||""));
-  const [evtMoteur,setEvtMoteur]=useState(String(acInfo.evtMoteur||""));
-  const [mels,setMels]=useState(()=>(acInfo.mels||[]));
+  const initAc=aircraft&&aircraft.length>0?aircraft[0]:{};
+  const [acId,setAcId]=useState(initAc.id||"");
+  const [ttaf,setTtaf]=useState(String(initAc.ttaf||""));
+  const [nextH,setNextH]=useState(String(initAc.nextCheckH||""));
+  const [bCheckH,setBCheckH]=useState(String(initAc.bCheckH||""));
+  const [cCheckH,setCCheckH]=useState(String(initAc.cCheckH||""));
+  const [evtMoteur,setEvtMoteur]=useState(String(initAc.evtMoteur||""));
+  const [mels,setMels]=useState(initAc.mels||[]);
 
   // Reload when aircraft selection changes
   useEffect(()=>{
-    const ac=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{};
+    const ac=aircraft?.find(a=>a.id===acId)||{};
     setTtaf(String(ac.ttaf||""));
     setNextH(String(ac.nextCheckH||""));
     setBCheckH(String(ac.bCheckH||""));
