@@ -1833,13 +1833,178 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
                 Fermer
               </button>
             </div>
-            <div style={{flex:1,overflowY:"auto",background:"white"}}>
-              <a href="https://afrijet-kpi.vercel.app/Satisfaction_Passager_Afrijet_v2.pdf"
-                target="_blank" rel="noopener noreferrer"
-                style={{display:"block",margin:"12px 16px",padding:"12px",background:"#7C3AED",borderRadius:10,color:"white",textDecoration:"none",textAlign:"center",fontWeight:700,fontSize:14}}>
-                📥 Télécharger le formulaire PDF
-              </a>
-              <div style={{padding:"16px",fontFamily:"Arial,sans-serif"}}>
+              <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0}}>
+                <button onClick={()=>{
+                  if(!window.jspdf){alert("jsPDF non charge. Verifiez votre connexion.");return;}
+                  try {
+                    const {jsPDF} = window.jspdf;
+                    const doc = new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+                    const W=210, H=297, M=15, CW=W-2*M;
+                    const NAVY=[15,31,61], GOLD=[160,114,10], EMERALD=[0,147,106];
+                    const SLATE=[100,116,139], RED=[220,38,38], BLUE=[29,78,216];
+                    const PURPLE=[124,58,237], WHITE=[255,255,255], LIGHT=[238,242,248];
+                    // Header
+                    doc.setFillColor(...NAVY);doc.rect(0,0,W,28,"F");
+                    doc.setFillColor(...GOLD);doc.rect(0,28,W,1.5,"F");
+                    doc.addImage(LOGO_B64,"JPEG",M,4,30,10);
+                    doc.setTextColor(...WHITE);doc.setFont("helvetica","bold");doc.setFontSize(14);
+                    doc.text("Enquête de Satisfaction Passager",M+35,12);
+                    doc.setFont("helvetica","normal");doc.setFontSize(8);
+                    doc.setTextColor(148,163,184);
+                    doc.text("EMB 135  ·  CN-KTA  ·  Votre avis améliore nos services",M+35,18);
+                    let y=36;
+                    // Info row
+                    doc.setFillColor(...LIGHT);doc.rect(M,y,CW,10,"F");
+                    const fields=[["N° Vol",0.18],["Date",0.18],["Route",0.22],["Classe",0.15],["Siège",0.13],["CM1",0.14]];
+                    let fx=M;
+                    fields.forEach(([lbl,w])=>{
+                      const fw=CW*w;
+                      doc.setTextColor(...SLATE);doc.setFont("helvetica","bold");doc.setFontSize(6.5);
+                      doc.text(lbl.toUpperCase(),fx+2,y+4);
+                      doc.setDrawColor(148,163,184);doc.setLineWidth(0.3);
+                      doc.line(fx+2,y+8,fx+fw-2,y+8);
+                      fx+=fw;
+                    });
+                    y+=14;
+                    // Section helper
+                    const section=(title,r,g,b)=>{
+                      if(y>260){doc.addPage();y=15;}
+                      doc.setFillColor(r,g,b);doc.rect(M,y,CW,7,"F");
+                      doc.setTextColor(...WHITE);doc.setFont("helvetica","bold");doc.setFontSize(8);
+                      doc.text("  "+title.toUpperCase(),M+2,y+5);
+                      y+=10;
+                    };
+                    const ratingRow=(label,sublabel="")=>{
+                      if(y>268){doc.addPage();y=15;}
+                      doc.setFillColor(248,250,252);doc.rect(M,y,CW,8,"F");
+                      doc.setDrawColor(221,227,237);doc.setLineWidth(0.2);doc.rect(M,y,CW,8,"S");
+                      doc.setTextColor(...NAVY);doc.setFont("helvetica","bold");doc.setFontSize(8.5);
+                      doc.text(label,M+3,y+4);
+                      if(sublabel){doc.setFont("helvetica","normal");doc.setFontSize(6.5);doc.setTextColor(...SLATE);doc.text(sublabel,M+3,y+7);}
+                      for(let i=0;i<5;i++){
+                        const bx=M+CW*0.62+i*13;
+                        doc.setFillColor(...WHITE);doc.setDrawColor(...NAVY);doc.setLineWidth(0.6);
+                        doc.rect(bx,y+2,4,4,"FD");
+                        doc.setFillColor(...GOLD);doc.setFont("helvetica","normal");doc.setFontSize(6);
+                        doc.text(String(i+1),bx+5,y+5.5);
+                      }
+                      y+=9;
+                    };
+                    const yesnoRow=(label)=>{
+                      if(y>268){doc.addPage();y=15;}
+                      doc.setFillColor(244,247,251);doc.rect(M,y,CW,7,"F");
+                      doc.setDrawColor(221,227,237);doc.setLineWidth(0.2);doc.rect(M,y,CW,7,"S");
+                      doc.setTextColor(...NAVY);doc.setFont("helvetica","bold");doc.setFontSize(8.5);
+                      doc.text(label,M+3,y+4.5);
+                      ["Oui","Non"].forEach((opt,i)=>{
+                        const bx=M+CW*0.75+i*18;
+                        doc.setFillColor(...WHITE);doc.setDrawColor(...NAVY);doc.setLineWidth(0.6);
+                        doc.rect(bx,y+2,4,4,"FD");
+                        doc.setFont("helvetica","bold");doc.setFontSize(8);doc.setFillColor(...NAVY);
+                        doc.text(opt,bx+5,y+5.5);
+                      });
+                      y+=8;
+                    };
+                    // Column headers
+                    doc.setTextColor(...SLATE);doc.setFont("helvetica","bold");doc.setFontSize(6.5);
+                    doc.text("CRITÈRE D'ÉVALUATION",M+2,y+3);
+                    doc.text("NOTE (cochez une case)",M+CW*0.62,y+3);
+                    y+=7;
+                    section("1. Embarquement & Enregistrement",...NAVY);
+                    ratingRow("Accueil au sol","Personnel au sol, check-in");
+                    ratingRow("Rapidité de l'enregistrement","File d'attente, efficacité");
+                    ratingRow("Information sur le vol","Affichages, annonces");
+                    ratingRow("Processus d'embarquement","Organisation, fluidité");
+                    y+=2;
+                    section("2. Confort à Bord",...BLUE);
+                    ratingRow("Confort du siège","Espace, rembourrage, tablette");
+                    ratingRow("Propreté de la cabine","Siège, hublot, sol, toilettes");
+                    ratingRow("Température & ventilation","Confort thermique");
+                    ratingRow("Niveau sonore","Bruit moteurs, cabine");
+                    y+=2;
+                    section("3. Service Cabin Crew",...EMERALD);
+                    ratingRow("Accueil à bord","Sourire, présentation");
+                    ratingRow("Courtoisie & professionnalisme","Attitude, disponibilité");
+                    ratingRow("Réactivité aux demandes","Temps de réponse");
+                    ratingRow("Qualité du service en vol","Boissons, journaux, assistance");
+                    ratingRow("Annonces & communication","Clarté des informations");
+                    y+=2;
+                    section("4. Ponctualité & Opérations",...PURPLE);
+                    ratingRow("Respect de l'horaire","Départ et arrivée à l'heure");
+                    ratingRow("Communication en cas de retard","Information passagers");
+                    yesnoRow("Avez-vous subi un retard ?");
+                    y+=2;
+                    section("5. Satisfaction Globale & NPS",...RED);
+                    doc.setFillColor(...WHITE);doc.setDrawColor(221,227,237);doc.rect(M,y,CW,22,"FD");
+                    doc.setTextColor(...NAVY);doc.setFont("helvetica","bold");doc.setFontSize(8.5);
+                    doc.text("Sur une échelle de 0 à 10, recommanderiez-vous Afrijet Sahara à vos proches ?",M+3,y+5);
+                    doc.setFont("helvetica","normal");doc.setFontSize(7);doc.setTextColor(...SLATE);
+                    doc.text("0 = Pas du tout probable   |   10 = Très probable",M+3,y+9);
+                    const bw=(CW-6)/11;
+                    for(let i=0;i<=10;i++){
+                      const bx=M+3+i*bw;
+                      const col=i<=6?[254,226,226]:i<=8?[254,243,199]:[209,250,229];
+                      doc.setFillColor(...col);doc.setDrawColor(221,227,237);doc.rect(bx,y+11,bw-1,7,"FD");
+                      doc.setFillColor(...NAVY);doc.setFont("helvetica","bold");doc.setFontSize(9);
+                      doc.text(String(i),bx+(bw-1)/2,y+16,{align:"center"});
+                    }
+                    doc.setTextColor(...RED);doc.setFont("helvetica","normal");doc.setFontSize(6.5);doc.text("Détracteurs (0-6)",M+3,y+21);
+                    doc.setTextColor(217,119,6);doc.drawCentredString&&doc.text("Passifs (7-8)",M+CW/2,y+21,{align:"center"});
+                    doc.setTextColor(...EMERALD);doc.text("Promoteurs (9-10)",M+CW-3,y+21,{align:"right"});
+                    y+=26;
+                    // Note globale
+                    doc.setFillColor(...LIGHT);doc.rect(M,y,CW,8,"F");
+                    doc.setTextColor(...NAVY);doc.setFont("helvetica","bold");doc.setFontSize(8.5);
+                    doc.text("Note globale du vol",M+3,y+5);
+                    for(let i=0;i<5;i++){
+                      const bx=M+CW*0.62+i*13;
+                      doc.setFillColor(...WHITE);doc.setDrawColor(...NAVY);doc.setLineWidth(0.6);
+                      doc.rect(bx,y+2,4,4,"FD");
+                      doc.setFillColor(...GOLD);doc.setFont("helvetica","normal");doc.setFontSize(6);
+                      doc.text(String(i+1),bx+5,y+5.5);
+                    }
+                    y+=12;
+                    // Commentaires
+                    doc.setFillColor(...NAVY);doc.rect(M,y,CW,7,"F");
+                    doc.setTextColor(...WHITE);doc.setFont("helvetica","bold");doc.setFontSize(8);
+                    doc.text("  6. COMMENTAIRES & SUGGESTIONS",M+2,y+5);
+                    y+=9;
+                    doc.setFillColor(...WHITE);doc.setDrawColor(221,227,237);doc.rect(M,y,CW,28,"FD");
+                    for(let i=0;i<5;i++){doc.setDrawColor(238,242,248);doc.setLineWidth(0.2);doc.line(M+3,y+6+i*5,M+CW-3,y+6+i*5);}
+                    y+=32;
+                    // Profil
+                    doc.setFillColor(71,85,105);doc.rect(M,y,CW,7,"F");
+                    doc.setTextColor(...WHITE);doc.setFont("helvetica","bold");doc.setFontSize(8);
+                    doc.text("  7. PROFIL VOYAGEUR (optionnel)",M+2,y+5);
+                    y+=9;
+                    doc.setFillColor(...LIGHT);doc.rect(M,y,CW,14,"F");
+                    ["Affaires","Tourisme","Famille","Autre"].forEach((m,i)=>{
+                      doc.setFillColor(...WHITE);doc.setDrawColor(...NAVY);doc.setLineWidth(0.6);
+                      doc.rect(M+3+i*38,y+2,3.5,3.5,"FD");
+                      doc.setTextColor(...NAVY);doc.setFont("helvetica","normal");doc.setFontSize(7.5);
+                      doc.text(m,M+8+i*38,y+5);
+                    });
+                    ["1er vol","Occasionnel","Régulier","Fréquent"].forEach((f,i)=>{
+                      doc.setFillColor(...WHITE);doc.setDrawColor(...NAVY);doc.setLineWidth(0.6);
+                      doc.rect(M+3+i*38,y+8,3.5,3.5,"FD");
+                      doc.setTextColor(...NAVY);doc.setFont("helvetica","normal");doc.setFontSize(7.5);
+                      doc.text(f,M+8+i*38,y+11);
+                    });
+                    // Footer
+                    const PH=doc.internal.pageSize.getHeight();
+                    doc.setFillColor(...NAVY);doc.rect(0,PH-12,W,12,"F");
+                    doc.setFillColor(...GOLD);doc.rect(0,PH-12,W,1.5,"F");
+                    doc.setTextColor(...WHITE);doc.setFont("helvetica","normal");doc.setFontSize(7.5);
+                    doc.text("Merci pour votre confiance  ·  Afrijet Sahara  ·  EMB 135 CN-KTA",W/2,PH-5,{align:"center"});
+                    doc.setTextColor(...GOLD);doc.setFont("helvetica","bold");doc.setFontSize(7);
+                    doc.text("Formulaire confidentiel",W-M,PH-5,{align:"right"});
+                    doc.save("Satisfaction_Passager_Afrijet.pdf");
+                  } catch(e){alert("Erreur: "+e.message);}
+                }}
+                style={{width:"100%",padding:"12px",background:"#7C3AED",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  📥 Télécharger le formulaire PDF
+                </button>
+            <div style={{flex:1,overflowY:"auto",background:"white",padding:"16px"}}>
                 <div style={{background:"linear-gradient(135deg,#0F1F3D,#1D3461)",padding:"16px",borderRadius:10,marginBottom:16}}>
                   <div style={{color:"#A0720A",fontSize:9,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Afrijet Sahara</div>
                   <div style={{color:"white",fontSize:18,fontWeight:800}}>Enquête de Satisfaction Passager</div>
