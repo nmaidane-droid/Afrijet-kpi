@@ -121,8 +121,11 @@ function clearStorage() {
     const keys = Object.keys(localStorage).filter(k => k.startsWith(PFX));
     keys.forEach(k => localStorage.removeItem(k));
   } catch(_e) {}
+  // Supabase delete in background - don't await
   if(supabase) {
-    supabase.from("kv_store").delete().like("key", PFX+"%").catch(()=>{});
+    setTimeout(()=>{
+      supabase.from("kv_store").delete().like("key", PFX+"%").catch(()=>{});
+    }, 0);
   }
 }
 
@@ -3021,7 +3024,7 @@ function App() {
     setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
   };
 
-  const doReset = async () => {
+  const doReset = () => {
     clearStorage();
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setReport(null);setReset(false);setTab("forms");
