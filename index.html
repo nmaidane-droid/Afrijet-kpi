@@ -1356,7 +1356,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   );
 }
 
-function FormMaint({ onSubmit, maintData, aircraft, saved }) {
+function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   const md=maintData||{};
   const initAc=aircraft&&aircraft.length>0?aircraft[0]:{};
   const [acId,setAcId]=useState(initAc.id||"");
@@ -1383,6 +1383,13 @@ function FormMaint({ onSubmit, maintData, aircraft, saved }) {
   const [mMel,setMMel]=useState("");
   const [mExp,setMExp]=useState("");
   const [mSev,setMSev]=useState("B");
+  const [showResolve,setShowResolve]=useState(false);
+  const [resolveIdx,setResolveIdx]=useState(null);
+  const [rDate,setRDate]=useState("");
+  const [rTech,setRTech]=useState("");
+  const [rAction,setRAction]=useState("");
+  const [rOT,setROT]=useState("");
+  const [resolveSaved,setResolveSaved]=useState(false);
 
   const openAdd=()=>{setMSys("");setMMel("");setMExp("");setMSev("B");setEditIdx(null);setShowMelForm(true);};
   const openEdit=(m,i)=>{setMSys(m.sys);setMMel(m.mel);setMExp(m.exp);setMSev(m.sev);setEditIdx(i);setShowMelForm(true);};
@@ -1393,6 +1400,33 @@ function FormMaint({ onSubmit, maintData, aircraft, saved }) {
     setShowMelForm(false);
   };
   const deleteMel=i=>setMels(mels.filter((_,idx)=>idx!==i));
+  const openResolve=(m,i)=>{
+    setResolveIdx(i);setRDate("");setRTech("");setRAction("");setROT("");
+    setShowResolve(true);
+  };
+  const saveResolve=()=>{
+    if(!rDate.trim()||!rTech.trim()||!rAction.trim()||!rOT.trim()){
+      alert("Tous les champs sont obligatoires");return;
+    }
+    const ac=aircraft?.find(a=>a.id===acId)||aircraft?.[0];
+    const mel=mels[resolveIdx];
+    const resolved={
+      ...mel,
+      acId, acImmat:ac?.immat||"",
+      dateResolution:rDate.trim(),
+      technicien:rTech.trim().toUpperCase(),
+      action:rAction.trim().toUpperCase(),
+      ot:rOT.trim().toUpperCase(),
+      resolvedAt:new Date().toISOString(),
+    };
+    // Add to melHist via onSubmit signal
+    const newMels=mels.filter((_,idx)=>idx!==resolveIdx);
+    setMels(newMels);
+    setResolveSaved(true);
+    setTimeout(()=>{setResolveSaved(false);setShowResolve(false);},2000);
+    // Pass resolved MEL to parent via onSubmit
+    if(onResolveMel) onResolveMel(resolved);
+  };
   const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
   const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
 
@@ -1463,6 +1497,7 @@ function FormMaint({ onSubmit, maintData, aircraft, saved }) {
                 <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
                 <div style={{fontSize:10,color:C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}</div>
               </div>
+              <button onClick={()=>openResolve(m,i)} style={{background:"#00936A",border:"none",borderRadius:8,padding:"4px 8px",fontSize:10,fontWeight:700,color:"white",cursor:"pointer",WebkitTapHighlightColor:"transparent",flexShrink:0}}>✓ Résoudre</button>
               <button onClick={()=>openEdit(m,i)} style={{background:"none",border:"none",fontSize:15,cursor:"pointer",color:C.slate,padding:"4px",WebkitTapHighlightColor:"transparent"}}>✏</button>
               <button onClick={()=>deleteMel(i)} style={{background:"none",border:"none",fontSize:15,cursor:"pointer",color:C.danger,padding:"4px",WebkitTapHighlightColor:"transparent"}}>🗑</button>
             </div>
@@ -1476,6 +1511,38 @@ function FormMaint({ onSubmit, maintData, aircraft, saved }) {
         <FSubmit label="Enregistrer Maintenance" onClick={submit} saved={saved}/>
       </div>
 
+      {showResolve&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"flex-end"}}>
+          <div style={{background:"white",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px 16px 32px",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{fontWeight:800,fontSize:16,color:C.navy,marginBottom:4}}>Résolution MEL</div>
+            <div style={{fontSize:12,color:C.slate,marginBottom:16}}>{mels[resolveIdx]?.sys||""}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {[["DATE DE RÉSOLUTION",rDate,setRDate,"text","JJ/MM/AAAA"],
+                ["TECHNICIEN",rTech,setRTech,"text","NOM PRÉNOM"],
+                ["ACTION EFFECTUÉE",rAction,setRAction,"text","DESCRIPTION DES TRAVAUX"],
+                ["N° ORDRE DE TRAVAIL",rOT,setROT,"text","OT-XXXXX"]
+              ].map(([lbl,val,setter,type,ph])=>(
+                <div key={lbl}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>{lbl} *</div>
+                  <input value={val} onChange={e=>setter(e.target.value.toUpperCase())}
+                    placeholder={ph} autoComplete="off"
+                    style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+                </div>
+              ))}
+              <div style={{display:"flex",gap:10,marginTop:6}}>
+                <button onClick={()=>setShowResolve(false)}
+                  style={{flex:1,height:46,background:"white",border:"1.5px solid "+C.border,borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",color:C.slate}}>
+                  Annuler
+                </button>
+                <button onClick={saveResolve}
+                  style={{flex:2,height:46,background:resolveSaved?"#00936A":"#DC2626",border:"none",borderRadius:10,fontSize:14,fontWeight:700,color:"white",cursor:"pointer",transition:"background 0.3s"}}>
+                  {resolveSaved?"✅ Enregistré":"✓ Confirmer résolution"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showMelForm&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"flex-end"}}>
           <div style={{background:"white",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px 16px 32px"}}>
@@ -1722,7 +1789,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist }) {
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
   const [showSat,setShowSat]=useState(false);
@@ -2089,7 +2156,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       </div>
       {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved}/>}
       {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
-      {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
+      {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
       {active==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} saved={saved}/>}
       {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {active==="avion" && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
@@ -2439,7 +2506,7 @@ function ScreenCarte({ flights, ac, moroccoTraffic, icao24 }) {
   );
 }
 
-function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft }) {
+function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist }) {
   const all=computeAlerts(kpis,flights,maintData,aircraft);
   const active=all.filter(a=>!dismissed.includes(a.id));
   const [filter,setFilter]=React.useState("30j");
@@ -2551,6 +2618,45 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, aler
           })}
         </Card>
       )}
+
+      {/* ── Historique MEL résolus ── */}
+      <Card>
+        <SectionTitle>Historique MEL résolus ({(melHist||[]).length})</SectionTitle>
+        {(melHist||[]).length===0?(
+          <div style={{textAlign:"center",color:C.slateL,fontSize:12,padding:"12px 0"}}>Aucun MEL résolu</div>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {(melHist||[]).map((m,i)=>{
+              const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
+              const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
+              const [expanded,setExpanded]=React.useState(false);
+              return (
+                <div key={m.id||i} style={{background:C.bg,borderRadius:10,overflow:"hidden"}}>
+                  <div onClick={()=>setExpanded(e=>!e)}
+                    style={{padding:"10px 12px",display:"flex",gap:10,alignItems:"center",cursor:"pointer"}}>
+                    <span style={{background:sevBg(m.sev),color:sevColor(m.sev),padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,flexShrink:0}}>Cat.{m.sev}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
+                      <div style={{fontSize:10,color:C.slate}}>{m.acImmat||""}{m.dateResolution?" · "+m.dateResolution:""}</div>
+                    </div>
+                    <span style={{fontSize:12,color:C.slate}}>{expanded?"▲":"▼"}</span>
+                  </div>
+                  {expanded&&(
+                    <div style={{padding:"0 12px 12px",borderTop:"1px solid "+C.border}}>
+                      {[["Ref. MEL",m.mel],["Expiration d'origine",m.exp],["Date résolution",m.dateResolution],["Technicien",m.technicien],["Action effectuée",m.action],["N° Ordre de travail",m.ot]].map(([lbl,val])=>(
+                        <div key={lbl} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid "+C.bg}}>
+                          <span style={{fontSize:11,color:C.slate,fontWeight:600}}>{lbl}</span>
+                          <span style={{fontSize:11,color:C.text,fontWeight:700,textAlign:"right",maxWidth:"60%"}}>{val||"--"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
@@ -3235,6 +3341,7 @@ function App() {
   const [aircraft,setAircraft] = usePersist("aircraft",INIT_AIRCRAFT);
   const [dismissed,setDism]  = usePersist("dismissed",[]);
   const [alertHist,setAlertHist] = usePersist("alertHist",[]);
+  const [melHist,setMelHist]     = usePersist("melHist",[]);
   const [icao24,setIcao24]   = usePersist("icao24","020035");
   const [ac,setAc]           = useState(null);
   const [mTraffic,setMTraff] = useState([]);
@@ -3249,7 +3356,7 @@ function App() {
   useEffect(()=>{
     const t=setInterval(async()=>{
       if(window.storage){
-        const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist,aircraft};
+        const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist,aircraft,melHist};
         await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
       }
       setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
@@ -3272,7 +3379,7 @@ function App() {
 
   const doSave = async () => {
     if(window.storage){
-      const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist,aircraft};
+      const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist,aircraft,melHist};
       await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
     }
     setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
@@ -3281,7 +3388,7 @@ function App() {
   const doReset = () => {
     clearStorage();
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
-    setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setReport(null);setReset(false);setTab("forms");
+    setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);setReport(null);setReset(false);setTab("forms");
   };
 
   const allAlerts  = computeAlerts(kpis,flights,maintData,aircraft);
@@ -3368,6 +3475,7 @@ function App() {
           flights={flights} crew={crew} setCrew={setCrew}
           maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed} safetyData={safetyData}
           aircraft={aircraft} onUpdateAircraft={setAircraft}
+          melHist={melHist} setMelHist={setMelHist}
           onImport={data=>{
             if(data.flights)   setFlights(data.flights);
             if(data.maintData) setMaint(data.maintData);
@@ -3377,11 +3485,12 @@ function App() {
             if(data.dismissed) setDism(data.dismissed);
             if(data.safetyData)setSafety(data.safetyData);
             if(data.alertHist) setAlertHist(data.alertHist);
+            if(data.melHist)   setMelHist(data.melHist);
             if(data.aircraft)  setAircraft(data.aircraft);
           }}
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
-        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft}/>}
+        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist}/>}
         {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
