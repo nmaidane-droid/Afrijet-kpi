@@ -813,15 +813,21 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
     const el = document.createElement("div");
     el.style.cssText = "width:32px;height:32px;cursor:pointer;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));";
     // SVG avion pointant vers le haut (nord=0°), rotation selon cap
-    el.innerHTML = `<svg width="32" height="32" viewBox="0 0 32 32" style="transform:rotate(${heading}deg);transition:transform 1s" xmlns="http://www.w3.org/2000/svg">
+    el.innerHTML = `<svg width="36" height="36" viewBox="0 0 100 100" style="transform:rotate(${heading}deg);transition:transform 1s" xmlns="http://www.w3.org/2000/svg">
       <!-- Fuselage -->
-      <ellipse cx="16" cy="16" rx="2.5" ry="11" fill="${color}" stroke="white" stroke-width="0.5"/>
-      <!-- Nez -->
-      <ellipse cx="16" cy="6" rx="2" ry="3" fill="${color}"/>
-      <!-- Ailes principales -->
-      <polygon points="16,13 3,21 29,21" fill="${color}" stroke="white" stroke-width="0.5"/>
-      <!-- Empennage -->
-      <polygon points="16,25 10,30 22,30" fill="${color}" stroke="white" stroke-width="0.5"/>
+      <ellipse cx="50" cy="50" rx="7" ry="42" fill="${color}" stroke="white" stroke-width="2"/>
+      <!-- Nez arrondi -->
+      <ellipse cx="50" cy="12" rx="6" ry="8" fill="${color}"/>
+      <!-- Ailes principales grandes -->
+      <polygon points="50,38 8,68 92,68 50,38" fill="${color}" stroke="white" stroke-width="1.5"/>
+      <!-- Réacteurs gauche -->
+      <ellipse cx="22" cy="65" rx="5" ry="8" fill="${color}" stroke="white" stroke-width="1.5"/>
+      <!-- Réacteurs droit -->
+      <ellipse cx="78" cy="65" rx="5" ry="8" fill="${color}" stroke="white" stroke-width="1.5"/>
+      <!-- Empennage horizontal -->
+      <polygon points="50,78 28,92 72,92 50,78" fill="${color}" stroke="white" stroke-width="1.5"/>
+      <!-- Dérive verticale -->
+      <ellipse cx="50" cy="85" rx="3" ry="7" fill="${color}"/>
     </svg>`;
     const popup = new window.mapboxgl.Popup({offset:20}).setHTML(
       "<div style='font-family:Arial;padding:6px 8px'>" +
