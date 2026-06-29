@@ -418,7 +418,7 @@ const WORLD_AIRPORTS = [
 ];
 
 
-function FAirport({ label, value, onChange, placeholder="ex: CMN" }) {
+function FAirport({ label, value, onChange }) {
   const [q, setQ]   = useState(value||"");
   const [open,setO] = useState(false);
   const res = q.length>=2
@@ -432,7 +432,6 @@ function FAirport({ label, value, onChange, placeholder="ex: CMN" }) {
       <input value={q}
         onChange={e=>{setQ(e.target.value);setO(true);onChange(e.target.value.toUpperCase());}}
         onFocus={()=>setO(true)} onBlur={()=>setTimeout(()=>setO(false),150)}
-        placeholder={placeholder}
         style={{ width:"100%", height:48, boxSizing:"border-box", background:C.bg,
                  border:"1.5px solid "+C.border, borderRadius:10, padding:"0 14px",
                  color:C.text, fontSize:14, outline:"none" }}/>
@@ -1113,19 +1112,19 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
             </select>
           </div>
         )}
-        <FGrid><FField label="N Vol *" value={num} onChange={setNum} placeholder="ex: AJS1307"/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
+        <FGrid><FField label="N Vol *" value={num} onChange={setNum}/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
         <FSection title="Route" color="#0F1F3D"/>
-        <FGrid><FAirport label="Depart" value={from_} onChange={setFrom} placeholder="ex: CMN"/><FAirport label="Arrivee" value={to} onChange={setTo} placeholder="ex: AGA"/></FGrid>
+        <FGrid><FAirport label="Depart" value={from_} onChange={setFrom}/><FAirport label="Arrivee" value={to} onChange={setTo}/></FGrid>
         <FSection title="Horaires planifies" color="#0F1F3D"/>
         <FGrid><FField label="Depart prevu *" value={dep} onChange={setDep} type="time"/></FGrid>
         <FSection title="Passagers prevus" color="#0F1F3D"/>
         <FGrid>
-          <FField label={"PAX (0-"+SIEGES+")"} value={pax} onChange={v=>setPax(String(Math.min(SIEGES,Math.max(0,Number(v)||0))))} type="number" min={0} max={SIEGES} placeholder={"ex: "+SIEGES}/>
+          <FField label={"PAX (0-"+SIEGES+")"} value={pax} onChange={v=>setPax(String(Math.min(SIEGES,Math.max(0,Number(v)||0))))} type="number" min={0} max={SIEGES}/>
           <FCalc label="Remplissage" value={pax===''?'--':load+"%"} color={pax===''?C.border:load>=80?"#00936A":load>=60?"#D97706":"#DC2626"}/>
         </FGrid>
         <FSection title={"Carburant embarque — Capacite "+CAPA+" kg"} color="#0F1F3D"/>
         <FGrid>
-          <FField label="Fuel depart (kg)" value={carbDep} onChange={setCDep} type="number" min={0} max={CAPA} placeholder="ex: 4500"/>
+          <FField label="Fuel depart (kg)" value={carbDep} onChange={setCDep} type="number" min={0} max={CAPA}/>
           <FCalc label="Niveau depart" value={fPct!==null?fPct+"%":"--"} sub={carbDep?carbDep+" kg":""} color={fPct!==null?fClr:"#94A3B8"}/>
         </FGrid>
         <FSection title="Equipage" color="#0F1F3D"/>
@@ -1208,13 +1207,13 @@ function FormEquipage({ crew, setCrew, saved }) {
         <FHeader icon="👨‍✈️" title={editing!==null?"Modifier membre":"Ajouter membre"} subtitle="Registre equipage CN-KTA" color="#0369A1"/>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <FGrid>
-            <FField label="Nom *" value={nom} onChange={setNom} placeholder="Alami"/>
-            <FField label="Prenom *" value={prenom} onChange={setPrenom} placeholder="Karim"/>
+            <FField label="Nom *" value={nom} onChange={setNom}/>
+            <FField label="Prenom *" value={prenom} onChange={setPrenom}/>
           </FGrid>
           <FGrid>
             <FSelect label="Role" value={role} onChange={setRole}
               options={ROLES.map(r=>({value:r,label:r==="CM1"?"CM1 — Commandant":r==="CM2"?"CM2 — Copilote":"CC — Hotesse"}))}/>
-            <FField label="Licence / Matricule" value={licence} onChange={setLic} placeholder="ATPL-A 12345"/>
+            <FField label="Licence / Matricule" value={licence} onChange={setLic}/>
           </FGrid>
           <div style={{display:"flex",gap:10}}>
             {editing!==null && (
@@ -1399,18 +1398,18 @@ function FormMaint({ onSubmit, maintData, aircraft, saved }) {
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <div>
                 <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>SYSTÈME</div>
-                <input value={mSys} onChange={e=>setMSys(e.target.value)} placeholder="ex: Passenger Address System"
+                <input value={mSys} onChange={e=>setMSys(e.target.value)}
                   style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}/>
               </div>
               <div>
                 <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>RÉFÉRENCE MEL</div>
-                <input value={mMel} onChange={e=>setMMel(e.target.value)} placeholder="ex: MEL 23-61"
+                <input value={mMel} onChange={e=>setMMel(e.target.value)}
                   style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}/>
               </div>
               <div style={{display:"flex",gap:10}}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>EXPIRATION</div>
-                  <input value={mExp} onChange={e=>setMExp(e.target.value)} placeholder="ex: 30/07/26"
+                  <input value={mExp} onChange={e=>setMExp(e.target.value)}
                     style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}/>
                 </div>
                 <div style={{width:100}}>
@@ -1534,11 +1533,11 @@ function FormFin({ onSubmit, saved }) {
         <FSelect label="Mois" value={mois} onChange={setMois} options={MOIS.map(m=>({value:m,label:m}))}/>
         <FSection title="Revenus et couts (MAD)" color="#7C3AED"/>
         <FGrid>
-          <FField label="Revenus (MAD)" value={rev} onChange={setRev} type="number" min={0} placeholder="ex: 1 240 000"/>
-          <FField label="Couts totaux (MAD)" value={cout} onChange={setCout} type="number" min={0} placeholder="ex: 910 000"/>
+          <FField label="Revenus (MAD)" value={rev} onChange={setRev} type="number" min={0}/>
+          <FField label="Couts totaux (MAD)" value={cout} onChange={setCout} type="number" min={0}/>
         </FGrid>
         <FGrid>
-          <FField label="Cout carburant (MAD)" value={cCarbu} onChange={setCCarbu} type="number" min={0} placeholder="ex: 320 000"/>
+          <FField label="Cout carburant (MAD)" value={cCarbu} onChange={setCCarbu} type="number" min={0}/>
           <FCalc label="Marge brute" value={marge!==null?marge+"%":"--"} color={marge!==null?marge>0?"#00936A":marge===0?"#D97706":"#DC2626":"#94A3B8"}/>
         </FGrid>
         <FSubmit label="Enregistrer Finances" onClick={submit} saved={saved}/>
@@ -1600,14 +1599,14 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
           </select>
         </div>
         <FGrid>
-          <FField label="Immatriculation *" value={immat} onChange={v=>setImmat(v.toUpperCase())} placeholder="CN-KTA"/>
-          <FField label="Type *" value={type} onChange={setType} placeholder="EMB 135"/>
+          <FField label="Immatriculation *" value={immat} onChange={v=>setImmat(v.toUpperCase())}/>
+          <FField label="Type *" value={type} onChange={setType}/>
         </FGrid>
         <FGrid>
-          <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999} placeholder="ex: 18"/>
-          <FField label="Capacité carbu. (kg)" value={capa} onChange={setCapa} type="number" min={0} placeholder="ex: 5700"/>
+          <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999}/>
+          <FField label="Capacité carbu. (kg)" value={capa} onChange={setCapa} type="number" min={0}/>
         </FGrid>
-        <FField label="Code ICAO24 (transpondeur)" value={icao24} onChange={setIcao24} placeholder="ex: 020035"/>
+        <FField label="Code ICAO24 (transpondeur)" value={icao24} onChange={setIcao24}/>
         {/* Summary of existing fleet */}
         {aircraft.length>0&&(
           <Card>
@@ -1956,13 +1955,13 @@ function ScreenOps({ flights, safetyData, onUpdateFlight }) {
                   </div>
                   <div>
                     <FLabel>Fuel arrivee (kg)</FLabel>
-                    <input type="number" min={0} max={5700} value={edit.carbArr||""} placeholder="ex: 2800"
+                    <input type="number" min={0} max={5700} value={edit.carbArr||""}
                       onChange={e=>setEdit({...edit,carbArr:Math.max(0,Number(e.target.value)||0)})}
                       style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
                   </div>
                   <div style={{gridColumn:"1 / -1"}}>
                     <FLabel>NPS client (0-10)</FLabel>
-                    <input type="number" min={0} max={10} step={0.1} value={edit.nps||""} placeholder="ex: 7.5"
+                    <input type="number" min={0} max={10} step={0.1} value={edit.nps||""}
                       onChange={e=>setEdit({...edit,nps:Math.min(10,Math.max(0,Number(e.target.value)||0))})}
                       style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
                   </div>
