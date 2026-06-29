@@ -1064,11 +1064,11 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
   const CAPA=ac.capa||5700;
   const SIEGES=ac.sieges||18;
   const [num,setNum]=useState("");
-  const [from_,setFrom]=useState("CMN");
-  const [to,setTo]=useState("AGA");
+  const [from_,setFrom]=useState("");
+  const [to,setTo]=useState("");
   const [dep,setDep]=useState("");
   const [arr,setArr]=useState("");
-  const [pax,setPax]=useState(String(SIEGES));
+  const [pax,setPax]=useState("");
   const [date,setDate]=useState(today);
   const [carbDep,setCDep]=useState("");
   const [cm1,setCm1]=useState("");
@@ -1094,7 +1094,7 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
       status:"Planifie",pax:pn,load,date,acId,sieges:SIEGES,
       carbDep:Number(carbDep)||0,carbArr:0,consomme:0,consoH:0,fuelPct:fPct||0,delayMin:0,
       cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0,dureeMin:planDuree});
-    setNum("");setDep("");setArr("");setPax(String(SIEGES));setCDep("");
+    setNum("");setFrom("");setTo("");setDep("");setPax("");setCDep("");
     setCm1("");setCm2("");setCc("");
   };
   return (
@@ -1551,8 +1551,8 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   const [sel,setSel]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"new");
   const [immat,setImmat]=useState("");
   const [type,setType]=useState("");
-  const [sieges,setSieges]=useState("18");
-  const [capa,setCapa]=useState("5700");
+  const [sieges,setSieges]=useState("");
+  const [capa,setCapa]=useState("");
   const [icao24,setIcao24]=useState(()=>aircraft&&aircraft.length>0?aircraft[0].icao24||"":"");
   const [msg,setMsg]=useState("");
   const [localSaved,setLocalSaved]=useState(false);
