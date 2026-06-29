@@ -3261,7 +3261,7 @@ function App() {
     setLoading(false);
   };
 
-  useEffect(()=>{refresh();},[]);
+  useEffect(()=>{refresh();},[icao24]);
 
   const doSave = async () => {
     if(window.storage){
