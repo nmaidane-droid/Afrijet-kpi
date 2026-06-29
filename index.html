@@ -1250,10 +1250,10 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   const [localSaved, setLocalSaved] = useState(false);
   const saved = localSaved;
   const triggerSaved = () => { setLocalSaved(true); setTimeout(()=>setLocalSaved(false),2500); };
-  const ROLES = ["CM1","CM2","CC"];
+  const ROLES = ["TRI","CM1","CM2","CC"];
   const [nom,setNom]       = useState("");
   const [prenom,setPrenom] = useState("");
-  const [role,setRole]     = useState("CM1");
+  const [role,setRole]     = useState("TRI");
   const [licence,setLic]   = useState("");
   const [editing,setEditing] = useState(null); // id en cours d edition
 
@@ -1280,8 +1280,8 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   const remove = id => setCrew(c => c.filter(m => m.id!==id));
   const cancel = () => { setEditing(null);setNom("");setPrenom("");setRole("CM1");setLic(""); };
 
-  const roleColor = r => r==="CM1"?"#0F1F3D":r==="CM2"?"#0369A1":"#00936A";
-  const roleBg    = r => r==="CM1"?"#E0E7FF":r==="CM2"?"#E0F2FE":"#D1FAE5";
+  const roleColor = r => r==="TRI"?"#7C3AED":r==="CM1"?"#0F1F3D":r==="CM2"?"#0369A1":"#00936A";
+  const roleBg    = r => r==="TRI"?"#EDE9FE":r==="CM1"?"#E0E7FF":r==="CM2"?"#E0F2FE":"#D1FAE5";
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -1294,7 +1294,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
           </FGrid>
           <FGrid>
             <FSelect label="Role" value={role} onChange={setRole}
-              options={ROLES.map(r=>({value:r,label:r==="CM1"?"CM1 — Commandant":r==="CM2"?"CM2 — Copilote":"CC — Hotesse"}))}/>
+              options={ROLES.map(r=>({value:r,label:r==="TRI"?"TRI — Type Rating Instructor":r==="CM1"?"CM1 — Commandant":r==="CM2"?"CM2 — Copilote":"CC — Hotesse"}))}/>
             <FField label="Licence / Matricule" value={licence} onChange={setLic}/>
           </FGrid>
           <div style={{display:"flex",gap:10}}>
@@ -1325,7 +1325,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
           return (
             <div key={r}>
               <div style={{padding:"6px 14px",background:roleBg(r),fontSize:9,fontWeight:800,color:roleColor(r),textTransform:"uppercase",letterSpacing:"0.1em"}}>
-                {r==="CM1"?"Commandants de bord":r==="CM2"?"Officiers Pilotes de Ligne":"Hotesses / Stewards"}
+                {r==="TRI"?"Type Rating Instructors":r==="CM1"?"Commandants de bord":r==="CM2"?"Officiers Pilotes de Ligne":"Hotesses / Stewards"}
               </div>
               {members.map((m,i)=>(
                 <div key={m.id} style={{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid "+C.border,gap:10}}>
