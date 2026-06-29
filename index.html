@@ -1499,11 +1499,11 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
               </div>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>openEdit(m,i)}
-                  style={{background:"white",border:"1.5px solid "+C.border,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer",color:C.slate,WebkitTapHighlightColor:"transparent"}}>
+                  style={{width:90,height:34,background:"white",border:"1.5px solid "+C.border,borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",color:C.slate,WebkitTapHighlightColor:"transparent"}}>
                   ✏ Modifier
                 </button>
                 <button onClick={()=>openResolve(m,i)}
-                  style={{background:"#00936A",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,color:"white",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  style={{width:90,height:34,background:"#00936A",border:"none",borderRadius:8,fontSize:11,fontWeight:700,color:"white",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
                   ✓ Résoudre
                 </button>
               </div>
