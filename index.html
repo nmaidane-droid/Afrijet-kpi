@@ -1114,7 +1114,7 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
             </select>
           </div>
         )}
-        <FGrid><FField label="N Vol *" value={num} onChange={setNum} placeholder="AJS07"/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
+        <FGrid><FField label="N Vol *" value={num} onChange={setNum} placeholder="ex: AJS1307"/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
         <FSection title="Route" color="#0F1F3D"/>
         <FGrid><FAirport label="Depart" value={from_} onChange={setFrom}/><FAirport label="Arrivee" value={to} onChange={setTo}/></FGrid>
         <FSection title="Horaires planifies" color="#0F1F3D"/>
@@ -1535,11 +1535,11 @@ function FormFin({ onSubmit, saved }) {
         <FSelect label="Mois" value={mois} onChange={setMois} options={MOIS.map(m=>({value:m,label:m}))}/>
         <FSection title="Revenus et couts (MAD)" color="#7C3AED"/>
         <FGrid>
-          <FField label="Revenus (MAD)" value={rev} onChange={setRev} type="number" min={0} placeholder="1240000"/>
-          <FField label="Couts totaux (MAD)" value={cout} onChange={setCout} type="number" min={0} placeholder="910000"/>
+          <FField label="Revenus (MAD)" value={rev} onChange={setRev} type="number" min={0} placeholder="ex: 1 240 000"/>
+          <FField label="Couts totaux (MAD)" value={cout} onChange={setCout} type="number" min={0} placeholder="ex: 910 000"/>
         </FGrid>
         <FGrid>
-          <FField label="Cout carburant (MAD)" value={cCarbu} onChange={setCCarbu} type="number" min={0}/>
+          <FField label="Cout carburant (MAD)" value={cCarbu} onChange={setCCarbu} type="number" min={0} placeholder="ex: 320 000"/>
           <FCalc label="Marge brute" value={marge!==null?marge+"%":"--"} color={marge!==null?marge>0?"#00936A":marge===0?"#D97706":"#DC2626":"#94A3B8"}/>
         </FGrid>
         <FSubmit label="Enregistrer Finances" onClick={submit} saved={saved}/>
@@ -1605,8 +1605,8 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
           <FField label="Type *" value={type} onChange={setType} placeholder="EMB 135"/>
         </FGrid>
         <FGrid>
-          <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999}/>
-          <FField label="Capacité carbu. (kg)" value={capa} onChange={setCapa} type="number" min={0}/>
+          <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999} placeholder="ex: 18"/>
+          <FField label="Capacité carbu. (kg)" value={capa} onChange={setCapa} type="number" min={0} placeholder="ex: 5700"/>
         </FGrid>
         <FField label="Code ICAO24 (transpondeur)" value={icao24} onChange={setIcao24} placeholder="ex: 020035"/>
         {/* Summary of existing fleet */}
