@@ -1823,7 +1823,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
         ))}
         {showSat&&(
           <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:9999,background:"white",display:"flex",flexDirection:"column"}}>
-            <div style={{background:C.navy,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div style={{background:C.navy,padding:"14px 16px 10px",paddingTop:"max(14px, env(safe-area-inset-top))",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
               <span style={{color:"white",fontWeight:700,fontSize:14}}>📋 Formulaire Satisfaction</span>
               <button onClick={()=>setShowSat(false)}
                 style={{background:"none",border:"1.5px solid white",color:"white",borderRadius:8,padding:"4px 12px",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
