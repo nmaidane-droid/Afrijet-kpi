@@ -814,9 +814,14 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
     el.style.cssText = "width:32px;height:32px;cursor:pointer;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));";
     // SVG avion pointant vers le haut (nord=0°), rotation selon cap
     el.innerHTML = `<svg width="32" height="32" viewBox="0 0 32 32" style="transform:rotate(${heading}deg);transition:transform 1s" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="16,2 20,28 16,24 12,28" fill="${color}" stroke="white" stroke-width="1.2"/>
-      <polygon points="6,18 26,18 24,22 8,22" fill="${color}" stroke="white" stroke-width="1"/>
-      <polygon points="10,26 22,26 20,30 12,30" fill="${color}" stroke="white" stroke-width="0.8"/>
+      <!-- Fuselage -->
+      <ellipse cx="16" cy="16" rx="2.5" ry="11" fill="${color}" stroke="white" stroke-width="0.5"/>
+      <!-- Nez -->
+      <ellipse cx="16" cy="6" rx="2" ry="3" fill="${color}"/>
+      <!-- Ailes principales -->
+      <polygon points="16,13 3,21 29,21" fill="${color}" stroke="white" stroke-width="0.5"/>
+      <!-- Empennage -->
+      <polygon points="16,25 10,30 22,30" fill="${color}" stroke="white" stroke-width="0.5"/>
     </svg>`;
     const popup = new window.mapboxgl.Popup({offset:20}).setHTML(
       "<div style='font-family:Arial;padding:6px 8px'>" +
