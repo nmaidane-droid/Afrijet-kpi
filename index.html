@@ -203,17 +203,22 @@ function FLabel({ children }) {
   );
 }
 
-function FField({ label, value, onChange, type="text", min, max, placeholder }) {
+function FField({ label, value, onChange, type="text", min, max, placeholder, step }) {
   const [focused, setFocused] = useState(false);
+  const handleChange = e => {
+    const v = type==="text" ? e.target.value.toUpperCase() : e.target.value;
+    onChange(v);
+  };
   return (
     <div>
       <FLabel>{label}</FLabel>
-      <input type={type} value={value} min={min} max={max} placeholder={placeholder}
-        onChange={e => onChange(e.target.value)}
+      <input type={type} value={value} min={min} max={max} step={step} placeholder={placeholder}
+        onChange={handleChange}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={{ width:"100%", height:48, boxSizing:"border-box",
                  background:focused?"#FFF":C.bg, border:"1.5px solid "+(focused?C.gold:C.border),
-                 borderRadius:10, padding:"0 14px", color:C.text, fontSize:14, outline:"none" }}/>
+                 borderRadius:10, padding:"0 14px", color:C.text, fontSize:14, outline:"none",
+                 textTransform:type==="text"?"uppercase":"none" }}/>
     </div>
   );
 }
@@ -260,13 +265,16 @@ function FSection({ title, color="#64748B" }) {
   );
 }
 
-function FSubmit({ label, color="#0F1F3D", onClick }) {
+function FSubmit({ label, color="#0F1F3D", onClick, saved }) {
+  const bg = saved ? "#00936A" : "#DC2626";
+  const lbl = saved ? "✅ Enregistré" : label;
   return (
     <button onClick={onClick}
-      style={{ width:"100%", height:52, background:color, border:"none", borderRadius:12,
+      style={{ width:"100%", height:52, background:bg, border:"none", borderRadius:12,
                cursor:"pointer", color:"white", fontSize:15, fontWeight:700,
-               WebkitTapHighlightColor:"transparent", boxShadow:"0 2px 12px "+color+"55" }}>
-      {label}
+               WebkitTapHighlightColor:"transparent", boxShadow:"0 2px 12px "+bg+"55",
+               transition:"background 0.3s" }}>
+      {lbl}
     </button>
   );
 }
@@ -1050,7 +1058,7 @@ const INIT_FIN = [
 ];
 
 // ── Forms ────────────────────────────────────────────────────────────────────
-function FormVol({ onSubmit, crew, aircraft }) {
+function FormVol({ onSubmit, crew, aircraft, saved }) {
   const today=new Date().toISOString().slice(0,10);
   const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
   const ac=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{immat:"CN-KTA",type:"EMB 135",sieges:18,capa:5700,id:"AC001"};
@@ -1110,7 +1118,7 @@ function FormVol({ onSubmit, crew, aircraft }) {
         <FSection title="Route" color="#0F1F3D"/>
         <FGrid><FAirport label="Depart" value={from_} onChange={setFrom}/><FAirport label="Arrivee" value={to} onChange={setTo}/></FGrid>
         <FSection title="Horaires planifies" color="#0F1F3D"/>
-        <FGrid><FField label="Depart prevu *" value={dep} onChange={setDep} type="time"/><FField label="Arrivee prevue *" value={arr} onChange={setArr} type="time"/></FGrid>
+        <FGrid><FField label="Depart prevu *" value={dep} onChange={setDep} type="time"/></FGrid>
         <FSection title="Passagers prevus" color="#0F1F3D"/>
         <FGrid>
           <FField label={"PAX (0-"+SIEGES+")"} value={pax} onChange={v=>setPax(String(Math.min(SIEGES,Math.max(0,Number(v)||0))))} type="number" min={0} max={SIEGES}/>
@@ -1154,7 +1162,7 @@ function FormVol({ onSubmit, crew, aircraft }) {
             ))}
           </select>
         </div>
-        <FSubmit label="Planifier le vol" color="#0F1F3D" onClick={submit}/>
+        <FSubmit label="Planifier le vol" onClick={submit} saved={saved}/>
       </div>
     </Card>
   );
@@ -1162,7 +1170,7 @@ function FormVol({ onSubmit, crew, aircraft }) {
 
 
 // ── Registre Equipage ────────────────────────────────────────────────────────
-function FormEquipage({ crew, setCrew }) {
+function FormEquipage({ crew, setCrew, saved }) {
   const ROLES = ["CM1","CM2","CC"];
   const [nom,setNom]       = useState("");
   const [prenom,setPrenom] = useState("");
@@ -1268,7 +1276,7 @@ function FormEquipage({ crew, setCrew }) {
   );
 }
 
-function FormMaint({ onSubmit, maintData, aircraft }) {
+function FormMaint({ onSubmit, maintData, aircraft, saved }) {
   const md=maintData||{};
   const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
   const acInfo=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{};
@@ -1382,7 +1390,7 @@ function FormMaint({ onSubmit, maintData, aircraft }) {
           </button>
         </div>
 
-        <FSubmit label="Enregistrer Maintenance" color="#00936A" onClick={submit}/>
+        <FSubmit label="Enregistrer Maintenance" onClick={submit} saved={saved}/>
       </div>
 
       {showMelForm&&(
@@ -1435,7 +1443,7 @@ function FormMaint({ onSubmit, maintData, aircraft }) {
   );
 }
 
-function FormSafety({ onSubmit, flights }) {
+function FormSafety({ onSubmit, flights, saved }) {
   // Get terminated flights of current week
   const now=new Date();
   const day=now.getDay()||7;
@@ -1499,13 +1507,13 @@ function FormSafety({ onSubmit, flights }) {
           <Check label="Inspection SAFA" value={safa} onChange={setSafa} color="#7C3AED"/>
         </div>
 
-        <FSubmit label="Enregistrer événements" color="#DC2626" onClick={submit}/>
+        <FSubmit label="Enregistrer événements" onClick={submit} saved={saved}/>
       </div>
     </Card>
   );
 }
 
-function FormFin({ onSubmit }) {
+function FormFin({ onSubmit, saved }) {
   const MOIS=["Janvier","Fevrier","Mars","Avril","Mai","Juin","Juillet","Aout","Septembre","Octobre","Novembre","Decembre"];
   const [mois,setMois]=useState("Juin");
   const [rev,setRev]=useState("");
@@ -1534,13 +1542,13 @@ function FormFin({ onSubmit }) {
           <FField label="Cout carburant (MAD)" value={cCarbu} onChange={setCCarbu} type="number" min={0}/>
           <FCalc label="Marge brute" value={marge!==null?marge+"%":"--"} color={marge!==null?marge>0?"#00936A":marge===0?"#D97706":"#DC2626":"#94A3B8"}/>
         </FGrid>
-        <FSubmit label="Enregistrer Finances" color="#7C3AED" onClick={submit}/>
+        <FSubmit label="Enregistrer Finances" onClick={submit} saved={saved}/>
       </div>
     </Card>
   );
 }
 
-function FormAircraft({ aircraft, onUpdate }) {
+function FormAircraft({ aircraft, onUpdate, saved }) {
   const [sel,setSel]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"new");
   const [immat,setImmat]=useState("");
   const [type,setType]=useState("");
@@ -1548,6 +1556,7 @@ function FormAircraft({ aircraft, onUpdate }) {
   const [capa,setCapa]=useState("5700");
   const [icao24,setIcao24]=useState(()=>aircraft&&aircraft.length>0?aircraft[0].icao24||"":"");
   const [msg,setMsg]=useState("");
+  const [localSaved,setLocalSaved]=useState(false);
 
   React.useEffect(()=>{
     if(sel==="new"){setImmat("");setType("");setSieges("18");setCapa("5700");setIcao24("");}
@@ -1567,7 +1576,8 @@ function FormAircraft({ aircraft, onUpdate }) {
       onUpdate(aircraft.map(a=>a.id===sel?{...a,immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icao24.trim()}:a));
       setMsg("Avion mis à jour ✅");
     }
-    setTimeout(()=>setMsg(""),3000);
+    setTimeout(()=>{setMsg("");setLocalSaved(false);},3000);
+    setLocalSaved(true);
   };
 
   const del=()=>{
@@ -1620,8 +1630,8 @@ function FormAircraft({ aircraft, onUpdate }) {
           {sel!=="new"&&aircraft.length>1&&(
             <button onClick={del} style={{flex:1,height:48,background:"#FEE2E2",border:"1.5px solid #DC2626",borderRadius:10,color:"#DC2626",fontSize:13,fontWeight:700,cursor:"pointer"}}>🗑 Supprimer</button>
           )}
-          <button onClick={save} style={{flex:2,height:48,background:"#0369A1",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer"}}>
-            {sel==="new"?"➕ Ajouter":"💾 Enregistrer"}
+          <button onClick={save} style={{flex:2,height:48,background:localSaved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",transition:"background 0.3s"}}>
+            {localSaved?"✅ Enregistré":sel==="new"?"➕ Ajouter":"💾 Enregistrer"}
           </button>
         </div>
       </div>
@@ -1764,12 +1774,12 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           <div>Satisfaction</div>
         </a>
       </div>
-      {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft}/>}
-      {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew}/>}
-      {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft}/>}
-      {active==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights}/>}
-      {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)}/>}
-      {active==="avion" && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft}/>}
+      {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved}/>}
+      {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
+      {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
+      {active==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} saved={saved}/>}
+      {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
+      {active==="avion" && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
   );
 }
