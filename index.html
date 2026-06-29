@@ -724,7 +724,7 @@ async function fetchMorocco() {
 }
 
 
-function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
+function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
   const mapDiv     = useRef(null);
   const mapRef     = useRef(null);
   const markRef    = useRef(null);
@@ -816,7 +816,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
     el.textContent = "✈";
     const popup = new window.mapboxgl.Popup({offset:20}).setHTML(
       "<div style='font-family:Arial;padding:6px 8px'>" +
-      "<b style='font-size:13px;color:#0F1F3D'>CN-KTA</b><br>" +
+      "<b style='font-size:13px;color:#0F1F3D'>"+(selAc?.immat||acData.callsign||"--")+"</b><br>" +
       "<span style='color:#64748B;font-size:11px'>"+(acData.simulated?"Simulation":"ADS-B Live")+"</span>" +
       "<hr style='margin:5px 0;border-color:#EEF2F8'>" +
       "<div style='font-size:11px;line-height:1.8'>" +
@@ -830,7 +830,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
       .setLngLat([acData.lon, acData.lat])
       .setPopup(popup)
       .addTo(map);
-    // Center map on CN-KTA on first placement
+    // Center map on aircraft on first placement
     if (!markRef._centered) {
       map.flyTo({center:[acData.lon, acData.lat], zoom:7, speed:1.2});
       markRef._centered = true;
@@ -874,7 +874,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24 }) {
             display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"white",
             transform:"rotate("+(ac.heading||0)+"deg)",transition:"transform 1s ease"}}>&#x2708;</div>
           <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:12,color:C.navy}}>CN-KTA — {ac.simulated?"Simulation":"ADS-B Live"}</div>
+            <div style={{fontWeight:700,fontSize:12,color:C.navy}}>{selAc?.immat||"--"} — {ac.simulated?"Simulation":"ADS-B Live"}</div>
             <div style={{fontSize:10,color:C.slate}}>{ac.lat.toFixed(4)}N {Math.abs(ac.lon).toFixed(4)}W {ac.alt_ft?(" · "+ac.alt_ft.toLocaleString()+" ft"):""} {ac.speed_kt?(" · "+ac.speed_kt+" kt"):""} {ac.heading?(" · Cap "+Math.round(ac.heading)):""}</div>
           </div>
           <button onClick={()=>{
@@ -2128,7 +2128,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
       </Card>
       <Card>
         <SectionTitle>Carte ADS-B — Maroc</SectionTitle>
-        <MapMarocSVG ac={ac} moroccoTraffic={moroccoTraffic} icao24={icao24}/>
+        <MapMarocSVG ac={ac} moroccoTraffic={moroccoTraffic} icao24={icao24} selAc={selAc}/>
       </Card>
       <Card>
         <SectionTitle>Trafic regional Maroc</SectionTitle>
