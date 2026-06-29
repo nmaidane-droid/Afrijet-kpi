@@ -3193,7 +3193,8 @@ function App() {
 
                 // ── Section helper ──
                 const drawSection=(title,r,g,b)=>{
-                  if(y>260){doc.addPage();y=15;}
+                  if(y>240){doc.addPage();y=15;}
+                  else y+=4;
                   doc.setFillColor(r,g,b);
                   doc.roundedRect(M,y,CW,7,1,1,"F");
                   doc.setTextColor(255,255,255);
@@ -3330,11 +3331,7 @@ function App() {
                   doc.line(M,y+3,M+CW,y+3);
                   y+=7;
                 });
-                y+=3;
-
-                // ── Page 2 ──
-                doc.addPage();
-                y=15;
+                y+=8;
 
                 // ── Maintenance ──
                 const pAcList=aircraft&&aircraft.length>0?aircraft:[maintData||{}];
