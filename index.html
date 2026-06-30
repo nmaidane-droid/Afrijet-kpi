@@ -1575,7 +1575,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                 Annuler
               </button>
               <button onClick={saveMel}
-                style={{flex:2,height:46,background:"#00936A",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                style={{flex:2,height:46,background:"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
                 Enregistrer
               </button>
             </div>
@@ -2210,6 +2210,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
 function ScreenOps({ flights, safetyData, onUpdateFlight }) {
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
+  const [opsSaved,setOpsSaved]=useState(false);
   const [search,setSearch]=useState("");
   const [filterStatus,setFilterStatus]=useState("Tous");
   const sBg=s=>s==="Termine"?C.emeraldL:s==="En vol"?C.goldL:s==="Annule"?C.dangerL:C.bg;
@@ -2272,7 +2273,8 @@ function ScreenOps({ flights, safetyData, onUpdateFlight }) {
     if(!edit)return;
     const c=calcEdit(edit);
     onUpdateFlight({...edit,load:Math.round(edit.pax/18*100),...c});
-    setEdit(null);
+    setOpsSaved(true);
+    setTimeout(()=>{setOpsSaved(false);setEdit(null);},900);
   };
 
   const enVol=flights.filter(f=>f.status==="En vol");
@@ -2411,7 +2413,7 @@ function ScreenOps({ flights, safetyData, onUpdateFlight }) {
             })()}
             <div style={{display:"flex",gap:10}}>
               <button onClick={()=>setEdit(null)} style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Annuler</button>
-              <button onClick={doUpdate} style={{flex:2,height:48,background:C.navy,border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Enregistrer</button>
+              <button onClick={doUpdate} style={{flex:2,height:48,background:opsSaved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.3s"}}>{opsSaved?"✅ Enregistré":"Enregistrer"}</button>
             </div>
           </div>
         </div>
@@ -3270,10 +3272,12 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
 function LoginGate({ onAuth }) {
   const [pwd,setPwd]=useState("");
   const [err,setErr]=useState("");
+  const [ok,setOk]=useState(false);
   const submit=()=>{
     if(pwd===APP_PASSWORD){
       try{ sessionStorage.setItem(PFX+"authed","1"); }catch(_e){}
-      onAuth();
+      setOk(true);
+      setTimeout(onAuth,400);
     } else {
       setErr("Mot de passe incorrect");
     }
@@ -3292,8 +3296,8 @@ function LoginGate({ onAuth }) {
           style={{width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:14,outline:"none",marginBottom:10}}/>
         {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
         <button onClick={submit}
-          style={{width:"100%",height:46,background:"#0F1F3D",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer"}}>
-          Se connecter
+          style={{width:"100%",height:46,background:ok?"#00936A":"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer",transition:"background 0.3s"}}>
+          {ok?"✅ Connecté":"Se connecter"}
         </button>
       </div>
     </div>
