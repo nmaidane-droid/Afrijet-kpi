@@ -634,17 +634,16 @@ function simulateFlightState(icao24) {
   const seed2 = Math.cos(now / 6000);
   const seed3 = Math.sin(now / 4000);
 
-  // CN-KTB (020036) — CMN → VIL (Dakhla), position mi-chemin ~28.5°N 11.7°W
-  if(icao24 === "020036") {
+  // CN-KTB — RAK (Marrakech) -> VIL (Dakhla), position mi-chemin
+  if(icao24 === "CN-KTB") {
     const elapsed = (now % (135 * 60 * 1000)) / (135 * 60 * 1000);
-    // Départ légèrement après mi-chemin pour varier
-    const progress = 0.45 + elapsed * 0.1; // oscille entre 0.45 et 0.55
-    const lat = 33.3675 + (23.7183 - 33.3675) * progress + seed * 0.05;
-    const lon = -7.5900 + (-15.9320 - (-7.5900)) * progress + seed2 * 0.05;
+    const progress = 0.45 + elapsed * 0.1; // oscille autour de mi-chemin
+    const lat = 31.607 + (23.7183 - 31.607) * progress + seed * 0.05;
+    const lon = -8.036 + (-15.9320 - (-8.036)) * progress + seed2 * 0.05;
     const cruiseAlt = 9144; // FL300
     const altM = cruiseAlt + seed * 80;
     const speed_ms = 220 + seed2 * 8;
-    const heading = 200 + seed3 * 3; // Cap SSO vers Dakhla
+    const heading = 215 + seed3 * 3; // Cap SO vers Dakhla
     return {
       icao24,
       callsign:    "AJS07",
@@ -662,17 +661,17 @@ function simulateFlightState(icao24) {
     };
   }
 
-  // CN-KTA (020035) — CMN → FEZ, position mi-chemin
+  // CN-KTA — AGA (Agadir) -> EUN (Laayoune), position mi-chemin
   const elapsed = (now % (55 * 60 * 1000)) / (55 * 60 * 1000);
-  const progress = 0.45 + elapsed * 0.1; // oscille entre 0.45 et 0.55
-  const lat = 33.3675 + (33.9273 - 33.3675) * progress + seed * 0.03;
-  const lon = -7.5900 + (-4.9778 - (-7.5900)) * progress + seed2 * 0.03;
+  const progress = 0.45 + elapsed * 0.1; // oscille autour de mi-chemin
+  const lat = 30.325 + (27.151 - 30.325) * progress + seed * 0.03;
+  const lon = -9.413 + (-13.219 - (-9.413)) * progress + seed2 * 0.03;
   const cruiseAlt = 8534; // FL280
   const altM = cruiseAlt + seed * 80;
   const speed_ms = 225 + seed2 * 8;
-  const heading = 72 + seed3 * 3; // ENE vers FEZ
+  const heading = 205 + seed3 * 3; // Cap SSO vers Laayoune
   return {
-    icao24:      icao24 || "020035",
+    icao24:      icao24 || "CN-KTA",
     callsign:    "AJS03",
     country:     "Morocco",
     lat, lon,
@@ -2224,9 +2223,6 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
   const selAc = aircraft?.find(a=>a.icao24===icao24)||aircraft?.[0];
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{background:"#FEF3C7",border:"1px solid #D97706",borderRadius:10,padding:"10px 14px",fontSize:11,color:"#92400E"}}>
-        <b>🔧 Diagnostic temporaire (Flightradar24):</b><br/>{FR24_DEBUG.info}
-      </div>
       {/* Aircraft selector */}
       {aircraft&&aircraft.length>0&&(
         <div>
