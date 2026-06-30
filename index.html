@@ -1794,7 +1794,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist }) {
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
   const [showSat,setShowSat]=useState(false);
@@ -1881,6 +1881,10 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           <button onClick={onReset}
             style={{flex:1,height:36,background:"#FEE2E2",border:"1.5px solid #DC2626",borderRadius:8,color:"#DC2626",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             🗑 Reset
+          </button>
+          <button onClick={onLogout}
+            style={{flex:1,height:36,background:"#F1F5F9",border:"1.5px solid #64748B",borderRadius:8,color:"#64748B",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            🔒 Déconnexion
           </button>
         </div>
       </Card>
@@ -3469,6 +3473,10 @@ function AppMain() {
           onSubmitFin={d=>setFin(f=>[...f,d])}
           onSubmitSafety={d=>setSafety(s=>[...s,d])}
           onReset={()=>setReset(true)}
+          onLogout={()=>{
+            try{ sessionStorage.removeItem(PFX+"authed"); }catch(_e){}
+            window.location.reload();
+          }}
           flights={flights} crew={crew} setCrew={setCrew}
           maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed} safetyData={safetyData}
           aircraft={aircraft} onUpdateAircraft={setAircraft}
