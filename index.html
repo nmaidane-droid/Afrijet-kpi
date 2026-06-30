@@ -2295,12 +2295,12 @@ function ScreenOps({ flights, safetyData, onUpdateFlight }) {
             </div>
             <div style={{marginBottom:16}}>
               <FLabel>Statut</FLabel>
-              <div style={{display:"flex",gap:8}}>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 {(origStatus==="Planifie"?["En vol","Annule"]
                   :origStatus==="En vol"?["Termine"]
                   :[origStatus]).map(s=>(
                   <button key={s} onClick={()=>setEdit({...edit,status:s})}
-                    style={{flex:1,padding:"9px 4px",borderRadius:9,border:"1.5px solid",fontSize:10,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:edit.status===s?sTx(s):C.border,background:edit.status===s?sBg(s):"white",color:edit.status===s?sTx(s):C.slate}}>
+                    style={{width:140,padding:"9px 4px",borderRadius:9,border:"1.5px solid",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:edit.status===s?sTx(s):C.border,background:edit.status===s?sBg(s):"white",color:edit.status===s?sTx(s):C.slate}}>
                     {sIc(s)} {s==="Termine"?"Vol terminé":s==="Annule"?"Vol annulé":s}
                   </button>
                 ))}
@@ -2411,9 +2411,9 @@ function ScreenOps({ flights, safetyData, onUpdateFlight }) {
                 </div>
               );
             })()}
-            <div style={{display:"flex",gap:10}}>
-              <button onClick={()=>setEdit(null)} style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Annuler</button>
-              <button onClick={doUpdate} style={{flex:2,height:48,background:opsSaved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.3s"}}>{opsSaved?"✅ Enregistré":"Enregistrer"}</button>
+            <div style={{display:"flex",gap:10,justifyContent:"flex-start"}}>
+              <button onClick={()=>setEdit(null)} style={{width:120,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Annuler</button>
+              <button onClick={doUpdate} style={{width:160,height:48,background:opsSaved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.3s"}}>{opsSaved?"✅ Enregistré":"Enregistrer"}</button>
             </div>
           </div>
         </div>
