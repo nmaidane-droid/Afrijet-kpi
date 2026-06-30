@@ -1794,7 +1794,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup }) {
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
   const [showSat,setShowSat]=useState(false);
@@ -1819,12 +1819,11 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     a.download="afrijet_backup_"+new Date().toISOString().slice(0,10)+".json";
     a.click();
     URL.revokeObjectURL(url);
-    // Save last backup date
-    localStorage.setItem("afrijet_last_backup", new Date().toISOString());
+    // Save last backup date (synced via Supabase)
+    setLastBackup(new Date().toISOString());
   };
 
   // Compute days since last backup
-  const lastBackup=localStorage.getItem("afrijet_last_backup");
   const daysSince=lastBackup?Math.floor((Date.now()-new Date(lastBackup).getTime())/(1000*60*60*24)):null;
 
   const doImport=()=>{
@@ -1839,6 +1838,11 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
         try{
           const data=JSON.parse(ev.target.result);
           if(data&&onImport){
+            const dateStr=data.exportDate
+              ? new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})
+              : "date inconnue";
+            const ok=window.confirm("Ce backup date du "+dateStr+".\n\nConfirmer l'import ? Cela remplacera les données actuelles.");
+            if(!ok) return;
             onImport(data);
             setSaved(true);
             setTimeout(()=>setSaved(false),2500);
@@ -1903,7 +1907,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
         if(daysSince===0) return (
           <div style={{padding:"10px 14px",borderRadius:10,fontSize:12,background:"#D1FAE5",border:"1px solid #00936A",color:"#065F46",display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:16}}>✅</span>
-            <span><b>Backup du jour effectué</b> — données sécurisées</span>
+            <span><b>Backup effectué le {new Date(lastBackup).toLocaleDateString("fr-FR",{day:"numeric",month:"long"})} à {new Date(lastBackup).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}</b> — données sécurisées</span>
           </div>
         );
         if(daysSince<=3) return (
@@ -3367,6 +3371,7 @@ function AppMain({ onLogout }) {
   const [alertHist,setAlertHist] = usePersist("alertHist",[]);
   const [melHist,setMelHist]     = usePersist("melHist",[]);
   const [icao24,setIcao24]   = usePersist("icao24","020035");
+  const [lastBackup,setLastBackup] = usePersist("lastBackup",null);
   const [ac,setAc]           = useState(null);
   const [mTraffic,setMTraff] = useState([]);
   const [loading,setLoading] = useState(false);
@@ -3500,6 +3505,7 @@ function AppMain({ onLogout }) {
           flights={flights} crew={crew} setCrew={setCrew}
           maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed} safetyData={safetyData}
           aircraft={aircraft} onUpdateAircraft={setAircraft}
+          lastBackup={lastBackup} setLastBackup={setLastBackup}
           melHist={melHist} setMelHist={setMelHist}
           onImport={data=>{
             if(data.flights)   setFlights(data.flights);
