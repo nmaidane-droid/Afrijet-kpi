@@ -1819,39 +1819,27 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     a.download="afrijet_backup_"+new Date().toISOString().slice(0,10)+".json";
     a.click();
     URL.revokeObjectURL(url);
-    // Save last backup date (synced via Supabase)
-    setLastBackup(new Date().toISOString());
+    // Save last backup date + content (synced via Supabase, accessible from any device)
+    setLastBackup(data.exportDate);
+    sbSet(PFX+"lastBackupData", data);
   };
 
   // Compute days since last backup
   const daysSince=lastBackup?Math.floor((Date.now()-new Date(lastBackup).getTime())/(1000*60*60*24)):null;
 
-  const doImport=()=>{
-    const input=document.createElement("input");
-    input.type="file";
-    input.accept=".json";
-    input.onchange=e=>{
-      const file=e.target.files[0];
-      if(!file)return;
-      const reader=new FileReader();
-      reader.onload=ev=>{
-        try{
-          const data=JSON.parse(ev.target.result);
-          if(data&&onImport){
-            const dateStr=data.exportDate
-              ? new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})
-              : "date inconnue";
-            const ok=window.confirm("Ce backup date du "+dateStr+".\n\nConfirmer l'import ? Cela remplacera les données actuelles.");
-            if(!ok) return;
-            onImport(data);
-            setSaved(true);
-            setTimeout(()=>setSaved(false),2500);
-          }
-        }catch(err){alert("Fichier invalide — vérifiez que c'est un backup Afrijet.");}
-      };
-      reader.readAsText(file);
-    };
-    input.click();
+  const doRestore=async()=>{
+    const data=await sbGet(PFX+"lastBackupData");
+    if(!data){alert("Aucun backup trouvé dans le cloud.");return;}
+    const dateStr=data.exportDate
+      ? new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})
+      : "date inconnue";
+    const ok=window.confirm("Ce backup cloud date du "+dateStr+".\n\nConfirmer la restauration ? Cela remplacera les données actuelles.");
+    if(!ok) return;
+    if(onImport){
+      onImport(data);
+      setSaved(true);
+      setTimeout(()=>setSaved(false),2500);
+    }
   };
 
   const FORMS=[
@@ -1878,9 +1866,9 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
             style={{flex:1,height:36,background:"#D1FAE5",border:"1.5px solid #00936A",borderRadius:8,color:"#00936A",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             📥 Exporter
           </button>
-          <button onClick={doImport}
+          <button onClick={doRestore}
             style={{flex:1,height:36,background:"#DBEAFE",border:"1.5px solid #0369A1",borderRadius:8,color:"#0369A1",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-            📤 Importer
+            ☁️ Restaurer
           </button>
           <button onClick={onReset}
             style={{flex:1,height:36,background:"#FEE2E2",border:"1.5px solid #DC2626",borderRadius:8,color:"#DC2626",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
