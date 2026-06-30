@@ -3365,21 +3365,8 @@ function AppMain({ onLogout }) {
   const [loading,setLoading] = useState(false);
   const [showReset,setReset] = useState(false);
   const [report,setReport]   = useState(null);
-  const [saveOk,setSaveOk]   = useState(false);
 
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),30000);return()=>clearInterval(t);},[]);
-
-  // Auto-save every 15 minutes
-  useEffect(()=>{
-    const t=setInterval(async()=>{
-      if(window.storage){
-        const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist,aircraft,melHist};
-        await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
-      }
-      setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
-    }, 15*60*1000);
-    return()=>clearInterval(t);
-  },[flights,kpis,maintData,finData,dismissed,icao24]);
 
   const refresh = async () => {
     setLoading(true);
@@ -3393,14 +3380,6 @@ function AppMain({ onLogout }) {
   };
 
   useEffect(()=>{refresh();},[icao24]);
-
-  const doSave = async () => {
-    if(window.storage){
-      const data={flights,kpis,maintData,finData,dismissed,icao24,safetyData,crew,alertHist,aircraft,melHist};
-      await window.storage.set(PFX+"snapshot",JSON.stringify(data)).catch(()=>{});
-    }
-    setSaveOk(true);setTimeout(()=>setSaveOk(false),2000);
-  };
 
   const doReset = () => {
     clearStorage();
@@ -3463,14 +3442,9 @@ function AppMain({ onLogout }) {
             <span style={{fontSize:11,color:C.slate,fontWeight:600}}>{ac&&!ac.simulated?"LIVE":"SIM"}</span>
           </div>
           <span style={{fontSize:12,fontWeight:700,color:C.navy}}>{timeStr}</span>
-          <button onClick={doSave}
-            title="Sauvegarde auto: 15 min"
-            style={{width:36,height:36,background:saveOk?C.emerald:C.navy,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
-            {saveOk?"✓":"💾"}
-          </button>
           <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData,safetyData,aircraft))}
-            style={{width:36,height:36,background:C.emerald,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
-            📋
+            style={{height:36,padding:"0 12px",background:C.emerald,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}}>
+            📋 Rapport
           </button>
         </div>
       </div>
