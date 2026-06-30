@@ -1763,21 +1763,20 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   const [type,setType]=useState("");
   const [sieges,setSieges]=useState("");
   const [capa,setCapa]=useState("");
-  const [icao24,setIcao24]=useState(()=>aircraft&&aircraft.length>0?aircraft[0].icao24||"":"");
   const [msg,setMsg]=useState("");
   const [localSaved,setLocalSaved]=useState(false);
 
   React.useEffect(()=>{
-    if(sel==="new"){setImmat("");setType("");setSieges("18");setCapa("5700");setIcao24("");}
+    if(sel==="new"){setImmat("");setType("");setSieges("18");setCapa("5700");}
     else{
       const ac=aircraft.find(a=>a.id===sel);
-      if(ac){setImmat(ac.immat||"");setType(ac.type||"");setSieges(String(ac.sieges||18));setCapa(String(ac.capa||5700));setIcao24(ac.icao24||"");}
+      if(ac){setImmat(ac.immat||"");setType(ac.type||"");setSieges(String(ac.sieges||18));setCapa(String(ac.capa||5700));}
     }
   },[sel]);
 
   const save=()=>{
     if(!immat.trim()||!type.trim()){alert("Immatriculation et type requis");return;}
-    const icaoTrim=icao24.trim().toUpperCase();
+    const icaoTrim=immat.trim().toUpperCase();
     if(sel==="new"){
       const newAc={id:"AC"+Date.now(),immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim,ttaf:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
       onUpdate([...aircraft,newAc]);
@@ -1818,7 +1817,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
           <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999}/>
           <FField label="Capacité carbu. (kg)" value={capa} onChange={setCapa} type="number" min={0}/>
         </FGrid>
-        <FField label="Immatriculation (suivi Live)" value={icao24} onChange={v=>setIcao24(v.toUpperCase())}/>
+        {/* Code ICAO24 retiré: il se synchronise automatiquement avec l'immatriculation */}
         {/* Summary of existing fleet */}
         {aircraft.length>0&&(
           <Card>
