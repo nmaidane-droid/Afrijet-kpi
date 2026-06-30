@@ -688,6 +688,28 @@ function simulateFlightState(icao24) {
   };
 }
 
+// Generate ~10 simulated Morocco traffic blips (fallback when the live API is unavailable)
+function simulateMoroccoTraffic() {
+  const callsigns = ["RAM450","RAM800","TOM2201","VLG1234","EJU5678","DAH012","AFR1480","IBE3344","BAW9921","TAR550"];
+  const now = Date.now();
+  const blips = [];
+  for (let i = 0; i < 10; i++) {
+    const lat = 28.5 + ((now/90000 + i*37) % 100)/100 * 8;
+    const lon = -10.5 + ((now/110000 + i*53) % 100)/100 * 9;
+    blips.push({
+      lat, lon,
+      track: Math.round((now/1000 + i*47) % 360),
+      alt: 18000 + (i*1500)%20000,
+      gspeed: 380 + (i*23)%160,
+      callsign: callsigns[i % callsigns.length],
+      reg: "",
+      hex: "",
+      simulated: true,
+    });
+  }
+  return blips;
+}
+
 // Generate ~12 simulated Morocco traffic blips
 function parseState(s) {
   if(!s||typeof s!=="object")return null;
@@ -729,6 +751,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
   const mapDiv     = useRef(null);
   const mapRef     = useRef(null);
   const markRef    = useRef(null);
+  const trafficMarksRef = useRef([]);
   const mapReady   = useRef(false);
   const pendingAc  = useRef(null);
   const [status, setStatus] = useState("loading");
@@ -859,6 +882,36 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
       pendingAc.current = ac;
     }
   }, [ac]);
+
+  // Render regional traffic as small markers
+  useEffect(() => {
+    if (!mapReady.current || !mapRef.current || !window.mapboxgl) return;
+    trafficMarksRef.current.forEach(m => m.remove());
+    trafficMarksRef.current = [];
+    (moroccoTraffic||[]).forEach(t => {
+      if (!t?.lat || !t?.lon) return;
+      const el = document.createElement("div");
+      const heading = t.track||t.heading||0;
+      el.style.cssText = "width:16px;height:16px;cursor:pointer;filter:drop-shadow(0 1px 3px rgba(0,0,0,.4));";
+      el.innerHTML = `<svg width="16" height="16" viewBox="0 0 100 100" style="transform:rotate(${heading}deg)" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#64748B" stroke="white" stroke-width="3" d="M50,4 L40,40 L8,58 L8,66 L42,56 L40,82 L26,90 L26,96 L50,90 L74,96 L74,90 L60,82 L58,56 L92,66 L92,58 L60,40 Z"/>
+      </svg>`;
+      const label = t.reg || t.callsign || t.flight || "Vol inconnu";
+      const altFt = t.alt ? Math.round(t.alt) : null;
+      const popup = new window.mapboxgl.Popup({offset:10}).setHTML(
+        "<div style='font-family:Arial;padding:4px 6px;font-size:11px'>"+
+        "<b>"+label+"</b><br>"+
+        (altFt?("Alt: "+altFt.toLocaleString()+" ft<br>"):"")+
+        (t.gspeed?("Vitesse: "+Math.round(t.gspeed)+" kt"):"")+
+        "</div>"
+      );
+      const marker = new window.mapboxgl.Marker({element:el})
+        .setLngLat([t.lon, t.lat])
+        .setPopup(popup)
+        .addTo(mapRef.current);
+      trafficMarksRef.current.push(marker);
+    });
+  }, [moroccoTraffic, status]);
 
   return (
     <div style={{borderRadius:12,overflow:"hidden",border:"1px solid "+C.border,position:"relative"}}>
