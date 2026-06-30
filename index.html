@@ -716,6 +716,8 @@ function parseState(s) {
   return {lat:s.lat,lon:s.lon,heading:s.track||0,alt_m:(s.alt||0)*0.3048,speed_ms:(s.gspeed||0)*0.51444,callsign:(s.callsign||s.flight||"").trim(),simulated:false};
 }
 
+const FR24_DEBUG = {info:"Aucun appel effectue"};
+
 async function fetchByIcao24(registration) {
   try {
     const r = await Promise.race([
@@ -725,9 +727,13 @@ async function fetchByIcao24(registration) {
     ]);
     if (r.ok) {
       const j = await r.json();
-      if (j.data?.[0]) return j.data[0];
+      if (j.data?.[0]) { FR24_DEBUG.info = "OK - "+j.data.length+" resultat(s)"; return j.data[0]; }
+      FR24_DEBUG.info = "Reponse OK mais 0 resultat pour '"+registration+"' (avion pas en vol actuellement ou hors couverture)";
+    } else {
+      let body=""; try{body=(await r.text()).slice(0,200);}catch(_e2){}
+      FR24_DEBUG.info = "Erreur HTTP "+r.status+" "+r.statusText+" - "+body;
     }
-  } catch(_e) {}
+  } catch(e) { FR24_DEBUG.info = "Erreur reseau/CORS: "+(e?.message||e); }
   return null;
 }
 
@@ -743,8 +749,11 @@ async function fetchRegionalTraffic(lat, lon) {
     if (r.ok) {
       const j = await r.json();
       return j.data ?? [];
+    } else {
+      let body=""; try{body=(await r.text()).slice(0,200);}catch(_e2){}
+      FR24_DEBUG.info += " | Trafic: HTTP "+r.status+" "+body;
     }
-  } catch(_e) {}
+  } catch(e) { FR24_DEBUG.info += " | Trafic erreur: "+(e?.message||e); }
   return simulateMoroccoTraffic();
 }
 
@@ -2216,6 +2225,9 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
   const selAc = aircraft?.find(a=>a.icao24===icao24)||aircraft?.[0];
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{background:"#FEF3C7",border:"1px solid #D97706",borderRadius:10,padding:"10px 14px",fontSize:11,color:"#92400E"}}>
+        <b>🔧 Diagnostic temporaire (Flightradar24):</b><br/>{FR24_DEBUG.info}
+      </div>
       {/* Aircraft selector */}
       {aircraft&&aircraft.length>0&&(
         <div>
