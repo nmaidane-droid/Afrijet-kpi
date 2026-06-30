@@ -924,7 +924,7 @@ function computeAlerts(kpis, flights, maintData, aircraft) {
   const lfVal=volsDone.length>0?Math.round(volsDone.reduce((s,f)=>s+f.load,0)/volsDone.length):kpis.loadFactor||0;
   if(lfVal<70)a.push({id:"lf",sev:"warn",msg:"Load Factor: "+lfVal+"%",icon:"💺"});
   // Per-aircraft checks and MEL alerts
-  const acList=aircraft&&aircraft.length>0?aircraft:[maintData||{}];
+  const acList=aircraft||[];
   acList.forEach(ac=>{
     const prefix=aircraft&&aircraft.length>1?"["+ac.immat+"] ":"";
     const id_prefix=ac.id||"ac";
@@ -1096,16 +1096,7 @@ const INIT_KPIS = {
   nps:8.1, consoH:865,
 };
 
-const INIT_MAINT = {
-  nextCheckH:182, ttaf:4218,
-  fiabMoteurs:99.8, evtMoteur:0,
-  mels:[
-    {sys:"Passenger Address System", mel:"MEL 23-61", exp:"30/06/26", sev:"B"},
-    {sys:"No. 2 VHF Nav - ILS",      mel:"MEL 34-01", exp:"03/07/26", sev:"B"},
-    {sys:"Cabin Reading Light Row 3", mel:"MEL 33-11", exp:"10/07/26", sev:"B"},
-    {sys:"Galley Coffee Maker",       mel:"MEL 25-21", exp:"15/07/26", sev:"C"},
-  ],
-};
+const INIT_MAINT = {};
 
 const INIT_SAFETY = [
   {date:"2026-06-03",num:"AJS049",from:"FEZ",to:"CMN",approche:false,tcas:false,gpws:false,hardLanding:false,safa:true,timestamp:1751000000},
@@ -3092,8 +3083,8 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
   const done=volsDoneR.length;
   const tPax=weekFlights.reduce((s,f)=>s+f.pax,0);
   // Use first aircraft data if available, fallback to maintData
-  const acList=aircraft&&aircraft.length>0?aircraft:[maintData||{}];
-  const md=acList[0]||maintData||{};
+  const acList=aircraft||[];
+  const md=acList[0]||{};
   const mels=acList.reduce((all,ac)=>[...all,...(ac.mels||[])],[]);
   const fd=finData||[];
   const tRev=fd.reduce((s,f)=>s+f.revenus,0);
@@ -3724,8 +3715,8 @@ function App() {
                 y+=8;
 
                 // ── Maintenance ──
-                const pAcList=aircraft&&aircraft.length>0?aircraft:[maintData||{}];
-                const md=pAcList[0]||maintData||{};
+                const pAcList=aircraft||[];
+                const md=pAcList[0]||{};
                 drawSection("  MAINTENANCE CAMO",0,147,106);
                 pAcList.forEach((ac,acIdx)=>{
                   if(y>240){doc.addPage();y=15;}
