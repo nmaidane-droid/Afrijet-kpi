@@ -47,7 +47,7 @@ const { useState, useEffect, useRef } = React;
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://zulwubuzuylmwkittnbg.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1bHd1YnV6dXlsbXdraXR0bmJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3Mjk5MjQsImV4cCI6MjA5ODMwNTkyNH0.Bt2MXASzrqWPaxTxo7ImZu-FtdjahLG9FLOMIgz9SWA";
-const OPENSKY_AUTH = "Basic " + btoa("nmaidane@hotmail.com:d!i#GT4FmKyaHGs");
+const FR24_TOKEN = "019f19a2-3af8-7196-b26a-9868009082bc|u8VFOrSqd0euZF0c9CZk0e8gCbQcE0GE6UPMhLRib8f2c0cf";
 const APP_PASSWORD = "esca141A330@2026";
 const supabase = window.supabase?.createClient(SUPA_URL, SUPA_KEY);
 
@@ -690,19 +690,20 @@ function simulateFlightState(icao24) {
 
 // Generate ~12 simulated Morocco traffic blips
 function parseState(s) {
-  if(!s||!Array.isArray(s))return null;
-  return {lat:s[6],lon:s[5],heading:s[10]||0,alt_m:s[7]||0,speed_ms:s[9]||0,callsign:(s[1]||"").trim(),simulated:false};
+  if(!s||typeof s!=="object")return null;
+  return {lat:s.lat,lon:s.lon,heading:s.track||0,alt_m:(s.alt||0)*0.3048,speed_ms:(s.gspeed||0)*0.51444,callsign:(s.callsign||s.flight||"").trim(),simulated:false};
 }
 
-async function fetchByIcao24(icao24) {
+async function fetchByIcao24(registration) {
   try {
     const r = await Promise.race([
-      fetch(`https://opensky-network.org/api/states/all?icao24=${icao24.toLowerCase()}`, {headers:{"Authorization":OPENSKY_AUTH}}),
+      fetch(`https://fr24api.flightradar24.com/api/live/flight-positions/full?registrations=${encodeURIComponent(registration)}`,
+        {headers:{"Accept":"application/json","Accept-Version":"v1","Authorization":"Bearer "+FR24_TOKEN}}),
       new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
     ]);
     if (r.ok) {
       const j = await r.json();
-      if (j.states?.[0]) return j.states[0];
+      if (j.data?.[0]) return j.data[0];
     }
   } catch(_e) {}
   return null;
@@ -711,12 +712,13 @@ async function fetchByIcao24(icao24) {
 async function fetchMorocco() {
   try {
     const r = await Promise.race([
-      fetch("https://opensky-network.org/api/states/all?lamin=27.7&lomin=-13.2&lamax=35.9&lomax=-0.9", {headers:{"Authorization":OPENSKY_AUTH}}),
+      fetch("https://fr24api.flightradar24.com/api/live/flight-positions/full?bounds=35.9,27.7,-13.2,-0.9",
+        {headers:{"Accept":"application/json","Accept-Version":"v1","Authorization":"Bearer "+FR24_TOKEN}}),
       new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
     ]);
     if (r.ok) {
       const j = await r.json();
-      return j.states ?? [];
+      return j.data ?? [];
     }
   } catch(_e) {}
   return simulateMoroccoTraffic();
@@ -1712,9 +1714,6 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   const save=()=>{
     if(!immat.trim()||!type.trim()){alert("Immatriculation et type requis");return;}
     const icaoTrim=icao24.trim().toUpperCase();
-    if(icaoTrim && !/^[0-9A-F]{6}$/.test(icaoTrim)){
-      alert("Code ICAO24 invalide (6 caractères hexadécimaux requis, ex: 020035)");return;
-    }
     if(sel==="new"){
       const newAc={id:"AC"+Date.now(),immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim,ttaf:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
       onUpdate([...aircraft,newAc]);
@@ -1755,7 +1754,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
           <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999}/>
           <FField label="Capacité carbu. (kg)" value={capa} onChange={setCapa} type="number" min={0}/>
         </FGrid>
-        <FField label="Code ICAO24 (transpondeur)" value={icao24} onChange={v=>setIcao24(v.toUpperCase())}/>
+        <FField label="Immatriculation (suivi Live)" value={icao24} onChange={v=>setIcao24(v.toUpperCase())}/>
         {/* Summary of existing fleet */}
         {aircraft.length>0&&(
           <Card>
@@ -2169,7 +2168,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
             style={{width:"100%",height:44,boxSizing:"border-box",background:C.navy,border:"none",borderRadius:10,padding:"0 14px",color:"white",fontSize:13,fontWeight:700,outline:"none",appearance:"none"}}>
             {aircraft.map(a=>(
               <option key={a.id} value={a.icao24||""} style={{background:"white",color:C.navy}}>
-                {a.immat} · {a.type} {a.icao24?"("+a.icao24+")":"(ICAO24 non défini)"}
+                {a.immat} · {a.type} {a.icao24?"("+a.icao24+")":"(immatriculation non définie)"}
               </option>
             ))}
           </select>
@@ -3361,7 +3360,7 @@ function AppMain({ onLogout }) {
   const [dismissed,setDism]  = usePersist("dismissed",[]);
   const [alertHist,setAlertHist] = usePersist("alertHist",[]);
   const [melHist,setMelHist]     = usePersist("melHist",[]);
-  const [icao24,setIcao24]   = usePersist("icao24","020035");
+  const [icao24,setIcao24]   = usePersist("icao24","CN-KTA");
   const [lastBackup,setLastBackup] = usePersist("lastBackup",null);
   const [ac,setAc]           = useState(null);
   const [mTraffic,setMTraff] = useState([]);
