@@ -1869,7 +1869,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
             <div style={{fontSize:11,color:C.slate}}>Saisie par departement</div>
           </div>
         </div>
-        <div style={{display:"flex",gap:8,marginTop:10}}>
+        <div style={{display:"flex",gap:12,marginTop:10}}>
           <button onClick={doExport}
             style={{flex:1,height:36,background:"#D1FAE5",border:"1.5px solid #00936A",borderRadius:8,color:"#00936A",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             📥 Exporter
@@ -1884,7 +1884,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           </button>
           <button onClick={onLogout}
             style={{flex:1,height:36,background:"#F1F5F9",border:"1.5px solid #64748B",borderRadius:8,color:"#64748B",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-            🔒 Déconnexion
+            🔒 Exit
           </button>
         </div>
       </Card>
@@ -3310,15 +3310,38 @@ function LoginGate({ onAuth }) {
 }
 
 // ── App ──────────────────────────────────────────────────────────────────────
+function LoggedOutScreen({ onReturnToLogin }) {
+  return (
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:20}}>
+      <div style={{background:"#fff",borderRadius:16,padding:32,width:"100%",maxWidth:340,boxShadow:"0 20px 50px rgba(0,0,0,.3)",textAlign:"center"}}>
+        <div style={{fontSize:32,marginBottom:8}}>🔒</div>
+        <div style={{fontWeight:700,fontSize:16,color:"#0F1F3D",marginBottom:6}}>Déconnecté</div>
+        <div style={{fontSize:13,color:"#64748B",marginBottom:20}}>Vous pouvez fermer l'application en toute sécurité.</div>
+        <button onClick={onReturnToLogin}
+          style={{width:"100%",height:46,background:"#F1F5F9",color:"#0F1F3D",border:"1.5px solid #CBD5E1",borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+          Se reconnecter
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [authed,setAuthed] = useState(()=>{
     try{ return sessionStorage.getItem(PFX+"authed")==="1"; }catch(_e){ return false; }
   });
+  const [loggedOut,setLoggedOut] = useState(false);
+  if(loggedOut) return <LoggedOutScreen onReturnToLogin={()=>setLoggedOut(false)}/>;
   if(!authed) return <LoginGate onAuth={()=>setAuthed(true)}/>;
-  return <AppMain/>;
+  return <AppMain onLogout={()=>{
+    try{ sessionStorage.removeItem(PFX+"authed"); }catch(_e){}
+    setAuthed(false);
+    setLoggedOut(true);
+  }}/>;
 }
 
-function AppMain() {
+
+function AppMain({ onLogout }) {
   const [now,setNow]         = useState(new Date());
   const [tab,setTab]         = useState(() => {
     try { return sessionStorage.getItem(PFX+"tab") || "forms"; } catch(_e) { return "forms"; }
@@ -3473,10 +3496,7 @@ function AppMain() {
           onSubmitFin={d=>setFin(f=>[...f,d])}
           onSubmitSafety={d=>setSafety(s=>[...s,d])}
           onReset={()=>setReset(true)}
-          onLogout={()=>{
-            try{ sessionStorage.removeItem(PFX+"authed"); }catch(_e){}
-            window.location.reload();
-          }}
+          onLogout={onLogout}
           flights={flights} crew={crew} setCrew={setCrew}
           maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed} safetyData={safetyData}
           aircraft={aircraft} onUpdateAircraft={setAircraft}
