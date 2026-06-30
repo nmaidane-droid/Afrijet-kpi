@@ -1137,7 +1137,7 @@ const INIT_FLIGHTS = [
 const INIT_AIRCRAFT = [
   {
     id:"AC001", immat:"CN-KTA", type:"EMB 135", sieges:18,
-    capa:5700, icao24:"020035",
+    capa:5700, icao24:"CN-KTA",
     ttaf:4350, nextCheckH:145, bCheckH:620, cCheckH:2400,
     evtMoteur:1, fiabMoteurs:98.9,
     mels:[
@@ -1148,7 +1148,7 @@ const INIT_AIRCRAFT = [
   },
   {
     id:"AC002", immat:"CN-KTB", type:"EMB 145", sieges:8,
-    capa:3800, icao24:"020036",
+    capa:3800, icao24:"CN-KTB",
     ttaf:2180, nextCheckH:210, bCheckH:890, cCheckH:3100,
     evtMoteur:0, fiabMoteurs:100,
     mels:[
@@ -2251,7 +2251,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
           ))}
         </div>
         <div style={{marginTop:8,fontSize:11,color:C.slateL,textAlign:"center"}}>
-          {ac?.simulated?"Mode simulation — ICAO24 à confirmer":"ADS-B Live"}
+          {ac?.simulated?"Mode simulation — immatriculation à confirmer":"ADS-B Live"}
         </div>
       </Card>
       <Card>
