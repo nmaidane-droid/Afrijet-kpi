@@ -3277,7 +3277,12 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
 // ── App ──────────────────────────────────────────────────────────────────────
 function App() {
   const [now,setNow]         = useState(new Date());
-  const [tab,setTab]         = usePersist("tab","forms");
+  const [tab,setTab]         = useState(() => {
+    try { return sessionStorage.getItem(PFX+"tab") || "forms"; } catch(_e) { return "forms"; }
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem(PFX+"tab", tab); } catch(_e) {}
+  }, [tab]);
   const [flights,setFlights] = usePersist("flights",INIT_FLIGHTS);
   // Auto-upgrade: if demo data is old (fewer than 8 flights), reload with new demo
   useEffect(()=>{
