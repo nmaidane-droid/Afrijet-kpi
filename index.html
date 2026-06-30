@@ -661,15 +661,15 @@ function simulateFlightState(icao24) {
     };
   }
 
-  // CN-KTA — AGA (Agadir) -> EUN (Laayoune), position mi-chemin
+  // CN-KTA — CMN (Casablanca) -> FEZ, position mi-chemin
   const elapsed = (now % (55 * 60 * 1000)) / (55 * 60 * 1000);
   const progress = 0.45 + elapsed * 0.1; // oscille autour de mi-chemin
-  const lat = 30.325 + (27.151 - 30.325) * progress + seed * 0.03;
-  const lon = -9.413 + (-13.219 - (-9.413)) * progress + seed2 * 0.03;
+  const lat = 33.3675 + (33.9273 - 33.3675) * progress + seed * 0.03;
+  const lon = -7.5900 + (-4.9778 - (-7.5900)) * progress + seed2 * 0.03;
   const cruiseAlt = 8534; // FL280
   const altM = cruiseAlt + seed * 80;
   const speed_ms = 225 + seed2 * 8;
-  const heading = 205 + seed3 * 3; // Cap SSO vers Laayoune
+  const heading = 72 + seed3 * 3; // ENE vers FEZ
   return {
     icao24:      icao24 || "CN-KTA",
     callsign:    "AJS03",
