@@ -1717,12 +1717,16 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
 
   const save=()=>{
     if(!immat.trim()||!type.trim()){alert("Immatriculation et type requis");return;}
+    const icaoTrim=icao24.trim().toUpperCase();
+    if(icaoTrim && !/^[0-9A-F]{6}$/.test(icaoTrim)){
+      alert("Code ICAO24 invalide (6 caractères hexadécimaux requis, ex: 020035)");return;
+    }
     if(sel==="new"){
-      const newAc={id:"AC"+Date.now(),immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icao24.trim(),ttaf:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
+      const newAc={id:"AC"+Date.now(),immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim,ttaf:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
       onUpdate([...aircraft,newAc]);
       setMsg("Avion ajouté ✅");
     } else {
-      onUpdate(aircraft.map(a=>a.id===sel?{...a,immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icao24.trim()}:a));
+      onUpdate(aircraft.map(a=>a.id===sel?{...a,immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim}:a));
       setMsg("Avion mis à jour ✅");
     }
     setTimeout(()=>{setMsg("");setLocalSaved(false);},3000);
@@ -1757,7 +1761,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
           <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999}/>
           <FField label="Capacité carbu. (kg)" value={capa} onChange={setCapa} type="number" min={0}/>
         </FGrid>
-        <FField label="Code ICAO24 (transpondeur)" value={icao24} onChange={setIcao24}/>
+        <FField label="Code ICAO24 (transpondeur)" value={icao24} onChange={v=>setIcao24(v.toUpperCase())}/>
         {/* Summary of existing fleet */}
         {aircraft.length>0&&(
           <Card>
