@@ -731,10 +731,12 @@ async function fetchByIcao24(registration) {
   return null;
 }
 
-async function fetchMorocco() {
+async function fetchRegionalTraffic(lat, lon) {
+  const d = 3; // ~3 degrees radius around the aircraft
+  const bounds = `${lat+d},${lat-d},${lon-d},${lon+d}`;
   try {
     const r = await Promise.race([
-      fetch("https://fr24api.flightradar24.com/api/live/flight-positions/full?bounds=35.9,27.7,-13.2,-0.9",
+      fetch(`https://fr24api.flightradar24.com/api/live/flight-positions/full?bounds=${bounds}`,
         {headers:{"Accept":"application/json","Accept-Version":"v1","Authorization":"Bearer "+FR24_TOKEN}}),
       new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
     ]);
@@ -3426,9 +3428,20 @@ function AppMain({ onLogout }) {
   const refresh = async () => {
     setLoading(true);
     try {
-      const [st,tr] = await Promise.all([fetchByIcao24(icao24),fetchMorocco()]);
-      if(st){const p=parseState(st);if(p){setAc({...p,simulated:false,alt_ft:p.alt_m?Math.round(p.alt_m*3.281):null,speed_kt:p.speed_ms?Math.round(p.speed_ms*1.944):null});}}
-      else{setAc(simulateFlightState(icao24));}
+      const st = await fetchByIcao24(icao24);
+      let posLat = 32.0, posLon = -6.0; // fallback default (Morocco) if no position known yet
+      if(st){
+        const p=parseState(st);
+        if(p){
+          setAc({...p,simulated:false,alt_ft:p.alt_m?Math.round(p.alt_m*3.281):null,speed_kt:p.speed_ms?Math.round(p.speed_ms*1.944):null});
+          posLat=p.lat; posLon=p.lon;
+        }
+      } else {
+        const sim = simulateFlightState(icao24);
+        setAc(sim);
+        posLat=sim.lat; posLon=sim.lon;
+      }
+      const tr = await fetchRegionalTraffic(posLat, posLon);
       setMTraff(tr);
     } catch(_e){setAc(simulateFlightState(icao24));}
     setLoading(false);
