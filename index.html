@@ -1860,18 +1860,20 @@ function FormReglementation() {
       )}
 
       {docs.map(doc => (
-        <div key={doc.id} style={{background:"white",borderRadius:12,border:"1.5px solid "+C.border,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
-          <div style={{fontSize:24,flexShrink:0}}>📄</div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:13,color:C.navy,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{doc.name}</div>
-            <div style={{fontSize:11,color:C.slate,marginTop:2}}>Version du {doc.date} · {doc.size} ko</div>
+        <div key={doc.id} style={{background:"white",borderRadius:12,border:"1.5px solid "+C.border,padding:"14px 16px"}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
+            <div style={{fontSize:22,flexShrink:0,marginTop:2}}>📄</div>
+            <div>
+              <div style={{fontWeight:700,fontSize:13,color:C.navy,wordBreak:"break-word"}}>{doc.name}</div>
+              <div style={{fontSize:11,color:C.slate,marginTop:2}}>Version du {doc.date} · {doc.size} ko</div>
+            </div>
           </div>
-          <div style={{display:"flex",gap:8,flexShrink:0}}>
+          <div style={{display:"flex",gap:8}}>
             <button onClick={()=>handleOpen(doc)}
-              style={{background:C.navy,color:"white",border:"none",borderRadius:8,padding:"7px 12px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+              style={{background:C.navy,color:"white",border:"none",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
               📥 Ouvrir
             </button>
-            <label style={{background:"#EFF6FF",color:"#1D4ED8",border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 12px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+            <label style={{background:"#EFF6FF",color:"#1D4ED8",border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
               🔄 Mettre à jour
               <input type="file" accept=".pdf" style={{display:"none"}} onChange={e=>handleUpdate(doc,e)}/>
             </label>
