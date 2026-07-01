@@ -48,7 +48,14 @@ const { useState, useEffect, useRef } = React;
 const SUPA_URL = "https://zulwubuzuylmwkittnbg.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1bHd1YnV6dXlsbXdraXR0bmJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3Mjk5MjQsImV4cCI6MjA5ODMwNTkyNH0.Bt2MXASzrqWPaxTxo7ImZu-FtdjahLG9FLOMIgz9SWA";
 const FR24_TOKEN = "019f19a2-3af8-7196-b26a-9868009082bc|u8VFOrSqd0euZF0c9CZk0e8gCbQcE0GE6UPMhLRib8f2c0cf";
-const APP_PASSWORD = "esca141A330@2026";
+const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813f67ec439268";
+
+async function checkPassword(pwd) {
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest("SHA-256", enc.encode(pwd));
+  const hex = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+  return hex === APP_PASSWORD_HASH;
+}
 const supabase = window.supabase?.createClient(SUPA_URL, SUPA_KEY);
 
 async function sbGet(key) {
@@ -3334,8 +3341,8 @@ function LoginGate({ onAuth }) {
   const [pwd,setPwd]=useState("");
   const [err,setErr]=useState("");
   const [ok,setOk]=useState(false);
-  const submit=()=>{
-    if(pwd===APP_PASSWORD){
+  const submit=async()=>{
+    if(await checkPassword(pwd)){
       try{ sessionStorage.setItem(PFX+"authed","1"); }catch(_e){}
       setOk(true);
       setTimeout(onAuth,400);
