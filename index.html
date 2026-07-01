@@ -2269,7 +2269,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
   );
 }
 
-function ScreenOps({ flights, safetyData, onUpdateFlight }) {
+function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight }) {
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
   const [opsSaved,setOpsSaved]=useState(false);
@@ -2301,11 +2301,12 @@ function ScreenOps({ flights, safetyData, onUpdateFlight }) {
 
   const calcEdit=ef=>{
     if(!ef)return{};
+    const toMin=(t)=>{ const[h,m]=t.split(":").map(Number); return h*60+m; };
+    const diffMin=(a,b)=>{ let d=toMin(b)-toMin(a); if(d<0)d+=1440; return d; }; // +24h si minuit franchi
+
     let delayMin=0;
     if(ef.arr&&ef.arrReal){
-      const [ph,pm]=ef.arr.split(":").map(Number);
-      const [rh,rm]=ef.arrReal.split(":").map(Number);
-      const diff=(rh*60+rm)-(ph*60+pm);
+      const diff=diffMin(ef.arr,ef.arrReal);
       if(diff>15)delayMin=diff;
     }
     let consomme=0,consoH=0,fuelPct=ef.fuelPct||0;
@@ -2313,26 +2314,61 @@ function ScreenOps({ flights, safetyData, onUpdateFlight }) {
       consomme=ef.carbDep-ef.carbArr;
       fuelPct=Math.round(ef.carbArr/5700*100);
       if(ef.depReal&&ef.arrReal){
-        const [dh,dm]=ef.depReal.split(":").map(Number);
-        const [ah,am]=ef.arrReal.split(":").map(Number);
-        const h=((ah*60+am)-(dh*60+dm))/60;
+        const h=diffMin(ef.depReal,ef.arrReal)/60;
         if(h>0)consoH=Math.round(consomme/h);
       }
     }
-    // Duration
     let dureeMin=0;
     const dep2=ef.depReal||ef.dep, arr2=ef.arrReal||ef.arr;
-    if(dep2&&arr2){
-      const [dh,dm]=dep2.split(":").map(Number);
-      const [ah,am]=arr2.split(":").map(Number);
-      const diff=(ah*60+am)-(dh*60+dm);
-      if(diff>0) dureeMin=diff;
-    }
-    return{delayMin,consomme,consoH,fuelPct,nps:ef.nps||0,dureeMin};
+    if(dep2&&arr2) dureeMin=diffMin(dep2,arr2);
+    return{delayMin,consomme,consoH,fuelPct,nps:(ef.nps===''||ef.nps===undefined||ef.nps===null)?null:Number(ef.nps),dureeMin};
   };
 
   const doUpdate=()=>{
     if(!edit)return;
+
+    // Validation des transitions de statut
+    const orig = origStatus;
+    const next = edit.status;
+    if(orig==="Planifie" && next!=="En vol" && next!=="Annule"){
+      alert("Transition invalide : un vol planifié ne peut passer qu'à « En vol » ou « Annulé ».");
+      return;
+    }
+    if(orig==="En vol" && next!=="Termine"){
+      alert("Transition invalide : un vol en cours ne peut passer qu'à « Terminé ».");
+      return;
+    }
+    if((orig==="Termine"||orig==="Annule") && next!==orig){
+      alert("Ce vol est dans un état final ("+orig+") et ne peut plus être modifié.");
+      return;
+    }
+
+    // Vérification MEL Cat.A expiré au décollage
+    if(next==="En vol"){
+      const ac = (aircraft||[]).find(a=>a.id===edit.acId);
+      if(ac && ac.mels && ac.mels.length>0){
+        const today = new Date(); today.setHours(0,0,0,0);
+        const expired = ac.mels.filter(m=>{
+          if(m.sev!=="A") return false;
+          if(!m.exp) return false;
+          const parts = m.exp.split("/");
+          if(parts.length!==3) return false;
+          const d = new Date(parts[2]+"-"+parts[1]+"-"+parts[0]);
+          return d < today;
+        });
+        if(expired.length>0){
+          alert("⛔ Vol non autorisé — MEL Cat.A expiré sur "+ac.immat+" :\n"+expired.map(m=>"• "+m.sys+" ("+m.mel+", exp. "+m.exp+")").join("\n")+"\n\nRésolvez ce MEL avant de mettre l'avion En vol.");
+          return;
+        }
+      }
+    }
+
+    // Vérification fuel arrivée > fuel départ
+    if(edit.carbDep>0 && edit.carbArr>0 && edit.carbArr>edit.carbDep){
+      alert("⚠️ Fuel arrivée ("+edit.carbArr+" kg) ne peut pas être supérieur au fuel départ ("+edit.carbDep+" kg). Vérifiez vos valeurs.");
+      return;
+    }
+
     const c=calcEdit(edit);
     onUpdateFlight({...edit,load:Math.round(edit.pax/18*100),...c});
     setOpsSaved(true);
@@ -2891,7 +2927,7 @@ function ScreenPerf({ kpis, flights, finData }) {
   const consoMoy = vols.length>0 ? Math.round(vols.reduce((s,f)=>s+f.consoH,0)/vols.length) : kpis.consoH||0;
   const consoLabel = vols.length>0 ? "Moy. "+vols.length+" vol(s)" : "Depuis KPI";
   const tPax = flights.reduce((s,f)=>s+f.pax,0);
-  const volsNps = flights.filter(f=>f.status==="Termine"&&f.nps>0);
+  const volsNps = flights.filter(f=>f.status==="Termine"&&f.nps!==null);
   const npsVal = volsNps.length>0 ? Math.round(volsNps.reduce((s,f)=>s+f.nps,0)/volsNps.length*10)/10 : kpis.nps||0;
 
   // Build chart data grouped by week for smooth curves
@@ -2914,7 +2950,7 @@ function ScreenPerf({ kpis, flights, finData }) {
   const consoData= days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
   const paxData  = days.map(d=>({label:d.date,val:d.pax}));
   const npsData  = days.map(d=>{
-    const npsVols=d.vols.filter(f=>f.nps>0);
+    const npsVols=d.vols.filter(f=>f.nps!==null);
     return {label:d.date,val:npsVols.length>0?Math.round(npsVols.reduce((s,f)=>s+f.nps,0)/npsVols.length):null};
   });
 
@@ -3164,7 +3200,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
   const rDelay=rDelayVols.length>0?Math.round(rDelayVols.reduce((s,f)=>s+f.delayMin,0)/rDelayVols.length):kpis.delayMin||0;
   const rConsoVols=volsDoneR.filter(f=>f.consoH>0);
   const rConso=rConsoVols.length>0?Math.round(rConsoVols.reduce((s,f)=>s+f.consoH,0)/rConsoVols.length):kpis.consoH||0;
-  const rNpsVols=volsDoneR.filter(f=>f.nps>0);
+  const rNpsVols=volsDoneR.filter(f=>f.nps!==null);
   const rNps=rNpsVols.length>0?Math.round(rNpsVols.reduce((s,f)=>s+f.nps,0)/rNpsVols.length*10)/10:kpis.nps||0;
 
   const row=(v1,l1,c1,v2,l2,c2,v3,l3,c3)=>{
@@ -3560,7 +3596,7 @@ function AppMain({ onLogout }) {
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist}/>}
-        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
+        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
@@ -3626,7 +3662,7 @@ function AppMain({ onLogout }) {
                 const lfData=days.map(d=>({label:d.date,val:d.vols.length>0?Math.round(d.vols.reduce((s,f)=>s+f.load,0)/d.vols.length):null}));
                 const consoData=days.map(d=>({label:d.date,val:d.consoVols>0?Math.round(d.consomme/d.consoVols):null}));
                 const paxData=days.map(d=>({label:d.date,val:d.pax}));
-                const npsData2=days.map(d=>{const nv=d.vols.filter(f=>f.nps>0);return{label:d.date,val:nv.length>0?Math.round(nv.reduce((s,f)=>s+f.nps,0)/nv.length):null};});
+                const npsData2=days.map(d=>{const nv=d.vols.filter(f=>f.nps!==null);return{label:d.date,val:nv.length>0?Math.round(nv.reduce((s,f)=>s+f.nps,0)/nv.length):null};});
                 const doc = new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
                 const PW=210, PH=297, M=15, CW=PW-M*2;
                 let y=0;
@@ -3669,7 +3705,7 @@ function AppMain({ onLogout }) {
                 const pDelay=pDelayVols.length>0?Math.round(pDelayVols.reduce((s,f)=>s+f.delayMin,0)/pDelayVols.length):kpis.delayMin||0;
                 const pConsoVols=volsDoneP.filter(f=>f.consoH>0);
                 const pConso=pConsoVols.length>0?Math.round(pConsoVols.reduce((s,f)=>s+f.consoH,0)/pConsoVols.length):kpis.consoH||0;
-                const pNpsVols=volsDoneP.filter(f=>f.nps>0);
+                const pNpsVols=volsDoneP.filter(f=>f.nps!==null);
                 const pNps=pNpsVols.length>0?Math.round(pNpsVols.reduce((s,f)=>s+f.nps,0)/pNpsVols.length):kpis.nps||0;
                 const cards=[
                   {v:done+"/"+flights.length,l:"Vols termines",c:[0,147,106],ok:true},
