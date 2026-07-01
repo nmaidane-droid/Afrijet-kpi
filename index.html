@@ -716,13 +716,10 @@ function simulateMoroccoTraffic() {
   return blips;
 }
 
-// Generate ~12 simulated Morocco traffic blips
 function parseState(s) {
   if(!s||typeof s!=="object")return null;
   return {lat:s.lat,lon:s.lon,heading:s.track||0,alt_m:(s.alt||0)*0.3048,speed_ms:(s.gspeed||0)*0.51444,callsign:(s.callsign||s.flight||"").trim(),simulated:false};
 }
-
-const FR24_DEBUG = {info:"Aucun appel effectue"};
 
 async function fetchByIcao24(registration) {
   try {
@@ -733,13 +730,9 @@ async function fetchByIcao24(registration) {
     ]);
     if (r.ok) {
       const j = await r.json();
-      if (j.data?.[0]) { FR24_DEBUG.info = "OK - "+j.data.length+" resultat(s)"; return j.data[0]; }
-      FR24_DEBUG.info = "Reponse OK mais 0 resultat pour '"+registration+"' (avion pas en vol actuellement ou hors couverture)";
-    } else {
-      let body=""; try{body=(await r.text()).slice(0,200);}catch(_e2){}
-      FR24_DEBUG.info = "Erreur HTTP "+r.status+" "+r.statusText+" - "+body;
+      if (j.data?.[0]) return j.data[0];
     }
-  } catch(e) { FR24_DEBUG.info = "Erreur reseau/CORS: "+(e?.message||e); }
+  } catch(_e) {}
   return null;
 }
 
@@ -755,11 +748,8 @@ async function fetchRegionalTraffic(lat, lon) {
     if (r.ok) {
       const j = await r.json();
       return j.data ?? [];
-    } else {
-      let body=""; try{body=(await r.text()).slice(0,200);}catch(_e2){}
-      FR24_DEBUG.info += " | Trafic: HTTP "+r.status+" "+body;
     }
-  } catch(e) { FR24_DEBUG.info += " | Trafic erreur: "+(e?.message||e); }
+  } catch(_e) {}
   return simulateMoroccoTraffic();
 }
 
@@ -1823,7 +1813,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
           <FField label="Nombre de sièges" value={sieges} onChange={setSieges} type="number" min={1} max={999}/>
           <FField label="Capacité carbu. (kg)" value={capa} onChange={setCapa} type="number" min={0}/>
         </FGrid>
-        {/* Code ICAO24 retiré: il se synchronise automatiquement avec l'immatriculation */}
+        
         {/* Summary of existing fleet */}
         {aircraft.length>0&&(
           <Card>
@@ -1885,7 +1875,11 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
   };
 
   // Compute days since last backup
-  const daysSince=lastBackup?Math.floor((Date.now()-new Date(lastBackup).getTime())/(1000*60*60*24)):null;
+  const daysSince=lastBackup?(()=>{
+    const today=new Date(); today.setHours(0,0,0,0);
+    const backupDay=new Date(lastBackup); backupDay.setHours(0,0,0,0);
+    return Math.floor((today.getTime()-backupDay.getTime())/(1000*60*60*24));
+  })():null;
 
   const doRestore=async()=>{
     const data=await sbGet(PFX+"lastBackupData");
