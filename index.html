@@ -2269,7 +2269,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
   );
 }
 
-function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight }) {
+function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft }) {
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
   const [opsSaved,setOpsSaved]=useState(false);
@@ -2304,24 +2304,32 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight }) {
     const toMin=(t)=>{ const[h,m]=t.split(":").map(Number); return h*60+m; };
     const diffMin=(a,b)=>{ let d=toMin(b)-toMin(a); if(d<0)d+=1440; return d; }; // +24h si minuit franchi
 
+    // Retard basé sur Off Block vs heure planifiée
     let delayMin=0;
     if(ef.arr&&ef.arrReal){
       const diff=diffMin(ef.arr,ef.arrReal);
       if(diff>15)delayMin=diff;
     }
+
+    // Block Time (Off Block → On Block)
+    let dureeMin=0;
+    const dep2=ef.depReal||ef.dep, arr2=ef.arrReal||ef.arr;
+    if(dep2&&arr2) dureeMin=diffMin(dep2,arr2);
+
+    // Flight Time (Take Off → Landing) — utilisé pour TTAF
+    let flightMin=0;
+    if(ef.takeOff&&ef.landing) flightMin=diffMin(ef.takeOff,ef.landing);
+
+    // Consommation basée sur Flight Time si disponible, sinon Block Time
     let consomme=0,consoH=0,fuelPct=ef.fuelPct||0;
     if(ef.carbDep>0&&ef.carbArr>0){
       consomme=ef.carbDep-ef.carbArr;
       fuelPct=Math.round(ef.carbArr/5700*100);
-      if(ef.depReal&&ef.arrReal){
-        const h=diffMin(ef.depReal,ef.arrReal)/60;
-        if(h>0)consoH=Math.round(consomme/h);
-      }
+      const h=(flightMin>0?flightMin:dureeMin)/60;
+      if(h>0)consoH=Math.round(consomme/h);
     }
-    let dureeMin=0;
-    const dep2=ef.depReal||ef.dep, arr2=ef.arrReal||ef.arr;
-    if(dep2&&arr2) dureeMin=diffMin(dep2,arr2);
-    return{delayMin,consomme,consoH,fuelPct,nps:(ef.nps===''||ef.nps===undefined||ef.nps===null)?null:Number(ef.nps),dureeMin};
+
+    return{delayMin,consomme,consoH,fuelPct,nps:(ef.nps===''||ef.nps===undefined||ef.nps===null)?null:Number(ef.nps),dureeMin,flightMin};
   };
 
   const doUpdate=()=>{
@@ -2371,6 +2379,17 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight }) {
 
     const c=calcEdit(edit);
     onUpdateFlight({...edit,load:Math.round(edit.pax/18*100),...c});
+
+    // Mise à jour automatique du TTAF avec le Flight Time (Take Off → Landing)
+    if(edit.status==="Termine" && c.flightMin>0 && edit.acId){
+      const flightH = Math.round(c.flightMin/60*100)/100; // arrondi à 2 décimales
+      if(typeof onUpdateAircraft==="function"){
+        onUpdateAircraft(prev => prev.map(a => a.id===edit.acId
+          ? {...a, ttaf: Math.round((a.ttaf+flightH)*100)/100}
+          : a
+        ));
+      }
+    }
     setOpsSaved(true);
     setTimeout(()=>{setOpsSaved(false);setEdit(null);},900);
   };
@@ -2409,12 +2428,22 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight }) {
                 <div style={{fontSize:10,fontWeight:700,color:C.gold,textTransform:"uppercase",marginBottom:8}}>Heures</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                   <div>
-                    <FLabel>Decollage reel</FLabel>
+                    <FLabel>Off Block</FLabel>
                     <input type="time" value={edit.depReal||""} onChange={e=>setEdit({...edit,depReal:e.target.value})}
                       style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
                   </div>
                   <div>
-                    <FLabel>Atterrissage reel</FLabel>
+                    <FLabel>Take Off</FLabel>
+                    <input type="time" value={edit.takeOff||""} onChange={e=>setEdit({...edit,takeOff:e.target.value})}
+                      style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                  </div>
+                  <div>
+                    <FLabel>Landing</FLabel>
+                    <input type="time" value={edit.landing||""} onChange={e=>setEdit({...edit,landing:e.target.value})}
+                      style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                  </div>
+                  <div>
+                    <FLabel>On Block</FLabel>
                     <input type="time" value={edit.arrReal||""} onChange={e=>setEdit({...edit,arrReal:e.target.value})}
                       style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
                   </div>
@@ -2575,7 +2604,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight }) {
               </div>
               <div style={{fontSize:11,color:C.textSub}}>
                 {f.dep} - {f.arr} · {f.pax} pax · {f.load}%
-                {(()=>{if(f.status==="Termine"&&f.depReal&&f.arrReal&&f.depReal.includes(":")&&f.arrReal.includes(":")){const[dh,dm]=f.depReal.split(":").map(Number);const[ah,am]=f.arrReal.split(":").map(Number);const r=(ah*60+am)-(dh*60+dm);if(r>0)return<span style={{color:C.emerald,fontWeight:700}}> · {Math.floor(r/60)}h{String(r%60).padStart(2,"0")}</span>;}if(f.dureeMin>0)return<span style={{color:C.slateL}}> · {Math.floor(f.dureeMin/60)}h{String(f.dureeMin%60).padStart(2,"0")}</span>;return null;})()}
+                {(()=>{if(f.dureeMin>0)return<span style={{color:C.emerald,fontWeight:700}}> · {Math.floor(f.dureeMin/60)}h{String(f.dureeMin%60).padStart(2,"0")}</span>;return null;})()}
               </div>
               {(f.cm1||f.cm2||f.cc)&&<div style={{fontSize:10,color:C.slateL,marginTop:1,fontStyle:"italic"}}>{[f.cm1,f.cm2,f.cc].filter(Boolean).join(" · ")}</div>}
             </div>
@@ -3229,12 +3258,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
   const fRows=fHeader+weekFlights.map((f,i)=>{
     const dot=f.status==="Termine"?"#00936A":f.status==="En vol"?"#D97706":"#94A3B8";
     let durVal="--";
-    if(f.status==="Termine"&&f.depReal&&f.arrReal&&f.depReal.length>=4&&f.arrReal.length>=4){
-      const[dh,dm]=f.depReal.split(":").map(Number);
-      const[ah,am]=f.arrReal.split(":").map(Number);
-      const r=(ah*60+am)-(dh*60+dm);
-      if(r>0)durVal=Math.floor(r/60)+"h"+String(r%60).padStart(2,"0");
-    } else if(f.dureeMin>0){
+    if(f.dureeMin>0){
       durVal=Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0");
     }
     const durColor=f.status==="Termine"?"#00936A":"#94A3B8";
@@ -3596,7 +3620,7 @@ function AppMain({ onLogout }) {
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist}/>}
-        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))}/>}
+        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
@@ -3837,12 +3861,7 @@ function AppMain({ onLogout }) {
 
                   // FLT
                   let durVal="--";
-                  if(f.status==="Termine"&&f.depReal&&f.arrReal&&f.depReal.length>=4&&f.arrReal.length>=4){
-                    const[dh,dm]=f.depReal.split(":").map(Number);
-                    const[ah,am]=f.arrReal.split(":").map(Number);
-                    const r=(ah*60+am)-(dh*60+dm);
-                    if(r>0)durVal=Math.floor(r/60)+"h"+String(r%60).padStart(2,"0");
-                  } else if(f.dureeMin>0){
+                  if(f.dureeMin>0){
                     durVal=Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0");
                   }
                   doc.setTextColor(f.status==="Termine"?0:100, f.status==="Termine"?147:116, f.status==="Termine"?106:139);
