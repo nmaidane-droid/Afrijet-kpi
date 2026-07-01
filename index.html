@@ -902,8 +902,8 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
       if (!t?.lat || !t?.lon) return;
       const el = document.createElement("div");
       const heading = t.track||t.heading||0;
-      el.style.cssText = "width:16px;height:16px;cursor:pointer;filter:drop-shadow(0 1px 3px rgba(0,0,0,.4));";
-      el.innerHTML = `<svg width="16" height="16" viewBox="0 0 100 100" style="transform:rotate(${heading}deg)" xmlns="http://www.w3.org/2000/svg">
+      el.style.cssText = "width:24px;height:24px;cursor:pointer;filter:drop-shadow(0 1px 3px rgba(0,0,0,.4));";
+      el.innerHTML = `<svg width="24" height="24" viewBox="0 0 100 100" style="transform:rotate(${heading}deg)" xmlns="http://www.w3.org/2000/svg">
         <path fill="#64748B" stroke="white" stroke-width="3" d="M50,4 L40,40 L8,58 L8,66 L42,56 L40,82 L26,90 L26,96 L50,90 L74,96 L74,90 L60,82 L58,56 L92,66 L92,58 L60,40 Z"/>
       </svg>`;
       const label = t.reg || t.callsign || t.flight || "Vol inconnu";
