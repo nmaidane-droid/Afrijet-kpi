@@ -1652,12 +1652,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
 }
 
 function FormSafety({ onSubmit, flights, saved }) {
-  // Get terminated flights of current week
   const now=new Date();
-  const day=now.getDay()||7;
-  const monday=new Date(now);monday.setDate(now.getDate()-day+1);monday.setHours(0,0,0,0);
-  const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);sunday.setHours(23,59,59,999);
-  const weekFlights=flights.filter(f=>f.status==="Termine"&&f.date&&new Date(f.date)>=monday&&new Date(f.date)<=sunday);
 
   const [volNum,setVolNum]=useState("");
   const [approche,setApproche]=useState(false);
@@ -1665,20 +1660,41 @@ function FormSafety({ onSubmit, flights, saved }) {
   const [gpws,setGpws]=useState(false);
   const [hardLanding,setHardLanding]=useState(false);
   const [safa,setSafa]=useState(false);
+  const [secuPeriod,setSecuPeriod]=useState("30j");
+  const [secuSearch,setSecuSearch]=useState("");
 
   const reset=()=>{setVolNum("");setApproche(false);setTcas(false);setGpws(false);setHardLanding(false);setSafa(false);};
 
   const submit=()=>{
     if(!volNum)return;
-    const f=flights.find(f=>f.num===volNum);
+    const parts=volNum.split("|");
+    const f=flights.find(f=>f.num===parts[0]&&f.date===parts[1])||flights.find(f=>f.num===parts[0]);
     onSubmit({
-      num:volNum, date:f?.date||new Date().toISOString().slice(0,10),
+      num:parts[0], date:f?.date||new Date().toISOString().slice(0,10),
       from:f?.from||"", to:f?.to||"",
       approche,tcas,gpws,hardLanding,safa,
       timestamp:new Date().toISOString()
     });
     reset();
   };
+
+  // Filter flights by period and search
+  const cutoff=new Date(now);
+  if(secuPeriod==="7j") cutoff.setDate(cutoff.getDate()-7);
+  else if(secuPeriod==="30j") cutoff.setDate(cutoff.getDate()-30);
+  else cutoff.setFullYear(2000);
+  cutoff.setHours(0,0,0,0);
+
+  const filteredSecuFlights = flights
+    .filter(f=>f.status==="Termine"&&f.date&&new Date(f.date)>=cutoff)
+    .filter(f=>{
+      const q=secuSearch.trim().toUpperCase();
+      if(!q) return true;
+      const dateFull=f.date?f.date.slice(8)+"/"+f.date.slice(5,7)+"/"+f.date.slice(0,4):"";
+      const terms=q.split(/\s+/);
+      return terms.every(t=>(f.num||"").toUpperCase().includes(t)||dateFull.includes(t));
+    })
+    .sort((a,b)=>b.date.localeCompare(a.date));
 
   const Check=({label,value,onChange,color="#DC2626"})=>(
     <div onClick={()=>onChange(!value)}
@@ -1694,17 +1710,31 @@ function FormSafety({ onSubmit, flights, saved }) {
 
   return (
     <Card accent="#DC2626">
-      <FHeader icon="🛡" title="Événements Sécurité" subtitle="Rapport post-vol CN-KTA" color="#DC2626"/>
+      <FHeader icon="🛡" title="Événements Sécurité" subtitle="Rapport post-vol" color="#DC2626"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        <FSection title="Numéro de vol" color="#DC2626"/>
+        <FSection title="Sélection du vol" color="#DC2626"/>
+
+        <div style={{display:"flex",gap:6,marginBottom:4}}>
+          {["7j","30j","Tout"].map(p=>(
+            <button key={p} onClick={()=>{setSecuPeriod(p);setVolNum("");}}
+              style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+C.border,fontSize:11,fontWeight:600,cursor:"pointer",
+                background:secuPeriod===p?"#DC2626":"white",color:secuPeriod===p?"white":C.slate}}>
+              {p}
+            </button>
+          ))}
+        </div>
+
+        <input value={secuSearch} onChange={e=>setSecuSearch(e.target.value)} placeholder="🔍  CN-KTA  /  30/06/2026  /  CN-KTA 30/06/2026"
+          style={{width:"100%",height:42,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 14px",fontSize:13,outline:"none",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+
         <select value={volNum} onChange={e=>setVolNum(e.target.value)}
           style={{width:"100%",height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",fontSize:14,color:C.text,outline:"none"}}>
-          <option value="">-- Sélectionner un vol --</option>
-          {flights.filter(f=>f.status==="Termine"&&f.date).sort((a,b)=>b.date.localeCompare(a.date)).map((f,i)=>(
+          <option value="">-- Sélectionner un vol ({filteredSecuFlights.length}) --</option>
+          {filteredSecuFlights.map((f,i)=>(
             <option key={f.num+f.date+i} value={f.num+"|"+f.date}>{f.num} · {f.date?.slice(8)}/{f.date?.slice(5,7)}/{f.date?.slice(0,4)} · {f.from}→{f.to}</option>
           ))}
         </select>
-        {flights.filter(f=>f.status==="Termine").length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12}}>Aucun vol terminé</div>}
+        {filteredSecuFlights.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12}}>Aucun vol terminé sur cette période</div>}
 
         <FSection title="Événements" color="#DC2626"/>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
