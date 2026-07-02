@@ -1249,7 +1249,7 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
         <FGrid><FField label="N Vol *" value={num} onChange={setNum}/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
         <FSection title="Route" color="#0F1F3D"/>
         <FGrid><FAirport label="Depart — Code IATA" value={from_} onChange={setFrom}/><FAirport label="Arrivee — Code IATA" value={to} onChange={setTo}/></FGrid>
-        <FSection title="Horaires planifies (GMT)" color="#0F1F3D"/>
+        <FSection title="Horaires planifies" color="#0F1F3D"/>
         <FGrid><FField label="Depart prevu * (GMT)" value={dep} onChange={setDep} type="time"/></FGrid>
         <FSection title="Passagers prevus" color="#0F1F3D"/>
         <FGrid>
@@ -2962,6 +2962,7 @@ function ScreenSecu({ safetyData, flights }) {
   const monday=new Date(now);monday.setDate(now.getDate()-day+1);monday.setHours(0,0,0,0);
   const [filterPeriod,setFilterPeriod]=React.useState("Tout");
   const [filterType,setFilterType]=React.useState("Tous");
+  const [histFilter,setHistFilter]=React.useState("Tout");
 
   // Filter safetyData by period and type
   const days=filterPeriod==="7j"?7:filterPeriod==="30j"?30:filterPeriod==="90j"?90:36500;
@@ -3077,24 +3078,38 @@ function ScreenSecu({ safetyData, flights }) {
         <Card>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <SectionTitle>Historique événements</SectionTitle>
-            <span style={{fontSize:11,color:C.slate,fontWeight:600}}>{filtered.length} événement(s)</span>
-          </div>
-          {[...filtered].reverse().map((e,i)=>(
-            <div key={i} style={{padding:"10px 0",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                <span style={{fontWeight:700,fontSize:12,color:C.navy}}>{e.num}</span>
-                <span style={{fontSize:11,color:C.slate}}>{e.from}→{e.to}</span>
-                <span style={{fontSize:10,color:C.slateL,marginLeft:"auto"}}>{e.date?.slice(8)}/{e.date?.slice(5,7)}/{e.date?.slice(2,4)}</span>
-              </div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {e.approche&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Approche instable</span>}
-                {e.tcas&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>TCAS RA</span>}
-                {e.gpws&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>GPWS Warning</span>}
-                {e.hardLanding&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Hard Landing</span>}
-                {e.safa&&<span style={{background:"#EDE9FE",color:"#7C3AED",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>SAFA</span>}
-              </div>
+            <div style={{display:"flex",gap:4}}>
+              {["7j","30j","Tout"].map(p=>(
+                <button key={p} onClick={()=>setHistFilter(p)}
+                  style={{padding:"4px 10px",borderRadius:8,border:"1px solid "+C.border,fontSize:11,fontWeight:600,cursor:"pointer",
+                    background:histFilter===p?C.navy:"white",color:histFilter===p?"white":C.slate}}>
+                  {p}
+                </button>
+              ))}
             </div>
-          ))}
+          </div>
+          {(()=>{
+            const hDays=histFilter==="7j"?7:histFilter==="30j"?30:36500;
+            const hCutoff=new Date(now); hCutoff.setDate(hCutoff.getDate()-hDays); hCutoff.setHours(0,0,0,0);
+            const histFiltered=[...filtered].filter(e=>!e.date||new Date(e.date)>=hCutoff).reverse();
+            if(histFiltered.length===0) return <div style={{textAlign:"center",color:C.slate,fontSize:12,padding:"12px 0"}}>Aucun événement sur cette période</div>;
+            return histFiltered.map((e,i)=>(
+              <div key={i} style={{padding:"10px 0",borderBottom:i<histFiltered.length-1?"1px solid "+C.border:"none"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontWeight:700,fontSize:12,color:C.navy}}>{e.num}</span>
+                  <span style={{fontSize:11,color:C.slate}}>{e.from}→{e.to}</span>
+                  <span style={{fontSize:10,color:C.slateL,marginLeft:"auto"}}>{e.date?.slice(8)}/{e.date?.slice(5,7)}/{e.date?.slice(2,4)}</span>
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {e.approche&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Approche instable</span>}
+                  {e.tcas&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>TCAS RA</span>}
+                  {e.gpws&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>GPWS Warning</span>}
+                  {e.hardLanding&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Hard Landing</span>}
+                  {e.safa&&<span style={{background:"#EDE9FE",color:"#7C3AED",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>SAFA</span>}
+                </div>
+              </div>
+            ));
+          })()}
         </Card>
       )}
     </div>
