@@ -2417,15 +2417,10 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
   const filtered=flights.filter(f=>{
     const q=search.trim().toUpperCase();
     if(q){
-      const dateShort=f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"";
-      const route=(f.from||"")+"-"+(f.to||"");
-      const match=(f.num||"").includes(q)||
-        route.includes(q)||
-        (f.from||"").includes(q)||
-        (f.to||"").includes(q)||
-        (f.date||"").includes(q)||
-        dateShort.includes(q)||
-        (f.cm1||"").toUpperCase().includes(q);
+      const dateFull=f.date?f.date.slice(8)+"/"+f.date.slice(5,7)+"/"+f.date.slice(0,4):"";
+      const num=(f.num||"").toUpperCase();
+      const terms=q.split(/\s+/);
+      const match=terms.every(t=>num.includes(t)||dateFull.includes(t));
       if(!match)return false;
     }
     if(filterStatus!=="Tous"&&f.status!==filterStatus)return false;
@@ -2718,7 +2713,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
       <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
         <input
           type="text"
-          placeholder="🔍  Vol, CMN-AGA, 26/06, CM1..."
+          placeholder="🔍  CN-KTA  /  30/06/2026  /  CN-KTA 30/06/2026"
           value={search}
           onChange={e=>setSearch(e.target.value.toUpperCase())}
           style={{width:"100%",padding:"9px 12px",borderRadius:9,border:"1.5px solid "+C.border,fontSize:13,color:C.text,background:C.bg,outline:"none",textTransform:"uppercase"}}
