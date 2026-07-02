@@ -1756,109 +1756,83 @@ function FormFin({ onSubmit, saved }) {
   );
 }
 
-function FormReglementation() {
-  const PFX_REGL = PFX + "reglementation_";
+function FormDocStore({ storeKey, label }) {
+  const PFX_DOCS = PFX + storeKey + "_";
   const [docs, setDocs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [msg, setMsg] = React.useState("");
 
-  // Load doc list from Supabase
   React.useEffect(() => {
     (async () => {
-      try {
-        const list = await sbGet(PFX + "regl_index") || [];
-        setDocs(list);
-      } catch(_e) {}
+      try { const list = await sbGet(PFX + storeKey + "_index") || []; setDocs(list); } catch(_e) {}
       setLoading(false);
     })();
-  }, []);
+  }, [storeKey]);
 
-  const saveIndex = async (newDocs) => {
-    setDocs(newDocs);
-    await sbSet(PFX + "regl_index", newDocs);
-  };
+  const saveIndex = async (newDocs) => { setDocs(newDocs); await sbSet(PFX + storeKey + "_index", newDocs); };
 
   const handleAdd = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     if (!file.name.toLowerCase().endsWith(".pdf")) { alert("Seuls les fichiers PDF sont acceptés."); return; }
-    const name = prompt("Nom du texte réglementaire :", file.name.replace(".pdf","")) || file.name;
+    const name = prompt("Nom du document :", file.name.replace(".pdf","")) || file.name;
     setMsg("📤 Import en cours...");
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const b64 = ev.target.result;
-      const id = "regl_" + Date.now();
+      const id = storeKey + "_" + Date.now();
       const dateStr = new Date().toLocaleDateString("fr-FR");
-      await sbSet(PFX_REGL + id, b64);
+      await sbSet(PFX_DOCS + id, b64);
       const newDocs = [...docs, { id, name, date: dateStr, size: Math.round(file.size/1024) }];
       await saveIndex(newDocs);
       setMsg("✅ « " + name + " » importé avec succès.");
       setTimeout(() => setMsg(""), 3000);
     };
-    reader.readAsDataURL(file);
-    e.target.value = "";
+    reader.readAsDataURL(file); e.target.value = "";
   };
 
   const handleUpdate = async (doc, e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     if (!file.name.toLowerCase().endsWith(".pdf")) { alert("Seuls les fichiers PDF sont acceptés."); return; }
     if (!window.confirm("⚠️ Ceci remplacera la version du " + doc.date + " de « " + doc.name + " ». Confirmer ?")) { e.target.value=""; return; }
     setMsg("📤 Mise à jour en cours...");
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const b64 = ev.target.result;
-      await sbSet(PFX_REGL + doc.id, b64);
+      await sbSet(PFX_DOCS + doc.id, b64);
       const newDocs = docs.map(d => d.id === doc.id ? { ...d, date: new Date().toLocaleDateString("fr-FR"), size: Math.round(file.size/1024) } : d);
       await saveIndex(newDocs);
       setMsg("✅ « " + doc.name + " » mis à jour.");
       setTimeout(() => setMsg(""), 3000);
     };
-    reader.readAsDataURL(file);
-    e.target.value = "";
+    reader.readAsDataURL(file); e.target.value = "";
   };
 
   const handleOpen = async (doc) => {
     setMsg("📥 Chargement...");
-    const b64 = await sbGet(PFX_REGL + doc.id);
+    const b64 = await sbGet(PFX_DOCS + doc.id);
     if (!b64) { setMsg("❌ Fichier introuvable."); return; }
     const link = document.createElement("a");
-    link.href = b64;
-    link.download = doc.name + ".pdf";
-    link.click();
+    link.href = b64; link.download = doc.name + ".pdf"; link.click();
     setMsg("");
-  };
-
-  const handleDelete = async (doc) => {
-    if (!window.confirm("Supprimer « " + doc.name + " » ? Cette action est irréversible.")) return;
-    await sbSet(PFX_REGL + doc.id, null);
-    const newDocs = docs.filter(d => d.id !== doc.id);
-    await saveIndex(newDocs);
-    setMsg("🗑 « " + doc.name + " » supprimé.");
-    setTimeout(() => setMsg(""), 3000);
   };
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {msg && <div style={{background:"#F0FDF4",border:"1px solid #86EFAC",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#166534"}}>{msg}</div>}
-
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-        <div style={{fontSize:13,fontWeight:700,color:C.navy}}>{docs.length} texte(s) réglementaire(s)</div>
+        <div style={{fontSize:13,fontWeight:700,color:C.navy}}>{docs.length} document(s) {label}</div>
         <label style={{background:C.navy,color:"white",borderRadius:8,padding:"9px 16px",fontSize:12,fontWeight:600,cursor:"pointer",letterSpacing:"0.05em"}}>
           + Ajouter un PDF
           <input type="file" accept=".pdf" style={{display:"none"}} onChange={handleAdd}/>
         </label>
       </div>
-
       {loading && <div style={{color:C.slate,fontSize:13,textAlign:"center",padding:24}}>Chargement...</div>}
-
       {!loading && docs.length===0 && (
         <div style={{background:C.bg2,borderRadius:12,padding:32,textAlign:"center",color:C.slate,fontSize:13}}>
-          <div style={{fontSize:28,marginBottom:8}}>📋</div>
-          Aucun texte réglementaire importé.<br/>Appuyez sur « + Ajouter un PDF » pour commencer.
+          <div style={{fontSize:28,marginBottom:8}}>📄</div>
+          Aucun document importé.<br/>Appuyez sur « + Ajouter un PDF » pour commencer.
         </div>
       )}
-
       {docs.map(doc => (
         <div key={doc.id} style={{background:"white",borderRadius:12,border:"1.5px solid "+C.border,padding:"14px 16px"}}>
           <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
@@ -1883,6 +1857,10 @@ function FormReglementation() {
     </div>
   );
 }
+
+function FormReglementation() { return <FormDocStore storeKey="regl" label="réglementaire(s)"/>; }
+function FormDocAvion() { return <FormDocStore storeKey="docavion" label="avion"/>; }
+
 
 function FormAircraft({ aircraft, onUpdate, saved }) {
   const [sel,setSel]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"new");
@@ -2034,6 +2012,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     {id:"fin",   icon:"💰", label:"Finances",      color:"#7C3AED"},
     {id:"crew",  icon:"👨‍✈️", label:"Equipage",     color:"#0369A1"},
     {id:"avion", icon:"🛩", label:"Avion",         color:"#0369A1"},
+    {id:"docavion", icon:"📁", label:"Doc Avion",  color:"#0369A1"},
     {id:"regl",  icon:"📋", label:"Réglementation",color:"#B45309"},
   ];
   const f=FORMS.find(x=>x.id===active);
@@ -2346,8 +2325,9 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
       {active==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} saved={saved}/>}
       {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
-      {active==="regl"  && <FormReglementation/>}
-      {active==="avion" && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
+      {active==="regl"     && <FormReglementation/>}
+      {active==="docavion" && <FormDocAvion/>}
+      {active==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
   );
 }
