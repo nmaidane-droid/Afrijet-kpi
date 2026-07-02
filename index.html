@@ -1956,7 +1956,6 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
 function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup }) {
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
-  const [showSat,setShowSat]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
 
   const doExport=()=>{
@@ -2006,14 +2005,15 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
   };
 
   const FORMS=[
-    {id:"vol",   icon:"✈",  label:"Vol",           color:"#0F1F3D"},
-    {id:"maint", icon:"🔧", label:"Maintenance",   color:"#00936A"},
-    {id:"secu",  icon:"🛡", label:"Sécurité",      color:"#DC2626"},
-    {id:"fin",   icon:"💰", label:"Finances",      color:"#7C3AED"},
-    {id:"crew",  icon:"👨‍✈️", label:"Equipage",     color:"#0369A1"},
-    {id:"avion", icon:"🛩", label:"Avion",         color:"#0369A1"},
-    {id:"docavion", icon:"📁", label:"Doc Avion",  color:"#0369A1"},
-    {id:"regl",  icon:"📋", label:"Réglementation",color:"#B45309"},
+    {id:"avion",    icon:"🛩",  label:"Avion",          color:"#0369A1"},
+    {id:"crew",     icon:"👨‍✈️", label:"Equipage",       color:"#0369A1"},
+    {id:"maint",    icon:"🔧",  label:"Maintenance",    color:"#00936A"},
+    {id:"vol",      icon:"✈",   label:"Vol",            color:"#0F1F3D"},
+    {id:"secu",     icon:"🛡",  label:"Sécurité",       color:"#DC2626"},
+    {id:"fin",      icon:"💰",  label:"Finances",       color:"#7C3AED"},
+    {id:"docavion", icon:"📁",  label:"Doc Avion",      color:"#0369A1"},
+    {id:"regl",     icon:"📋",  label:"Réglementation", color:"#B45309"},
+    {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"},
   ];
   const f=FORMS.find(x=>x.id===active);
   return (
@@ -2084,14 +2084,14 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
             <div>{fm.label}</div>
           </button>
         ))}
-        {showSat&&(
+        {active==="sat"&&(
           <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",flexDirection:"column",background:"#0F1F3D"}}>
             <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"2px solid #A0720A"}}>
               <div>
                 <div style={{color:"white",fontWeight:800,fontSize:14}}>📋 Formulaire Satisfaction</div>
                 <div style={{color:"#A0720A",fontSize:10}}>Afrijet Sahara</div>
               </div>
-              <button onClick={()=>setShowSat(false)}
+              <button onClick={()=>setActive(null)}
                 style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"8px 16px",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
                 Fermer
               </button>
@@ -2314,11 +2314,6 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
             </div>
           </div>
         )}
-        <button onClick={()=>setShowSat(true)}
-          style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:C.border,background:"white",color:C.slate,textAlign:"center",display:"block",width:"100%"}}>
-          <div style={{fontSize:16,marginBottom:2}}>📋</div>
-          <div>Satisfaction</div>
-        </button>
       </div>
       {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved}/>}
       {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
