@@ -132,14 +132,6 @@ function clearStorage() {
   } catch(_e) {}
 }
 
-function PlaneIcon({ size=32, color="#A0720A", heading=0 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 64 64" fill="none"
-      style={{ transform:"rotate("+heading+"deg)", transition:"transform 1s ease", display:"block" }}>
-      <path d="M8 32 L24 28 L40 16 L44 18 L32 30 L52 28 L54 31 L32 36 L36 46 L32 47 L26 37 L14 40 Z" fill={color}/>
-    </svg>
-  );
-}
 
 function Card({ children, accent }) {
   return (
@@ -484,38 +476,7 @@ function FAirport({ label, value, onChange }) {
   );
 }
 
-function geoToSvg(lat,lon,W,H) {
-  const x=(lon+13.5)/(13.5-0.8)*W;
-  const y=(36.1-lat)/(36.1-27.5)*H;
-  return {x:Math.max(0,Math.min(W,x)),y:Math.max(0,Math.min(H,y))};
-}
-const MOROCCO_PATH = "M 214.8,11.1 L 221.3,6.2 L 230.8,5.6 L 238.1,7.9 L 250.8,8.3 L 260.3,30.5 L 269.2,27.2 L 278.3,23.0 L 289.4,28.0 L 298.5,34.3 L 312.9,31.3 L 319.8,36.6 L 325.2,33.1 L 328.4,39.9 L 330.9,67.5 L 332.1,80.7 L 333.5,93.8 L 334.7,107.1 L 335.9,130.3 L 334.9,148.5 L 333.6,165.9 L 325.4,178.3 L 321.3,190.7 L 311.8,202.8 L 302.6,220.9 L 287.7,230.3 L 269.6,245.1 L 253.4,257.2 L 240.3,267.5 L 218.3,273.5 L 189.9,280 L 155.9,280 L 136.9,280 L 11.3,280 L 9.4,269.6 L 8.8,262.4 L 10.0,254.1 L 13.6,246.8 L 24.9,236.0 L 33.5,231.4 L 40.5,231.1 L 50.7,224.6 L 60.2,218.1 L 68.0,213.3 L 73.8,208.5 L 81.6,204.5 L 85.2,201.9 L 90.7,205.7 L 97.8,206.7 L 99.7,191.9 L 100.6,187.5 L 105.0,184.5 L 107.4,178.5 L 110.5,169.0 L 105.2,163.1 L 104.3,156.4 L 104.1,142.6 L 106.6,135.8 L 109.1,130.2 L 113.1,125.3 L 120.2,123.7 L 128.1,114.3 L 130.0,108.9 L 136.9,101.5 L 141.6,100.8 L 147.9,94.7 L 151.3,88.0 L 161.0,84.6 L 167.6,82.3 L 176.3,78.8 L 187.4,68.0 L 188.8,67.7 L 198.4,57.3 L 211.1,53.7 L 213.7,43.0 L 214.8,31.0 L 214.8,11.1 Z";
 
-const AIRPORTS_DATA = [
-  // Grands aeroports internationaux
-  { code:"CMN", lat:33.3675, lon:-7.5900,  city:"Casablanca",  type:"intl" },
-  { code:"RAK", lat:31.6069, lon:-8.0363,  city:"Marrakech",   type:"intl" },
-  { code:"AGA", lat:30.3250, lon:-9.4130,  city:"Agadir",      type:"intl" },
-  { code:"TNG", lat:35.7269, lon:-5.9168,  city:"Tanger",      type:"intl" },
-  { code:"FEZ", lat:33.9273, lon:-4.9778,  city:"Fes",         type:"intl" },
-  { code:"OUD", lat:34.7872, lon:-1.9240,  city:"Oujda",       type:"intl" },
-  { code:"RBA", lat:34.0514, lon:-6.7515,  city:"Rabat",       type:"intl" },
-  { code:"NDR", lat:34.9889, lon:-3.0282,  city:"Nador",       type:"intl" },
-  { code:"AHU", lat:35.1771, lon:-3.8395,  city:"Al Hoceima",  type:"intl" },
-  { code:"TTU", lat:35.5943, lon:-5.3200,  city:"Tetouan",     type:"reg"  },
-  // Aeroports regionaux
-  { code:"ESU", lat:31.3975, lon:-9.6817,  city:"Essaouira",   type:"reg"  },
-  { code:"OZZ", lat:30.9391, lon:-6.9094,  city:"Ouarzazate",  type:"reg"  },
-  { code:"ERH", lat:31.9475, lon:-4.3983,  city:"Er-Rachidia", type:"reg"  },
-  { code:"ZGR", lat:30.3203, lon:-5.8668,  city:"Zagora",      type:"reg"  },
-  { code:"TTA", lat:28.4484, lon:-11.1613, city:"Tan Tan",     type:"reg"  },
-  // Provinces du sud
-  { code:"EUN", lat:27.1517, lon:-13.2192, city:"Laayoune",    type:"intl" },
-  { code:"VIL", lat:23.7183, lon:-15.9320, city:"Dakhla",      type:"intl" },
-  { code:"SMW", lat:26.7458, lon:-11.6847, city:"Smara",       type:"reg"  },
-  { code:"SII", lat:29.3661, lon:-10.0708, city:"Sidi Ifni",   type:"reg"  },
-  { code:"GLN", lat:29.0267, lon:-10.0564, city:"Guelmim",     type:"reg"  },
-];
 
 
 const FC_INFO = {
@@ -1194,7 +1155,6 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
   const today=new Date().toISOString().slice(0,10);
   const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
   const ac=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{immat:"CN-KTA",type:"EMB 135",sieges:18,capa:5700,id:"AC001"};
-  const CAPA=ac.capa||5700;
   const SIEGES=ac.sieges||18;
   const [num,setNum]=useState("");
   const [from_,setFrom]=useState("");
@@ -2794,13 +2754,6 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
   );
 }
 
-function ScreenCarte({ flights, ac, moroccoTraffic, icao24 }) {
-  return (
-    <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <Card><SectionTitle>Position ADS-B</SectionTitle><MapMarocSVG ac={ac} moroccoTraffic={moroccoTraffic} icao24={icao24}/></Card>
-    </div>
-  );
-}
 
 function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist }) {
   const all=computeAlerts(kpis,flights,maintData,aircraft);
