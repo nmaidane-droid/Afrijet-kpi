@@ -1718,7 +1718,7 @@ function FormSafety({ onSubmit, flights, saved }) {
           {["7j","30j","Tout"].map(p=>(
             <button key={p} onClick={()=>{setSecuPeriod(p);setVolNum("");}}
               style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+C.border,fontSize:11,fontWeight:600,cursor:"pointer",
-                background:secuPeriod===p?"#DC2626":"white",color:secuPeriod===p?"white":C.slate}}>
+                background:secuPeriod===p?C.navy:"white",color:secuPeriod===p?"white":C.slate}}>
               {p}
             </button>
           ))}
