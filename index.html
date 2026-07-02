@@ -2413,10 +2413,18 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
   const [opsSaved,setOpsSaved]=useState(false);
   const [search,setSearch]=useState("");
   const [filterStatus,setFilterStatus]=useState("Tous");
+  const [filterPeriodOps,setFilterPeriodOps]=useState("Tout");
   const sBg=s=>s==="Termine"?C.emeraldL:s==="En vol"?C.goldL:s==="Annule"?C.dangerL:C.bg;
   const sTx=s=>s==="Termine"?C.emeraldD:s==="En vol"?C.gold:s==="Annule"?C.danger:C.slate;
   const sIc=s=>s==="Termine"?"✓":s==="En vol"?"✈":s==="Annule"?"✗":"○";
   const getSecEvents=(num,date)=>(safetyData||[]).filter(e=>e.num===num&&(!date||e.date===date));
+
+  // Period cutoff for Ops filter
+  const nowOps=new Date(); nowOps.setHours(0,0,0,0);
+  const opsCutoff=new Date(nowOps);
+  if(filterPeriodOps==="7j") opsCutoff.setDate(opsCutoff.getDate()-7);
+  else if(filterPeriodOps==="30j") opsCutoff.setDate(opsCutoff.getDate()-30);
+  else opsCutoff.setFullYear(2000);
 
   // Filter flights
   const filtered=flights.filter(f=>{
@@ -2429,6 +2437,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
       if(!match)return false;
     }
     if(filterStatus!=="Tous"&&f.status!==filterStatus)return false;
+    if(filterPeriodOps!=="Tout"&&f.date&&new Date(f.date)<opsCutoff)return false;
     return true;
   });
 
@@ -2731,6 +2740,14 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
             </button>
           ))}
         </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {["7j","30j","Tout"].map(p=>(
+            <button key={p} onClick={()=>setFilterPeriodOps(p)}
+              style={{padding:"4px 10px",borderRadius:8,border:"1.5px solid "+(filterPeriodOps===p?C.navy:C.border),background:filterPeriodOps===p?C.navy:"white",color:filterPeriodOps===p?"white":C.slate,fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              {p}
+            </button>
+          ))}
+        </div>
       </div>
       <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,overflow:"hidden"}}>
         <div style={{padding:"9px 14px",background:C.bg,borderBottom:"1px solid "+C.border,fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",display:"flex",justifyContent:"space-between"}}>
@@ -2965,7 +2982,7 @@ function ScreenSecu({ safetyData, flights }) {
   const [histFilter,setHistFilter]=React.useState("Tout");
 
   // Filter safetyData by period and type
-  const days=filterPeriod==="7j"?7:filterPeriod==="30j"?30:filterPeriod==="90j"?90:36500;
+  const days=filterPeriod==="7j"?7:filterPeriod==="30j"?30:36500;
   const filtered=safetyData.filter(e=>{
     const d=new Date(e.date);
     const inPeriod=(now-d)/(1000*60*60*24)<=days;
@@ -3031,7 +3048,7 @@ function ScreenSecu({ safetyData, flights }) {
       {/* Filtres période */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
         <span style={{fontSize:10,fontWeight:700,color:C.slate}}>Période :</span>
-        {["7j","30j","90j","Tout"].map(f=>(
+        {["7j","30j","Tout"].map(f=>(
           <FilterBtn key={f} val={f} active={filterPeriod===f} onClick={()=>setFilterPeriod(f)}/>
         ))}
       </div>
