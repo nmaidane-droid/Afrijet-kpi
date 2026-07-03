@@ -1313,7 +1313,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
           </FGrid>
           <FGrid>
             <FSelect label="Role" value={role} onChange={setRole} placeholder={true}
-              options={ROLES.map(r=>({value:r,label:r==="TRI"?"TRI":r==="CM1"?"CDB":r==="CM2"?"OPL":"CC"}))}/>
+              options={ROLES.map(r=>({value:r,label:r==="TRI"?"TRI — Instructeur":r==="CM1"?"CDB — Commandant":r==="CM2"?"OPL — Co-pilote":"CC — Hôtesse / Steward"}))}/>
             <FField label="Licence / Matricule" value={licence} onChange={setLic}/>
           </FGrid>
           <div style={{display:"flex",gap:10}}>
