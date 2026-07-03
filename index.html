@@ -1154,6 +1154,12 @@ const INIT_FIN = [
 function FormVol({ onSubmit, crew, aircraft, saved }) {
   const today=new Date().toISOString().slice(0,10);
   const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
+
+  // Auto-remplir le numéro de vol avec l'immatriculation de l'avion sélectionné
+  React.useEffect(()=>{
+    const ac=aircraft?.find(a=>a.id===acId);
+    if(ac) setNum(ac.immat||"");
+  },[acId]);
   const ac=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{immat:"CN-KTA",type:"EMB 135",sieges:18,capa:5700,id:"AC001"};
   const SIEGES=ac.sieges||18;
   const [num,setNum]=useState("");
