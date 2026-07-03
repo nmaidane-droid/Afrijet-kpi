@@ -1871,7 +1871,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   const [localSaved,setLocalSaved]=useState(false);
 
   React.useEffect(()=>{
-    if(sel==="new"){setImmat("");setType("");setSieges("18");setCapa("5700");}
+    if(sel==="new"){setImmat("");setType("");setSieges("");setCapa("");}
     else{
       const ac=aircraft.find(a=>a.id===sel);
       if(ac){setImmat(ac.immat||"");setType(ac.type||"");setSieges(String(ac.sieges||18));setCapa(String(ac.capa||5700));}
