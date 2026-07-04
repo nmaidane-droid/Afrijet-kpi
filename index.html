@@ -3413,7 +3413,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
       durVal=Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0");
     }
     const durColor=isTermine?"#00936A":"#94A3B8";
-    const blkTime=isTermine&&f.dep&&f.arr?(f.dep+"-"+f.arr):"--";
+    const blkTime=isTermine&&f.depReal&&f.arrReal?(f.depReal+"-"+f.arrReal):"--";
     const dateShort=f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--";
     const cm1Last=(f.cm1||"--").split(" ").slice(-1)[0];
     return "<div style='"+gridStyle+"background:"+(i%2?"#F8FAFC":"white")+"'>"
