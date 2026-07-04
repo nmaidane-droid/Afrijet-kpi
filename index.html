@@ -1858,6 +1858,16 @@ function FormDocStore({ storeKey, label }) {
     reader.readAsDataURL(file); e.target.value = "";
   };
 
+  const handleDelete = async (doc) => {
+    if (!window.confirm("⚠️ Supprimer « " + doc.name + " » ? Cette action est irréversible.")) return;
+    setMsg("🗑 Suppression...");
+    await sbSet(PFX_DOCS + doc.id, null);
+    const newDocs = docs.filter(d => d.id !== doc.id);
+    await saveIndex(newDocs);
+    setMsg("✅ « " + doc.name + " » supprimé.");
+    setTimeout(() => setMsg(""), 3000);
+  };
+
   const handleOpen = async (doc) => {
     setMsg("📥 Chargement...");
     const b64 = await sbGet(PFX_DOCS + doc.id);
@@ -1902,6 +1912,10 @@ function FormDocStore({ storeKey, label }) {
               🔄 Mettre à jour
               <input type="file" accept=".pdf" style={{display:"none"}} onChange={e=>handleUpdate(doc,e)}/>
             </label>
+            <button onClick={()=>handleDelete(doc)}
+              style={{background:"#FEF2F2",color:"#DC2626",border:"1px solid #FCA5A5",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+              🗑
+            </button>
           </div>
         </div>
       ))}
