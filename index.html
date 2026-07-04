@@ -3353,9 +3353,15 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
   });
   const weekLabel=monday.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" — "+sunday.toLocaleDateString("fr-FR",{day:"numeric",month:"short"});
 
-  const volsDoneR=weekFlights.filter(f=>f.status==="Termine");
-  const done=volsDoneR.length;
-  const tPax=weekFlights.reduce((s,f)=>s+f.pax,0);
+  // All terminated flights for global counters
+  const allDone=flights.filter(f=>f.status==="Termine");
+  const done=allDone.length;
+  const tPax=allDone.reduce((s,f)=>s+f.pax,0);
+
+  // Last 30 days for KPI performance
+  const cutoff30=new Date(now); cutoff30.setDate(cutoff30.getDate()-30); cutoff30.setHours(0,0,0,0);
+  const volsDoneR=allDone.filter(f=>f.date&&new Date(f.date)>=cutoff30);
+
   // Use first aircraft data if available, fallback to maintData
   const acList=aircraft||[];
   const md=acList[0]||{};
@@ -3955,7 +3961,7 @@ function AppMain({ onLogout }) {
                 drawSection("  ROTATIONS SEMAINE "+pWeekLabel+"  ("+weekF.length+" vols)",15,31,61);
 
                 // Column positions
-                const C0=M+2,C1=M+22,C2=M+62,C3=M+95,C4=M+114,C5=M+126,C6=M+148;
+                const C0=M+2,C1=M+38,C2=M+72,C3=M+102,C4=M+118,C5=M+130,C6=M+148;
 
                 // Header row
                 doc.setFillColor(30,52,97);
@@ -3963,8 +3969,8 @@ function AppMain({ onLogout }) {
                 doc.setTextColor(255,255,255);
                 doc.setFontSize(6);
                 doc.setFont("helvetica","bold");
-                doc.text("VOL",C0+8,y,"center");
-                doc.text("ROUTE",C1+18,y,"center");
+                doc.text("VOL",C0+16,y,"center");
+                doc.text("ROUTE",C1+16,y,"center");
                 doc.text("BLK TIME",C2+14,y,"center");
                 doc.text("DATE",C3+8,y,"center");
                 doc.text("FLT",C4+4,y,"center");
@@ -3987,11 +3993,11 @@ function AppMain({ onLogout }) {
                   doc.setTextColor(15,31,61);
                   doc.setFontSize(6.5);
                   doc.setFont("helvetica","bold");
-                  doc.text(f.num,C0+6,y);
+                  doc.text(f.num,C0+16,y,"center");
 
                   // Route
                   doc.setFontSize(7.5);
-                  doc.text(f.from+"->"+f.to,C1+18,y,"center");
+                  doc.text(f.from+"->"+f.to,C1+16,y,"center");
 
                   // BLK Time
                   doc.setFont("helvetica","normal");
