@@ -3395,7 +3395,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
   const sec=(t,c)=>"<div style='background:"+c+";color:white;padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em'>"+t+"</div>";
   const card=c=>"<div style='background:white;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;margin:10px 12px'>"+c+"</div>";
 
-  const gridStyle="display:grid;grid-template-columns:46px 64px 68px 36px 32px 20px 40px;align-items:center;padding:4px 6px;border-bottom:1px solid #EEF2F8;";
+  const gridStyle="display:grid;grid-template-columns:62px 60px 68px 36px 32px 20px 40px;align-items:center;padding:4px 6px;border-bottom:1px solid #EEF2F8;";
   const fHeader="<div style='"+gridStyle+"background:#EEF2F8;border-bottom:1px solid #DDE3ED'>"
     +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;padding-left:11px'>Vol</div>"
     +"<div style='font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;text-align:center'>Route</div>"
@@ -3407,17 +3407,19 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
     +"</div>";
   const fRows=fHeader+weekFlights.map((f,i)=>{
     const dot=f.status==="Termine"?"#00936A":f.status==="En vol"?"#D97706":"#94A3B8";
+    const isTermine=f.status==="Termine";
     let durVal="--";
-    if(f.dureeMin>0){
+    if(isTermine&&f.dureeMin>0){
       durVal=Math.floor(f.dureeMin/60)+"h"+String(f.dureeMin%60).padStart(2,"0");
     }
-    const durColor=f.status==="Termine"?"#00936A":"#94A3B8";
+    const durColor=isTermine?"#00936A":"#94A3B8";
+    const blkTime=isTermine&&f.dep&&f.arr?(f.dep+"-"+f.arr):"--";
     const dateShort=f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--";
     const cm1Last=(f.cm1||"--").split(" ").slice(-1)[0];
     return "<div style='"+gridStyle+"background:"+(i%2?"#F8FAFC":"white")+"'>"
-      +"<div style='display:flex;align-items:center;gap:4px'><span style='width:7px;height:7px;border-radius:50%;background:"+dot+";display:inline-block;flex-shrink:0'></span><span style='font-weight:800;font-size:10px;color:#0F1F3D'>"+f.num+"</span></div>"
+      +"<div style='display:flex;align-items:center;gap:4px'><span style='width:7px;height:7px;border-radius:50%;background:"+dot+";display:inline-block;flex-shrink:0'></span><span style='font-weight:800;font-size:10px;color:#0F1F3D;white-space:nowrap'>"+f.num+"</span></div>"
       +"<div style='font-size:10px;font-weight:700;white-space:nowrap;text-align:center'>"+f.from+"→"+f.to+"</div>"
-      +"<div style='font-size:8.5px;color:#64748B;white-space:nowrap;text-align:center'>"+f.dep+"-"+f.arr+"</div>"
+      +"<div style='font-size:8.5px;color:#64748B;white-space:nowrap;text-align:center'>"+blkTime+"</div>"
       +"<div style='font-size:8.5px;color:#94A3B8;white-space:nowrap'>"+dateShort+"</div>"
       +"<div style='font-size:10px;font-weight:700;color:"+durColor+";text-align:center'>"+durVal+"</div>"
       +"<div style='font-size:10px;text-align:center'>"+f.pax+"</div>"
@@ -3991,7 +3993,7 @@ function AppMain({ onLogout }) {
 
                   // Vol
                   doc.setTextColor(15,31,61);
-                  doc.setFontSize(6.5);
+                  doc.setFontSize(6);
                   doc.setFont("helvetica","bold");
                   doc.text(f.num,C0+16,y,"center");
 
