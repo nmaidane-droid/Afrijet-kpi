@@ -3647,6 +3647,42 @@ function LoggedOutScreen({ onReturnToLogin }) {
   );
 }
 
+function ResetPasswordCheck({ onConfirm, onCancel }) {
+  const [pwd, setPwd] = useState("");
+  const [err, setErr] = useState("");
+  const [checking, setChecking] = useState(false);
+
+  const handle = async () => {
+    if(!pwd.trim()){ setErr("Mot de passe requis."); return; }
+    setChecking(true);
+    const ok = await checkPassword(pwd);
+    setChecking(false);
+    if(ok){ onConfirm(); }
+    else { setErr("Mot de passe incorrect."); setPwd(""); }
+  };
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <input type="password" value={pwd} onChange={e=>{setPwd(e.target.value);setErr("");}}
+        placeholder="Mot de passe"
+        style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+(err?"#DC2626":"#CBD5E1"),padding:"0 14px",fontSize:14,outline:"none",boxSizing:"border-box"}}
+        onKeyDown={e=>e.key==="Enter"&&handle()}
+        autoFocus/>
+      {err&&<div style={{color:"#DC2626",fontSize:12,textAlign:"center"}}>{err}</div>}
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={onCancel}
+          style={{flex:1,height:48,background:"#F1F5F9",border:"1.5px solid #CBD5E1",borderRadius:10,color:"#64748B",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+          Annuler
+        </button>
+        <button onClick={handle} disabled={checking}
+          style={{flex:1,height:48,background:"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",opacity:checking?0.6:1}}>
+          {checking?"...":"Confirmer"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [authed,setAuthed] = useState(()=>{
     try{ return sessionStorage.getItem(PFX+"authed")==="1"; }catch(_e){ return false; }
@@ -3837,17 +3873,8 @@ function AppMain({ onLogout }) {
           <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
             <div style={{fontSize:32,textAlign:"center",marginBottom:12}}>🗑</div>
             <div style={{fontWeight:800,fontSize:16,color:C.navy,textAlign:"center",marginBottom:8}}>Reinitialiser l application</div>
-            <div style={{fontSize:13,color:C.slate,textAlign:"center",lineHeight:1.6,marginBottom:20}}>Toutes les donnees demo seront effacees. Vous pourrez saisir vos vraies donnees.</div>
-            <div style={{display:"flex",gap:10}}>
-              <button onClick={()=>setReset(false)}
-                style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-                Annuler
-              </button>
-              <button onClick={doReset}
-                style={{flex:1,height:48,background:"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-                Reinitialiser
-              </button>
-            </div>
+            <div style={{fontSize:13,color:C.slate,textAlign:"center",lineHeight:1.6,marginBottom:16}}>Toutes les donnees demo seront effacees. Vous pourrez saisir vos vraies donnees.</div>
+            <ResetPasswordCheck onConfirm={doReset} onCancel={()=>setReset(false)}/>
           </div>
         </div>
       )}
