@@ -1237,10 +1237,26 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
   const load=Math.round(pn/SIEGES*100);
 
   const submit=()=>{
-    if(!num.trim()||!dep||!arr){alert("N vol, depart et arrivee requis");return;}
-    // Vérification date dans le passé
+    if(!num.trim()||!dep){alert("N° vol et départ requis");return;}
     const todayStr=new Date().toISOString().slice(0,10);
     if(date<todayStr){alert("⚠️ La date du vol ne peut pas être dans le passé.");return;}
+    // Vérification MEL expiré à la planification
+    const selAc=(aircraft||[]).find(a=>a.id===acId);
+    if(selAc&&selAc.mels&&selAc.mels.length>0){
+      const today=new Date(); today.setHours(0,0,0,0);
+      const expired=selAc.mels.filter(m=>{
+        if(!m.exp) return false;
+        const parts=m.exp.split("/");
+        if(parts.length!==3) return false;
+        const yr=parseInt(parts[2])<100?2000+parseInt(parts[2]):parseInt(parts[2]);
+        const expDate=new Date(yr,parseInt(parts[1])-1,parseInt(parts[0]));
+        return expDate<today;
+      });
+      if(expired.length>0){
+        alert("⛔ Planification impossible — MEL expiré sur "+selAc.immat+" :\n"+expired.map(m=>"• Cat."+m.sev+" — "+m.sys+" ("+m.mel+", exp. "+m.exp+")").join("\n")+"\n\nRésolvez ou étendez ce MEL avant de planifier un vol.");
+        return;
+      }
+    }
     // Pre-calculate planned duration
     let planDuree=0;
     if(dep&&arr){
