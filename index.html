@@ -1583,11 +1583,11 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12,padding:"8px 0"}}>Aucun MEL — appuyez sur + pour ajouter</div>}
           {mels.map((m,i)=>(
-            <div key={i} style={{background:isMelExpired(m)?"#FEF2F2":C.bg,border:isMelExpired(m)?"1.5px solid #FCA5A5":"1.5px solid transparent",borderRadius:10,padding:"10px 12px",display:"flex",gap:10,alignItems:"center"}}>
+            <div key={i} style={{background:isMelExpired(m)?"#DC2626":C.bg,border:isMelExpired(m)?"1.5px solid #DC2626":"1.5px solid transparent",borderRadius:10,padding:"10px 12px",display:"flex",gap:10,alignItems:"center"}}>
               <span style={{background:sevBg(m.sev),color:sevColor(m.sev),padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,flexShrink:0}}>Cat.{m.sev}</span>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
-                <div style={{fontSize:10,color:C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}</div>
+                <div style={{fontSize:12,fontWeight:600,color:isMelExpired(m)?"white":C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
+                <div style={{fontSize:10,color:isMelExpired(m)?"rgba(255,255,255,0.8)":C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}{isMelExpired(m)&&<span style={{fontWeight:700}}> ⚠️ EXPIRÉ</span>}</div>
               </div>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>openEdit(m,i)}
@@ -3353,11 +3353,11 @@ function ScreenMaint({ kpis, maintData, flights, aircraft }) {
         <SectionTitle>MEL actifs ({mels.length})</SectionTitle>
         {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:13,padding:"12px 0"}}>Aucun MEL actif</div>}
         {mels.map((m,i)=>(
-          <div key={i} style={{background:isMelExpired(m)?"#FEF2F2":"transparent",border:isMelExpired(m)?"1.5px solid #FCA5A5":"none",borderRadius:isMelExpired(m)?8:0,padding:"10px 8px",marginBottom:i<mels.length-1?4:0,display:"flex",gap:10,alignItems:"center"}}>
+          <div key={i} style={{background:isMelExpired(m)?"#DC2626":"transparent",border:isMelExpired(m)?"1.5px solid #DC2626":"none",borderRadius:isMelExpired(m)?8:0,padding:"10px 8px",marginBottom:i<mels.length-1?4:0,display:"flex",gap:10,alignItems:"center"}}>
             <span style={{background:sevBg(m.sev),color:sevColor(m.sev),padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,flexShrink:0}}>Cat.{m.sev}</span>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
-              <div style={{fontSize:10,color:C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}</div>
+              <div style={{fontSize:12,fontWeight:600,color:isMelExpired(m)?"white":C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
+              <div style={{fontSize:10,color:isMelExpired(m)?"rgba(255,255,255,0.8)":C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}{isMelExpired(m)&&<span style={{fontWeight:700}}> ⚠️ EXPIRÉ</span>}</div>
               {(m.extensions||[]).length>0&&(
                 <div style={{marginTop:6,borderTop:"1px solid "+C.border,paddingTop:6}}>
                   <div style={{fontSize:9,fontWeight:700,color:"#D97706",marginBottom:4}}>📋 HISTORIQUE EXTENSIONS</div>
@@ -3559,11 +3559,11 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
       const catColor=m.sev==="A"?"#DC2626":m.sev==="B"?"#D97706":"#64748B";
       const catBg=m.sev==="A"?"#FEE2E2":m.sev==="B"?"#FEF3C7":"#F1F5F9";
       const daysStr=daysLeft===null?"":daysLeft<0?"EXPIRÉ":daysLeft===0?"Auj.":daysLeft+"j";
-      return "<div style='padding:8px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center'>"+
+      return "<div style='padding:8px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center;background:"+(daysLeft!==null&&daysLeft<0?"#DC2626":"white")+"'>"+
         "<span style='background:"+catBg+";color:"+catColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700;flex-shrink:0'>Cat."+m.sev+"</span>"+
         "<div style='flex:1'>"+
-          "<div style='font-size:11px;font-weight:600;color:#0F1F3D'>"+m.sys+"</div>"+
-          "<div style='font-size:9px;color:#64748B;margin-top:1px'>"+(m.mel||"")+(m.acImmat?" · "+m.acImmat:"")+"</div>"+
+          "<div style='font-size:11px;font-weight:600;color:"+(daysLeft!==null&&daysLeft<0?"white":"#0F1F3D")+"'>"+m.sys+"</div>"+
+          "<div style='font-size:9px;color:"+(daysLeft!==null&&daysLeft<0?"rgba(255,255,255,0.85)":"#64748B")+";margin-top:1px'>"+(m.mel||"")+(m.acImmat?" · "+m.acImmat:"")+"</div>"+
         "</div>"+
         "<div style='text-align:right;flex-shrink:0'>"+
           "<div style='background:"+expBg+";color:"+expColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700'>"+(m.exp||"--")+"</div>"+
@@ -3610,10 +3610,10 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
               const catColor=m.sev==="A"?"#DC2626":m.sev==="B"?"#D97706":"#64748B";
               const catBg=m.sev==="A"?"#FEE2E2":m.sev==="B"?"#FEF3C7":"#F1F5F9";
               const daysStr=daysLeft===null?"":daysLeft<0?"EXPIRÉ":daysLeft===0?"Auj.":daysLeft+"j";
-              return "<div style='padding:8px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center;background:"+(daysLeft!==null&&daysLeft<0?"#FEF2F2":"white")+"'>"+
+              return "<div style='padding:8px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center;background:"+(daysLeft!==null&&daysLeft<0?"#DC2626":"white")+"'>"+
                 "<span style='background:"+catBg+";color:"+catColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700;flex-shrink:0'>Cat."+m.sev+"</span>"+
-                "<div style='flex:1'><div style='font-size:11px;font-weight:600;color:#0F1F3D'>"+m.sys+"</div>"+
-                "<div style='font-size:9px;color:#64748B;margin-top:1px'>"+(m.mel||"")+"</div></div>"+
+                "<div style='flex:1'><div style='font-size:11px;font-weight:600;color:"+(daysLeft!==null&&daysLeft<0?"white":"#0F1F3D")+"'>"+m.sys+"</div>"+
+                "<div style='font-size:9px;color:"+(daysLeft!==null&&daysLeft<0?"rgba(255,255,255,0.85)":"#64748B")+";margin-top:1px'>"+(m.mel||"")+"</div></div>"+
                 "<div style='text-align:right;flex-shrink:0'>"+
                 "<div style='background:"+expBg+";color:"+expColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700'>"+(m.exp||"--")+"</div>"+
                 (daysStr?"<div style='font-size:8px;color:"+expColor+";margin-top:2px;text-align:center'>"+daysStr+"</div>":"")+
@@ -4220,21 +4220,25 @@ function AppMain({ onLogout }) {
                       const today=new Date();
                       const expDate=(()=>{if(!m.exp)return null;const p=m.exp.split("/");if(p.length!==3)return null;const yr=p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]);return new Date(yr,parseInt(p[1])-1,parseInt(p[0]));})();
                       const daysLeft=expDate?Math.ceil((expDate-today)/(1000*60*60*24)):null;
+                      const isExpired=daysLeft!==null&&daysLeft<0;
                       const catColor=m.sev==="A"?[220,38,38]:m.sev==="B"?[217,119,6]:[100,116,139];
-                      doc.setFillColor(248,250,252);doc.rect(M,y,CW,8,"F");
+                      if(isExpired){doc.setFillColor(220,38,38);}else{doc.setFillColor(248,250,252);}
+                      doc.rect(M,y,CW,8,"F");
                       doc.setFillColor(...catColor);
                       doc.roundedRect(M+2,y+1.5,10,5,1,1,"F");
                       doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(6);
                       doc.text("Cat."+m.sev,M+7,y+4.5,{align:"center"});
-                      doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(8);
+                      if(isExpired){doc.setTextColor(255,255,255);}else{doc.setTextColor(15,31,61);}
+                      doc.setFont("helvetica","bold");doc.setFontSize(8);
                       doc.text(m.sys||"--",M+15,y+4);
-                      doc.setTextColor(100,116,139);doc.setFont("helvetica","normal");doc.setFontSize(6.5);
+                      if(isExpired){doc.setTextColor(255,220,220);}else{doc.setTextColor(100,116,139);}
+                      doc.setFont("helvetica","normal");doc.setFontSize(6.5);
                       doc.text(m.mel||"",M+15,y+7);
-                      const expColor=daysLeft===null?[100,116,139]:daysLeft<7?[220,38,38]:daysLeft<30?[217,119,6]:[0,147,106];
+                      const expColor=isExpired?[255,255,255]:daysLeft===null?[100,116,139]:daysLeft<7?[220,38,38]:daysLeft<30?[217,119,6]:[0,147,106];
                       doc.setTextColor(...expColor);doc.setFont("helvetica","bold");doc.setFontSize(7.5);
-                      const daysStr=daysLeft===null?"":daysLeft<0?" (EXPIRÉ)":daysLeft===0?" (Auj.)":` (${daysLeft}j)`;
+                      const daysStr=daysLeft===null?"":daysLeft<0?" ⚠ EXPIRÉ":daysLeft===0?" (Auj.)":` (${daysLeft}j)`;
                       doc.text((m.exp||"--")+daysStr,M+CW-2,y+4,{align:"right"});
-                      if(i<acMels.length-1){doc.setDrawColor(226,232,240);doc.setLineWidth(0.2);doc.line(M,y+8,M+CW,y+8);}
+                      if(i<acMels.length-1){doc.setDrawColor(isExpired?180:226,isExpired?50:232,isExpired?50:240);doc.setLineWidth(0.2);doc.line(M,y+8,M+CW,y+8);}
                       y+=9;
                     });
                     y+=4;
