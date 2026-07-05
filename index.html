@@ -2000,11 +2000,15 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
     if(!immat.trim()||!type.trim()){alert("Immatriculation et type requis");return;}
     const icaoTrim=immat.trim().toUpperCase();
     if(sel==="new"){
-      const newAc={id:"AC"+Date.now(),immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim,ttaf:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
+      const duplicate=aircraft.find(a=>a.immat.toUpperCase()===icaoTrim);
+      if(duplicate){alert("⛔ L'immatriculation "+icaoTrim+" existe déjà. Choisissez un autre identifiant.");return;}
+      const newAc={id:"AC"+Date.now(),immat:icaoTrim,type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim,ttaf:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
       onUpdate([...aircraft,newAc]);
       setMsg("Avion ajouté ✅");
     } else {
-      onUpdate(aircraft.map(a=>a.id===sel?{...a,immat:immat.trim().toUpperCase(),type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim}:a));
+      const duplicate=aircraft.find(a=>a.immat.toUpperCase()===icaoTrim&&a.id!==sel);
+      if(duplicate){alert("⛔ L'immatriculation "+icaoTrim+" est déjà utilisée par un autre avion.");return;}
+      onUpdate(aircraft.map(a=>a.id===sel?{...a,immat:icaoTrim,type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim}:a));
       setMsg("Avion mis à jour ✅");
     }
     setTimeout(()=>{setMsg("");setLocalSaved(false);},3000);
