@@ -1515,6 +1515,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   };
   const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
   const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
+  const isMelExpired=m=>{if(!m.exp)return false;const p=m.exp.split("/");if(p.length!==3)return false;const d=new Date(parseInt(p[2])<100?2000+parseInt(p[2]):parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));const t=new Date();t.setHours(0,0,0,0);return d<t;};
 
   const submit=()=>{
     const volsDone=Number(md.volsDone||0);
@@ -1577,7 +1578,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12,padding:"8px 0"}}>Aucun MEL — appuyez sur + pour ajouter</div>}
           {mels.map((m,i)=>(
-            <div key={i} style={{background:C.bg,borderRadius:10,padding:"10px 12px",display:"flex",gap:10,alignItems:"center"}}>
+            <div key={i} style={{background:isMelExpired(m)?"#FEF2F2":C.bg,border:isMelExpired(m)?"1.5px solid #FCA5A5":"1.5px solid transparent",borderRadius:10,padding:"10px 12px",display:"flex",gap:10,alignItems:"center"}}>
               <span style={{background:sevBg(m.sev),color:sevColor(m.sev),padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,flexShrink:0}}>Cat.{m.sev}</span>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
@@ -2929,6 +2930,7 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, aler
             {filteredMelHist.map((m,i)=>{
               const sevColor=s=>s==="A"?"#DC2626":s==="B"?"#D97706":"#64748B";
               const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
+              const isMelExpired=m=>{if(!m.exp)return false;const p=m.exp.split("/");if(p.length!==3)return false;const d=new Date(parseInt(p[2])<100?2000+parseInt(p[2]):parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));const t=new Date();t.setHours(0,0,0,0);return d<t;};
               const [expanded,setExpanded]=React.useState(false);
               return (
                 <div key={m.id||i} style={{background:C.bg,borderRadius:10,overflow:"hidden"}}>
@@ -3344,7 +3346,7 @@ function ScreenMaint({ kpis, maintData, flights, aircraft }) {
         <SectionTitle>MEL actifs ({mels.length})</SectionTitle>
         {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:13,padding:"12px 0"}}>Aucun MEL actif</div>}
         {mels.map((m,i)=>(
-          <div key={i} style={{padding:"10px 0",borderBottom:i<mels.length-1?"1px solid "+C.border:"none",display:"flex",gap:10,alignItems:"center"}}>
+          <div key={i} style={{background:isMelExpired(m)?"#FEF2F2":"transparent",border:isMelExpired(m)?"1.5px solid #FCA5A5":"none",borderRadius:isMelExpired(m)?8:0,padding:"10px 8px",marginBottom:i<mels.length-1?4:0,display:"flex",gap:10,alignItems:"center"}}>
             <span style={{background:sevBg(m.sev),color:sevColor(m.sev),padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,flexShrink:0}}>Cat.{m.sev}</span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
@@ -3601,7 +3603,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
               const catColor=m.sev==="A"?"#DC2626":m.sev==="B"?"#D97706":"#64748B";
               const catBg=m.sev==="A"?"#FEE2E2":m.sev==="B"?"#FEF3C7":"#F1F5F9";
               const daysStr=daysLeft===null?"":daysLeft<0?"EXPIRÉ":daysLeft===0?"Auj.":daysLeft+"j";
-              return "<div style='padding:8px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center'>"+
+              return "<div style='padding:8px 12px;border-top:1px solid #EEF2F8;display:flex;gap:8px;align-items:center;background:"+(daysLeft!==null&&daysLeft<0?"#FEF2F2":"white")+"'>"+
                 "<span style='background:"+catBg+";color:"+catColor+";padding:2px 7px;border-radius:6px;font-size:9px;font-weight:700;flex-shrink:0'>Cat."+m.sev+"</span>"+
                 "<div style='flex:1'><div style='font-size:11px;font-weight:600;color:#0F1F3D'>"+m.sys+"</div>"+
                 "<div style='font-size:9px;color:#64748B;margin-top:1px'>"+(m.mel||"")+"</div></div>"+
