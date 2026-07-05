@@ -1454,7 +1454,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   const [mSys,setMSys]=useState("");
   const [mMel,setMMel]=useState("");
   const [mExp,setMExp]=useState("");
-  const [mSev,setMSev]=useState("B");
+  const [mSev,setMSev]=useState("");
   const [showResolve,setShowResolve]=useState(false);
   const [resolveIdx,setResolveIdx]=useState(null);
   const [rDate,setRDate]=useState("");
@@ -1463,7 +1463,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   const [rOT,setROT]=useState("");
   const [resolveSaved,setResolveSaved]=useState(false);
 
-  const openAdd=()=>{setMSys("");setMMel("");setMExp("");setMSev("B");setEditIdx(null);setShowMelForm(true);};
+  const openAdd=()=>{setMSys("");setMMel("");setMExp("");setMSev("");setEditIdx(null);setShowMelForm(true);};
   const openEdit=(m,i)=>{setMSys(m.sys);setMMel(m.mel);setMExp(m.exp);setMSev(m.sev);setEditIdx(i);setShowMelForm(true);};
   const saveMel=()=>{
     if(!mSys.trim())return;
@@ -1647,6 +1647,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                   <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>CATÉGORIE</div>
                   <select value={mSev} onChange={e=>setMSev(e.target.value)}
                     style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}>
+                    <option value="">-- Choisir --</option>
                     <option value="A">A — Immédiat (délai dans MEL)</option>
                     <option value="B">B — 3 jours calendaires</option>
                     <option value="C">C — 10 jours calendaires</option>
