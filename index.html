@@ -1647,10 +1647,10 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                   <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>CATÉGORIE</div>
                   <select value={mSev} onChange={e=>setMSev(e.target.value)}
                     style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}>
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="C">C</option>
-                    <option value="D">D</option>
+                    <option value="A">A — Immédiat (délai dans MEL)</option>
+                    <option value="B">B — 3 jours calendaires</option>
+                    <option value="C">C — 10 jours calendaires</option>
+                    <option value="D">D — 120 jours calendaires</option>
                   </select>
                 </div>
               </div>
