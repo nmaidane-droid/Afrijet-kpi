@@ -2557,21 +2557,22 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
       return;
     }
 
-    // Vérification MEL Cat.A expiré au décollage
+    // Vérification MEL expiré au décollage (toutes catégories)
     if(next==="En vol"){
       const ac = (aircraft||[]).find(a=>a.id===edit.acId);
       if(ac && ac.mels && ac.mels.length>0){
         const today = new Date(); today.setHours(0,0,0,0);
         const expired = ac.mels.filter(m=>{
-          if(m.sev!=="A") return false;
           if(!m.exp) return false;
           const parts = m.exp.split("/");
           if(parts.length!==3) return false;
-          const d = new Date(parts[2]+"-"+parts[1]+"-"+parts[0]);
-          return d < today;
+          const d = new Date(parts[2].length===2?"20"+parts[2]:parts[2]+"-"+parts[1]+"-"+parts[0]);
+          const d2 = new Date(2000+parseInt(parts[2])+"-"+parts[1]+"-"+parts[0]);
+          const expDate = new Date(parseInt(parts[2])<100?2000+parseInt(parts[2]):parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0]));
+          return expDate < today;
         });
         if(expired.length>0){
-          alert("⛔ Vol non autorisé — MEL Cat.A expiré sur "+ac.immat+" :\n"+expired.map(m=>"• "+m.sys+" ("+m.mel+", exp. "+m.exp+")").join("\n")+"\n\nRésolvez ce MEL avant de mettre l'avion En vol.");
+          alert("⛔ Vol non autorisé — MEL expiré sur "+ac.immat+" :\n"+expired.map(m=>"• Cat."+m.sev+" — "+m.sys+" ("+m.mel+", exp. "+m.exp+")").join("\n")+"\n\nRésolvez ou étendez ce MEL avant de mettre l'avion En vol.");
           return;
         }
       }
