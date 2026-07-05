@@ -1674,13 +1674,13 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                 <div style={{fontSize:11,fontWeight:700,color:"#D97706",marginBottom:2}}>📋 EXTENSION DE VALIDITÉ</div>
                 <div>
                   <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>MOTIF DE L'EXTENSION</div>
-                  <input value={mMotif} onChange={e=>setMMotif(e.target.value)} placeholder="Ex: Pièce en commande, vol de convoyage..."
-                    style={{width:"100%",height:44,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:13,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                  <input value={mMotif} onChange={e=>setMMotif(e.target.value.toUpperCase())} placeholder="Ex: PIÈCE EN COMMANDE, VOL DE CONVOYAGE..."
+                    style={{width:"100%",height:44,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:13,outline:"none",background:C.bg,boxSizing:"border-box",textTransform:"uppercase"}}/>
                 </div>
                 <div>
                   <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>RÉFÉRENCE AUTORISATION (DGAC/CAMO)</div>
-                  <input value={mRef} onChange={e=>setMRef(e.target.value)} placeholder="Ex: ACC-CAMO-2026-0042"
-                    style={{width:"100%",height:44,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:13,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                  <input value={mRef} onChange={e=>setMRef(e.target.value.toUpperCase())} placeholder="Ex: ACC-CAMO-2026-0042"
+                    style={{width:"100%",height:44,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:13,outline:"none",background:C.bg,boxSizing:"border-box",textTransform:"uppercase"}}/>
                 </div>
               </div>
             )}
