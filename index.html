@@ -2902,13 +2902,13 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, aler
         </div>
       ):active.map(a=>{
         const cl=colors[a.sev]||colors.warn;
-        const expiredStyle=a.expired?{bg:"#FEE2E2",border:"#DC2626",text:"#991B1B"}:cl;
+        const expiredStyle=a.expired?{bg:"#DC2626",border:"#DC2626",text:"white",sub:"white"}:cl;
         return (
           <div key={a.id} style={{background:expiredStyle.bg,border:"1.5px solid "+expiredStyle.border,borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:24}}>{a.icon}</span>
             <div style={{flex:1}}>
               <div style={{fontWeight:700,fontSize:13,color:expiredStyle.text}}>{a.msg}</div>
-              <div style={{fontSize:10,color:C.slate,marginTop:2}}>{a.expired?"MEL EXPIRÉ":a.sev==="danger"?"CRITIQUE":"ATTENTION"}</div>
+              <div style={{fontSize:10,color:a.expired?"white":C.slate,marginTop:2}}>{a.expired?"MEL EXPIRÉ":a.sev==="danger"?"CRITIQUE":"ATTENTION"}</div>
             </div>
           </div>
         );
