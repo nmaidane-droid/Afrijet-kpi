@@ -3293,6 +3293,7 @@ function ScreenMaint({ kpis, maintData, flights, aircraft }) {
   // Filter flights by selected aircraft - if only 1 aircraft or flights have no acId, use all flights
   const hasAcIds=flights.some(f=>f.acId);
   const acFlights=aircraft&&aircraft.length>1&&hasAcIds?flights.filter(f=>f.acId===selAc||!f.acId):flights;
+  const isMelExpired=m=>{if(!m.exp)return false;const p=m.exp.split("/");if(p.length!==3)return false;const d=new Date(parseInt(p[2])<100?2000+parseInt(p[2]):parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));const t=new Date();t.setHours(0,0,0,0);return d<t;};
   // Calculate Tech Delay from flights
   const volsDone=acFlights.filter(f=>f.status==="Termine");
   const techVols=volsDone.filter(f=>f.causeRetard==="Technique");
@@ -3547,8 +3548,8 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
       const year=parts.length===3?(parts[2].length===2?"20"+parts[2]:parts[2]):null;
       const exp=year?new Date(year+"-"+parts[1]+"-"+parts[0]):null;
       const daysLeft=exp&&!isNaN(exp)?Math.ceil((exp-today)/(1000*60*60*24)):null;
-      const expColor=daysLeft===null?"#64748B":daysLeft<7?"#DC2626":daysLeft<30?"#D97706":"#00936A";
-      const expBg=daysLeft===null?"#F1F5F9":daysLeft<7?"#FEE2E2":daysLeft<30?"#FEF3C7":"#D1FAE5";
+      const expColor=daysLeft===null?"#64748B":daysLeft<0?"white":daysLeft<7?"#DC2626":daysLeft<30?"#D97706":"#00936A";
+      const expBg=daysLeft===null?"#F1F5F9":daysLeft<0?"#DC2626":daysLeft<7?"#FEE2E2":daysLeft<30?"#FEF3C7":"#D1FAE5";
       const catColor=m.sev==="A"?"#DC2626":m.sev==="B"?"#D97706":"#64748B";
       const catBg=m.sev==="A"?"#FEE2E2":m.sev==="B"?"#FEF3C7":"#F1F5F9";
       const daysStr=daysLeft===null?"":daysLeft<0?"EXPIRÉ":daysLeft===0?"Auj.":daysLeft+"j";
@@ -3598,8 +3599,8 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
               const year=parts.length===3?(parts[2].length===2?"20"+parts[2]:parts[2]):null;
               const exp=year?new Date(year+"-"+parts[1]+"-"+parts[0]):null;
               const daysLeft=exp&&!isNaN(exp)?Math.ceil((exp-today)/(1000*60*60*24)):null;
-              const expColor=daysLeft===null?"#64748B":daysLeft<7?"#DC2626":daysLeft<30?"#D97706":"#00936A";
-              const expBg=daysLeft===null?"#F1F5F9":daysLeft<7?"#FEE2E2":daysLeft<30?"#FEF3C7":"#D1FAE5";
+              const expColor=daysLeft===null?"#64748B":daysLeft<0?"white":daysLeft<7?"#DC2626":daysLeft<30?"#D97706":"#00936A";
+              const expBg=daysLeft===null?"#F1F5F9":daysLeft<0?"#DC2626":daysLeft<7?"#FEE2E2":daysLeft<30?"#FEF3C7":"#D1FAE5";
               const catColor=m.sev==="A"?"#DC2626":m.sev==="B"?"#D97706":"#64748B";
               const catBg=m.sev==="A"?"#FEE2E2":m.sev==="B"?"#FEF3C7":"#F1F5F9";
               const daysStr=daysLeft===null?"":daysLeft<0?"EXPIRÉ":daysLeft===0?"Auj.":daysLeft+"j";
