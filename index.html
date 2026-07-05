@@ -960,8 +960,13 @@ function computeAlerts(kpis, flights, maintData, aircraft) {
     if(ac.cCheckH&&ac.cCheckH<200)a.push({id:id_prefix+"_cchk",sev:"danger",msg:prefix+"C-Check dans "+ac.cCheckH+"h",icon:"🛠"});
     else if(ac.cCheckH&&ac.cCheckH<500)a.push({id:id_prefix+"_cchk",sev:"warn",msg:prefix+"C-Check dans "+ac.cCheckH+"h",icon:"🛠"});
     (ac.mels||[]).forEach((m,i)=>{
+      const parts=(m.exp||"").split("/");
+      const expDate=parts.length===3?new Date(parseInt(parts[2])<100?2000+parseInt(parts[2]):parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0])):null;
+      const today=new Date(); today.setHours(0,0,0,0);
+      const expired=expDate&&expDate<today;
       const sev=m.sev==="A"?"danger":m.sev==="B"?"danger":"warn";
-      a.push({id:id_prefix+"_mel_"+i,sev,msg:prefix+"MEL Cat."+m.sev+" — "+m.sys+" ("+(m.mel||m.ref||"")+") · Exp: "+m.exp,icon:"🔧"});
+      const msg=prefix+"MEL Cat."+m.sev+(expired?" ⚠️ EXPIRÉ":"")+' — '+m.sys+' ('+(m.mel||m.ref||"")+') · Exp: '+m.exp;
+      a.push({id:id_prefix+"_mel_"+i,sev,expired,msg,icon:"🔧"});
     });
   });
   return a;
@@ -2897,12 +2902,13 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, aler
         </div>
       ):active.map(a=>{
         const cl=colors[a.sev]||colors.warn;
+        const expiredStyle=a.expired?{bg:"#FEE2E2",border:"#DC2626",text:"#991B1B"}:cl;
         return (
-          <div key={a.id} style={{background:cl.bg,border:"1.5px solid "+cl.border,borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+          <div key={a.id} style={{background:expiredStyle.bg,border:"1.5px solid "+expiredStyle.border,borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:24}}>{a.icon}</span>
             <div style={{flex:1}}>
-              <div style={{fontWeight:700,fontSize:13,color:cl.text}}>{a.msg}</div>
-              <div style={{fontSize:10,color:C.slate,marginTop:2}}>{a.sev==="danger"?"CRITIQUE":"ATTENTION"}</div>
+              <div style={{fontWeight:700,fontSize:13,color:expiredStyle.text}}>{a.msg}</div>
+              <div style={{fontSize:10,color:C.slate,marginTop:2}}>{a.expired?"MEL EXPIRÉ":a.sev==="danger"?"CRITIQUE":"ATTENTION"}</div>
             </div>
           </div>
         );
