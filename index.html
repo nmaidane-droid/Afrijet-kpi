@@ -1455,6 +1455,8 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   const [mMel,setMMel]=useState("");
   const [mExp,setMExp]=useState("");
   const [mSev,setMSev]=useState("");
+  const [mMotif,setMMotif]=useState("");
+  const [mRef,setMRef]=useState("");
   const [showResolve,setShowResolve]=useState(false);
   const [resolveIdx,setResolveIdx]=useState(null);
   const [rDate,setRDate]=useState("");
@@ -1463,12 +1465,23 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   const [rOT,setROT]=useState("");
   const [resolveSaved,setResolveSaved]=useState(false);
 
-  const openAdd=()=>{setMSys("");setMMel("");setMExp("");setMSev("");setEditIdx(null);setShowMelForm(true);};
-  const openEdit=(m,i)=>{setMSys(m.sys);setMMel(m.mel);setMExp(m.exp);setMSev(m.sev);setEditIdx(i);setShowMelForm(true);};
+  const openAdd=()=>{setMSys("");setMMel("");setMExp("");setMSev("");setMMotif("");setMRef("");setEditIdx(null);setShowMelForm(true);};
+  const openEdit=(m,i)=>{setMSys(m.sys);setMMel(m.mel);setMExp(m.exp);setMSev(m.sev);setMMotif("");setMRef("");setEditIdx(i);setShowMelForm(true);};
   const saveMel=()=>{
     if(!mSys.trim())return;
-    const newMel={sys:mSys.trim(),mel:mMel.trim(),exp:mExp.trim(),sev:mSev};
-    setMels(editIdx!==null?mels.map((m,i)=>i===editIdx?newMel:m):[...mels,newMel]);
+    const today=new Date().toLocaleDateString("fr-FR");
+    if(editIdx!==null){
+      const old=mels[editIdx];
+      const newMel={...old,sys:mSys.trim(),mel:mMel.trim(),exp:mExp.trim(),sev:mSev};
+      // Record extension if expiry date changed
+      if(old.exp!==mExp.trim()&&mExp.trim()){
+        const ext={date:today,oldExp:old.exp,newExp:mExp.trim(),motif:mMotif.trim()||"—",ref:mRef.trim()||"—"};
+        newMel.extensions=[...(old.extensions||[]),ext];
+      }
+      setMels(mels.map((m,i)=>i===editIdx?newMel:m));
+    } else {
+      setMels([...mels,{sys:mSys.trim(),mel:mMel.trim(),exp:mExp.trim(),sev:mSev,extensions:[]}]);
+    }
     setShowMelForm(false);
   };
   const deleteMel=i=>setMels(mels.filter((_,idx)=>idx!==i));
@@ -1656,6 +1669,21 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                 </div>
               </div>
             </div>
+            {editIdx!==null&&(
+              <div style={{display:"flex",flexDirection:"column",gap:10,padding:"12px 0",borderTop:"1px solid "+C.border,marginTop:8}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#D97706",marginBottom:2}}>📋 EXTENSION DE VALIDITÉ</div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>MOTIF DE L'EXTENSION</div>
+                  <input value={mMotif} onChange={e=>setMMotif(e.target.value)} placeholder="Ex: Pièce en commande, vol de convoyage..."
+                    style={{width:"100%",height:44,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:13,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>RÉFÉRENCE AUTORISATION (DGAC/CAMO)</div>
+                  <input value={mRef} onChange={e=>setMRef(e.target.value)} placeholder="Ex: ACC-CAMO-2026-0042"
+                    style={{width:"100%",height:44,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:13,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                </div>
+              </div>
+            )}
             <div style={{display:"flex",gap:10,marginTop:16}}>
               <button onClick={()=>setShowMelForm(false)}
                 style={{flex:1,height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
@@ -3319,6 +3347,18 @@ function ScreenMaint({ kpis, maintData, flights, aircraft }) {
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
               <div style={{fontSize:10,color:C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}</div>
+              {(m.extensions||[]).length>0&&(
+                <div style={{marginTop:6,borderTop:"1px solid "+C.border,paddingTop:6}}>
+                  <div style={{fontSize:9,fontWeight:700,color:"#D97706",marginBottom:4}}>📋 HISTORIQUE EXTENSIONS</div>
+                  {(m.extensions||[]).map((e,ei)=>(
+                    <div key={ei} style={{fontSize:9,color:C.slate,background:"#FFFBEB",borderRadius:6,padding:"4px 8px",marginBottom:3}}>
+                      <span style={{fontWeight:700,color:"#D97706"}}>{e.date}</span> · {e.oldExp} → <span style={{fontWeight:700,color:C.navy}}>{e.newExp}</span>
+                      {e.motif!=="—"&&<span> · {e.motif}</span>}
+                      {e.ref!=="—"&&<span style={{color:"#7C3AED"}}> · Réf: {e.ref}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
