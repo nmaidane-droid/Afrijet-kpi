@@ -2105,7 +2105,8 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId }) {
+  const isAdmin = profileId === "rdoa";
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
@@ -2168,7 +2169,10 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"}
   ];
   const FORMS = canForm ? ALL_FORMS.filter(f=>canForm(f.id)) : ALL_FORMS;
-  const f=FORMS.find(x=>x.id===active);
+  // Reset active if current form is not allowed for this profile
+  const activeAllowed = !active || FORMS.some(f=>f.id===active);
+  const effectiveActive = activeAllowed ? active : null;
+  const f=FORMS.find(x=>x.id===effectiveActive);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <Card accent="#0F1F3D">
@@ -2180,18 +2184,24 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           </div>
         </div>
         <div style={{display:"flex",gap:12,marginTop:10}}>
-          <button onClick={doExport}
-            style={{flex:1,height:36,background:"#D1FAE5",border:"1.5px solid #00936A",borderRadius:8,color:"#00936A",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-            📥 Export
-          </button>
-          <button onClick={doRestore}
-            style={{flex:1,height:36,background:"#DBEAFE",border:"1.5px solid #0369A1",borderRadius:8,color:"#0369A1",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-            ☁️ Restore
-          </button>
-          <button onClick={onReset}
-            style={{flex:1,height:36,background:"#FEE2E2",border:"1.5px solid #DC2626",borderRadius:8,color:"#DC2626",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-            🗑 Reset
-          </button>
+          {isAdmin&&(
+            <button onClick={doExport}
+              style={{flex:1,height:36,background:"#D1FAE5",border:"1.5px solid #059669",borderRadius:8,color:"#065F46",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              📥 Export
+            </button>
+          )}
+          {isAdmin&&(
+            <button onClick={doRestore}
+              style={{flex:1,height:36,background:"#DBEAFE",border:"1.5px solid #0369A1",borderRadius:8,color:"#0369A1",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              ☁️ Restore
+            </button>
+          )}
+          {isAdmin&&(
+            <button onClick={onReset}
+              style={{flex:1,height:36,background:"#FEE2E2",border:"1.5px solid #DC2626",borderRadius:8,color:"#DC2626",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              🗑 Reset
+            </button>
+          )}
           <button onClick={onLogout}
             style={{flex:1,height:36,background:"#F1F5F9",border:"1.5px solid #64748B",borderRadius:8,color:"#64748B",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             🔒 Exit
@@ -2232,12 +2242,12 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
         {FORMS.map(fm=>(
           <button key={fm.id} onClick={()=>setActive(fm.id)}
-            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:active===fm.id?fm.color:C.border,background:active===fm.id?fm.color+"15":"white",color:active===fm.id?fm.color:C.slate}}>
+            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:effectiveActive===fm.id?fm.color:C.border,background:effectiveActive===fm.id?fm.color+"15":"white",color:effectiveActive===fm.id?fm.color:C.slate}}>
             <div style={{fontSize:16,marginBottom:2}}>{fm.icon}</div>
             <div>{fm.label}</div>
           </button>
         ))}
-        {active==="sat"&&(
+        {effectiveActive==="sat"&&(
           <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",flexDirection:"column",background:"#0F1F3D"}}>
             <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"2px solid #A0720A"}}>
               <div>
@@ -2468,14 +2478,14 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           </div>
         )}
       </div>
-      {active==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved}/>}
-      {active==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
-      {active==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
-      {active==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} saved={saved}/>}
-      {active==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
-      {active==="regl"     && <FormReglementation/>}
-      {active==="docavion" && <FormDocAvion/>}
-      {active==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
+      {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved}/>}
+      {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
+      {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
+      {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} saved={saved}/>}
+      {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
+      {effectiveActive==="regl"     && <FormReglementation/>}
+      {effectiveActive==="docavion" && <FormDocAvion/>}
+      {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
   );
 }
@@ -2530,7 +2540,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
   );
 }
 
-function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft }) {
+function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit }) {
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
   const [opsSaved,setOpsSaved]=useState(false);
@@ -2682,6 +2692,11 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {canEdit===false&&(
+        <div style={{background:"#FEF3C7",border:"1px solid #D97706",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#92400E",fontWeight:600,textAlign:"center"}}>
+          👁 Mode consultation — Modifications non autorisées
+        </div>
+      )}
       {edit&&(
         <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end"}}>
           <div style={{background:"white",width:"100%",borderRadius:"20px 20px 0 0",padding:"20px 16px 36px",maxHeight:"90vh",overflowY:"auto"}}>
@@ -2854,7 +2869,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
           <div style={{color:"white",fontWeight:800,fontSize:15}}>{enVol[0].num} — {enVol[0].from} vers {enVol[0].to}</div>
           <div style={{color:"#94A3B8",fontSize:11,marginTop:3}}>{enVol[0].dep} - {enVol[0].arr} · {enVol[0].pax} pax</div>
           <button onClick={()=>{setEdit({...enVol[0]});setOrigStatus(enVol[0].status);}}
-            style={{marginTop:10,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,padding:"8px 16px",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            style={{marginTop:10,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,padding:"8px 16px",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",display:canEdit===false?"none":"inline-block"}}>
             Mettre a jour
           </button>
         </div>
@@ -2899,8 +2914,8 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
           const secEvts=getSecEvents(f.num,f.date);
           const hasSecu=secEvts.length>0;
           return (
-          <div key={i} onClick={()=>{setEdit({...f});setOrigStatus(f.status);}}
-            style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+          <div key={i} onClick={()=>{if(canEdit!==false){setEdit({...f});setOrigStatus(f.status);}}}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none",cursor:canEdit!==false?"pointer":"default",WebkitTapHighlightColor:"transparent"}}>
             <div style={{width:34,height:34,borderRadius:9,background:sBg(f.status),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <span style={{fontWeight:800,fontSize:14,color:sTx(f.status)}}>{sIc(f.status)}</span>
             </div>
@@ -4244,10 +4259,12 @@ function AppMain({ onLogout, profileId }) {
             <span style={{fontSize:11,color:C.slate,fontWeight:600}}>{ac&&!ac.simulated?"LIVE":"SIM"}</span>
           </div>
           <span style={{fontSize:12,fontWeight:700,color:C.navy}}>{timeStr}</span>
-          <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData,safetyData,aircraft))}
-            style={{height:36,padding:"0 12px",background:C.emerald,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}}>
-            📋 Rapport
-          </button>
+          {(profileId==="rdoa"||profileId==="dir")&&(
+            <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData,safetyData,aircraft))}
+              style={{height:36,padding:"0 12px",background:C.emerald,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}}>
+              📋 Rapport
+            </button>
+          )}
         </div>
       </div>
 
@@ -4271,7 +4288,7 @@ function AppMain({ onLogout, profileId }) {
           aircraft={aircraft} onUpdateAircraft={setAircraft}
           lastBackup={lastBackup} setLastBackup={setLastBackup}
           melHist={melHist} setMelHist={setMelHist}
-          canForm={canForm} profileLabel={profile.label}
+          canForm={canForm} profileLabel={profile.label} profileId={profileId}
           onImport={data=>{
             if(data.flights)   setFlights(data.flights);
             if(data.maintData) setMaint(data.maintData);
@@ -4287,7 +4304,7 @@ function AppMain({ onLogout, profileId }) {
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist}/>}
-        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft}/>}
+        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
