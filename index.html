@@ -2731,13 +2731,25 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
                     <select value={edit.causeRetard||""} onChange={e=>setEdit({...edit,causeRetard:e.target.value})}
                       style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box",color:C.text}}>
                       <option value="">-- Sélectionner --</option>
-                      <option value="Technique">Technique</option>
-                      <option value="Météo">Météo</option>
-                      <option value="ATC">ATC</option>
-                      <option value="Passagers">Passagers</option>
-                      <option value="Autre">Autre</option>
+                      <option value="Technique">🔧 Technique</option>
+                      <option value="Météo">⛈ Météo</option>
+                      <option value="ATC">📡 ATC</option>
+                      <option value="Commercial">💼 Commercial</option>
+                      <option value="Équipage">👨‍✈️ Équipage</option>
+                      <option value="Handling">🛂 Handling</option>
+                      <option value="Passagers">🧳 Passagers</option>
+                      <option value="Carburant">⛽ Carburant</option>
+                      <option value="Autre">📋 Autre</option>
                     </select>
                   </div>
+                  {edit.causeRetard&&edit.delayMin>0&&(
+                    <div style={{gridColumn:"1 / -1"}}>
+                      <FLabel>Détail (optionnel)</FLabel>
+                      <input value={edit.causeDetail||""} onChange={e=>setEdit({...edit,causeDetail:e.target.value})}
+                        placeholder="Ex: défaut hydraulique, CAM MORA fermé..."
+                        style={{width:"100%",height:44,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:13,outline:"none",background:C.bg,boxSizing:"border-box",color:C.text}}/>
+                    </div>
+                  )}
                 </div>
                 {edit.carbDep>0&&edit.carbArr>0&&(()=>{
                   const c=calcEdit(edit);
@@ -3258,6 +3270,19 @@ function ScreenPerf({ kpis, flights, finData }) {
   const delayVols = volsDone.filter(f=>f.delayMin>0);
   const delayVal = delayVols.length>0 ? Math.round(delayVols.reduce((s,f)=>s+f.delayMin,0)/delayVols.length) : kpis.delayMin||0;
 
+  // Tech Delay Rate & breakdown by cause
+  const techDelayVols = delayVols.filter(f=>f.causeRetard==="Technique");
+  const techDelayRate = volsDone.length>0 ? Math.round(techDelayVols.length/volsDone.length*100*10)/10 : 0;
+  const CAUSES = ["Technique","Météo","ATC","Commercial","Équipage","Handling","Passagers","Carburant","Autre"];
+  const delayCauses = CAUSES.map(c=>({
+    cause:c,
+    count:delayVols.filter(f=>f.causeRetard===c).length,
+    avgMin:delayVols.filter(f=>f.causeRetard===c).length>0
+      ?Math.round(delayVols.filter(f=>f.causeRetard===c).reduce((s,f)=>s+f.delayMin,0)/delayVols.filter(f=>f.causeRetard===c).length)
+      :0,
+    totalMin:delayVols.filter(f=>f.causeRetard===c).reduce((s,f)=>s+f.delayMin,0),
+  })).filter(c=>c.count>0).sort((a,b)=>b.count-a.count);
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {/* KPI tiles */}
@@ -3268,11 +3293,31 @@ function ScreenPerf({ kpis, flights, finData }) {
           info={"Formule :\nMoyenne (PAX réels / 18 sièges) × 100\nSur vols terminés\n\n🟢 ≥ 80%\n🟡 < 80%"}/>
         <KpiTile title="Retards moy." value={delayVal} unit="min" accent={delayVal>15?C.warn:C.emerald} icon="⚠"
           info={"Formule :\nMoyenne des retards\n(vols avec retard > 0 min)\n\n🟢 ≤ 15 min\n🟡 > 15 min"}/>
+        <KpiTile title="Tech Delay Rate" value={techDelayRate} unit="%" accent={techDelayRate<2?C.emerald:C.warn} icon="🔧"
+          info={"Formule :\nVols retardés cause Technique / Total vols terminés × 100\n\n🟢 < 2%\n🟡 ≥ 2%"}/>
         {(()=>{
           return <KpiTile title="NPS moyen" value={npsVal} unit="/10" accent={npsVal>=7?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}
             info={"Formule :\nMoyenne NPS saisi post-vol (0-10)\n\n🟢 ≥ 7\n🟡 < 7"}/>;
         })()}
       </div>
+
+      {/* Retards par cause */}
+      {delayCauses.length>0&&(
+        <Card>
+          <SectionTitle>Retards par cause — {delayVols.length} vol(s) en retard</SectionTitle>
+          {delayCauses.map((c,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<delayCauses.length-1?"1px solid "+C.border:"none"}}>
+              <div style={{fontWeight:700,fontSize:13,color:C.navy,width:90,flexShrink:0}}>{c.cause}</div>
+              <div style={{flex:1,background:C.bg,borderRadius:6,height:8,overflow:"hidden"}}>
+                <div style={{height:8,borderRadius:6,background:c.cause==="Technique"?"#DC2626":c.cause==="Météo"?"#3B82F6":c.cause==="ATC"?"#7C3AED":C.gold,
+                  width:Math.round(c.count/delayVols.length*100)+"%"}}/>
+              </div>
+              <div style={{fontSize:12,color:C.slate,width:30,textAlign:"right",flexShrink:0}}>{c.count}</div>
+              <div style={{fontSize:11,color:C.slateL,width:50,textAlign:"right",flexShrink:0}}>{c.avgMin} min</div>
+            </div>
+          ))}
+        </Card>
+      )}
 
       {/* Charts */}
       {days.length>=2 ? (
@@ -3514,6 +3559,14 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
   const rLf=volsDoneR.length>0?Math.round(volsDoneR.reduce((s,f)=>s+f.load,0)/volsDoneR.length):kpis.loadFactor||0;
   const rDelayVols=volsDoneR.filter(f=>f.delayMin>0);
   const rDelay=rDelayVols.length>0?Math.round(rDelayVols.reduce((s,f)=>s+f.delayMin,0)/rDelayVols.length):kpis.delayMin||0;
+  const rTechDelayVols=rDelayVols.filter(f=>f.causeRetard==="Technique");
+  const rTechRate=volsDoneR.length>0?Math.round(rTechDelayVols.length/volsDoneR.length*100*10)/10:0;
+  const R_CAUSES=["Technique","Météo","ATC","Commercial","Équipage","Handling","Passagers","Carburant","Autre"];
+  const rDelayCauses=R_CAUSES.map(c=>({
+    cause:c,
+    count:rDelayVols.filter(f=>f.causeRetard===c).length,
+    avgMin:rDelayVols.filter(f=>f.causeRetard===c).length>0?Math.round(rDelayVols.filter(f=>f.causeRetard===c).reduce((s,f)=>s+f.delayMin,0)/rDelayVols.filter(f=>f.causeRetard===c).length):0,
+  })).filter(c=>c.count>0).sort((a,b)=>b.count-a.count);
   const rConsoVols=volsDoneR.filter(f=>f.consoH>0);
   const rConso=rConsoVols.length>0?Math.round(rConsoVols.reduce((s,f)=>s+f.consoH,0)/rConsoVols.length):kpis.consoH||0;
   const rNpsVols=volsDoneR.filter(f=>f.nps!==null);
@@ -3604,9 +3657,21 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
       kpiLine("OTP (ponctualite)",rOtp+"%","90%",rOtp>=90)+
       kpiLine("Load Factor",rLf+"%","80%",rLf>=80)+
       kpiLine("Retards moy.",rDelay+" min","15 min",rDelay<=15)+
+      kpiLine("Tech Delay Rate",rTechRate+"%","2%",rTechRate<2)+
       kpiLine("Conso. carburant",rConso+" kg/h","900 kg/h",rConso<900)+
       kpiLine("NPS client",rNps+"/10","7",rNps>=7)
     )+
+    (rDelayCauses.length>0?card(sec("Retards par cause — "+rDelayVols.length+" vol(s) en retard","#0F1F3D")+
+      rDelayCauses.map((c,i)=>(
+        "<div style='display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:"+(i<rDelayCauses.length-1?"1px solid #EEF2F8":"none")+";background:"+(i%2?"#F8FAFC":"white")+"'>"+
+        "<div style='font-weight:700;font-size:12px;color:#0F1F3D;width:90px;flex-shrink:0'>"+c.cause+"</div>"+
+        "<div style='flex:1;background:#EEF2F8;border-radius:4px;height:8px;overflow:hidden'>"+
+        "<div style='height:8px;border-radius:4px;background:"+(c.cause==="Technique"?"#DC2626":c.cause==="Météo"?"#3B82F6":c.cause==="ATC"?"#7C3AED":"#D97706")+";width:"+Math.round(c.count/rDelayVols.length*100)+"%'></div></div>"+
+        "<div style='font-size:11px;color:#64748B;width:24px;text-align:right;flex-shrink:0'>"+c.count+"</div>"+
+        "<div style='font-size:10px;color:#94A3B8;width:50px;text-align:right;flex-shrink:0'>"+c.avgMin+" min</div>"+
+        "</div>"
+      )).join("")
+    ):"")+ 
     card(sec("Rotations semaine du "+weekLabel+" — "+weekFlights.length+" vols","#0F1F3D")+fRows)+
     card(sec("Maintenance CAMO","#00936A")+
       acList.map(ac=>{
@@ -4284,6 +4349,30 @@ function AppMain({ onLogout }) {
                 drawRow("Dispatch Reliability",pDR+"%",pDR>=99);
                 drawRow("Completion Factor",pCF+"%",pCF>=99,true);
                 y+=6;
+
+                // ── Retards par cause ──
+                const pDelayVols2=pDoneVols.filter(f=>f.delayMin>0);
+                if(pDelayVols2.length>0){
+                  drawSection("  RETARDS PAR CAUSE ("+pDelayVols2.length+" vol(s))",15,31,61);
+                  const pCauses=["Technique","Météo","ATC","Commercial","Équipage","Handling","Passagers","Carburant","Autre"];
+                  pCauses.forEach(cat=>{
+                    const cv=pDelayVols2.filter(f=>f.causeRetard===cat);
+                    if(cv.length===0)return;
+                    const avgM=Math.round(cv.reduce((s,f)=>s+f.delayMin,0)/cv.length);
+                    const pct=Math.round(cv.length/pDelayVols.length*100);
+                    if(y>270){doc.addPage();y=15;}
+                    doc.setFillColor(248,250,252);doc.rect(M,y,CW,7,"F");
+                    doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(8);
+                    doc.text(cat,M+3,y+5);
+                    const barW=(CW-100)*pct/100;
+                    const barColor=cat==="Technique"?[220,38,38]:cat==="Météo"?[59,130,246]:cat==="ATC"?[124,58,237]:[217,119,6];
+                    doc.setFillColor(...barColor);doc.rect(M+70,y+2,barW,3,"F");
+                    doc.setTextColor(...barColor);doc.setFont("helvetica","normal");doc.setFontSize(7.5);
+                    doc.text(cv.length+" vol(s) · "+avgM+" min moy.",M+CW-2,y+5,{align:"right"});
+                    y+=8;
+                  });
+                  y+=4;
+                }
 
                 // ── Sécurité ──
                 const sd=safetyData||[];
