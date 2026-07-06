@@ -3541,8 +3541,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
   const tPax=allDone.reduce((s,f)=>s+f.pax,0);
 
   // Last 30 days for KPI performance
-  const cutoff30=new Date(now); cutoff30.setDate(cutoff30.getDate()-30); cutoff30.setHours(0,0,0,0);
-  const volsDoneR=allDone.filter(f=>f.date&&new Date(f.date)>=cutoff30);
+  const volsDoneR=allDone;
 
   // Use first aircraft data if available, fallback to maintData
   const acList=aircraft||[];
