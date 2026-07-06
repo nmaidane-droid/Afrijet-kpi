@@ -50,11 +50,34 @@ const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const FR24_TOKEN = "019f19a2-3af8-7196-b26a-9868009082bc|u8VFOrSqd0euZF0c9CZk0e8gCbQcE0GE6UPMhLRib8f2c0cf";
 const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813f67ec439268";
 
-async function checkPassword(pwd) {
+const PROFILES = [
+  {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
+   pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
+   forms:["avion","crew","vol","secu","docavion","regl","sat"],
+   tabs:["forms","ops"],  readOnly:["live","alerts","perf","secu_tab","maint","fin"] },
+  {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
+   pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
+   forms:["maint"],
+   tabs:["forms"],        readOnly:["live","ops","alerts","perf","secu_tab","fin"] },
+  {id:"fin",   label:"Finances",    icon:"💰",  color:"#7C3AED",
+   pwdHash:"2bb078f176007917292c786bdc9fd0a51a88eebf9bfbae142455c0c652f9475c",
+   forms:["fin"],
+   tabs:["forms"],        readOnly:["live","ops","alerts","perf","secu_tab","maint"] },
+  {id:"dir",   label:"Direction",   icon:"🏢",  color:"#64748B",
+   pwdHash:"93c4abe27cf1696102534bb60b3795f41f60f52fa806cd5d0feadfc8bd2b8170",
+   forms:[],
+   tabs:[],               readOnly:["live","ops","alerts","perf","secu_tab","maint","fin"] },
+  {id:"rdoa",  label:"RDOA",        icon:"🛡",  color:"#A0720A",
+   pwdHash:APP_PASSWORD_HASH,
+   forms:null, tabs:null, readOnly:[] },  // null = accès total
+];
+
+async function checkPassword(pwd, profileId) {
   const enc = new TextEncoder();
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(pwd));
   const hex = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
-  return hex === APP_PASSWORD_HASH;
+  const profile = PROFILES.find(p=>p.id===profileId);
+  return hex === (profile ? profile.pwdHash : APP_PASSWORD_HASH);
 }
 const supabase = window.supabase?.createClient(SUPA_URL, SUPA_KEY);
 
@@ -2068,7 +2091,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel }) {
   const [active,setActive]=useState("vol");
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
@@ -2119,7 +2142,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     }
   };
 
-  const FORMS=[
+  const ALL_FORMS=[
     {id:"avion",    icon:"🛩",  label:"Avion",          color:"#0369A1"},
     {id:"crew",     icon:"👨‍✈️", label:"Equipage",       color:"#0369A1"},
     {id:"maint",    icon:"🔧",  label:"Maintenance",    color:"#00936A"},
@@ -2129,7 +2152,8 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     {id:"docavion", icon:"📁",  label:"Doc Avion",      color:"#0369A1"},
     {id:"regl",     icon:"📋",  label:"Réglementation", color:"#B45309"},
     {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"}
-];
+  ];
+  const FORMS = canForm ? ALL_FORMS.filter(f=>canForm(f.id)) : ALL_FORMS;
   const f=FORMS.find(x=>x.id===active);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -3827,12 +3851,12 @@ function TotpSetup({ secret, onVerified }) {
   );
 }
 
-function TotpVerify({ onVerified }) {
+function TotpVerify({ profileId, onVerified }) {
   const [code,setCode]=useState("");
   const [err,setErr]=useState("");
   const verify=async()=>{
     if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
-    const secret=await sbGet(TOTP_KEY);
+    const secret=await sbGet(TOTP_KEY+"_"+(profileId||"rdoa"));
     if(!secret){setErr("TOTP non configuré");return;}
     if(await verifyTotp(secret,code)){
       onVerified();
@@ -3859,17 +3883,43 @@ function TotpVerify({ onVerified }) {
   );
 }
 
+function ProfileSelectScreen({ onSelect }) {
+  return (
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:24}}>
+      <div style={{textAlign:"center",marginBottom:28}}>
+        <div style={{fontSize:36,marginBottom:8}}>🛩</div>
+        <div style={{fontWeight:800,fontSize:20,color:"white"}}>Afrijet Sahara</div>
+        <div style={{fontSize:12,color:"#94A3B8",marginTop:4}}>KPI Dashboard — Sélectionnez votre profil</div>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:12,width:"100%",maxWidth:340,justifyContent:"center"}}>
+        {PROFILES.map(p=>(
+          <button key={p.id} onClick={()=>onSelect(p.id)}
+            style={{background:p.color,border:"none",borderRadius:14,padding:"18px 12px",cursor:"pointer",
+              display:"flex",flexDirection:"column",alignItems:"center",gap:8,
+              boxShadow:"0 4px 12px rgba(0,0,0,.3)",WebkitTapHighlightColor:"transparent",
+              width:"calc(50% - 6px)"}}>
+            <div style={{fontSize:28}}>{p.icon}</div>
+            <div style={{fontWeight:700,fontSize:13,color:"white"}}>{p.label}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LoginGate({ onAuth }) {
-  const [step,setStep]=useState("pwd"); // pwd | totp_setup | totp_verify
+  const [profileId,setProfileId]=useState(null);
+  const [step,setStep]=useState("select"); // select | pwd | totp_setup | totp_verify
   const [pwd,setPwd]=useState("");
   const [err,setErr]=useState("");
   const [ok,setOk]=useState(false);
   const [totpSecret,setTotpSecret]=useState("");
 
+  const selectProfile=(id)=>{ setProfileId(id); setStep("pwd"); setErr(""); setPwd(""); };
+
   const submit=async()=>{
-    if(!await checkPassword(pwd)){ setErr("Mot de passe incorrect"); return; }
-    // Check if TOTP already configured
-    const existingSecret=await sbGet(TOTP_KEY);
+    if(!await checkPassword(pwd, profileId)){ setErr("Mot de passe incorrect"); return; }
+    const existingSecret=await sbGet(TOTP_KEY+"_"+profileId);
     if(existingSecret){
       setStep("totp_verify");
     } else {
@@ -3880,39 +3930,46 @@ function LoginGate({ onAuth }) {
   };
 
   const handleTotpVerified=async()=>{
-    try{ sessionStorage.setItem(PFX+"authed","1"); }catch(_e){}
+    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){}
     setOk(true);
-    setTimeout(onAuth,400);
+    setTimeout(()=>onAuth(profileId),400);
   };
 
   const handleTotpSetupVerified=async()=>{
-    await sbSet(TOTP_KEY,totpSecret);
-    try{ sessionStorage.setItem(PFX+"authed","1"); }catch(_e){}
+    await sbSet(TOTP_KEY+"_"+profileId,totpSecret);
+    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){}
     setOk(true);
-    setTimeout(onAuth,400);
+    setTimeout(()=>onAuth(profileId),400);
   };
 
+  if(step==="select") return <ProfileSelectScreen onSelect={selectProfile}/>;
+
+  const profile=PROFILES.find(p=>p.id===profileId);
   return (
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:20}}>
       <div style={{background:"#fff",borderRadius:16,padding:32,width:"100%",maxWidth:340,boxShadow:"0 20px 50px rgba(0,0,0,.3)"}}>
+        <button onClick={()=>setStep("select")} style={{background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:12,marginBottom:12,display:"flex",alignItems:"center",gap:4}}>
+          ← Changer de profil
+        </button>
+        <div style={{textAlign:"center",marginBottom:20}}>
+          <div style={{fontSize:32,marginBottom:6}}>{profile?.icon}</div>
+          <div style={{fontWeight:700,fontSize:16,color:profile?.color}}>{profile?.label}</div>
+          <div style={{fontSize:11,color:"#64748B"}}>Afrijet Sahara — KPI Dashboard</div>
+        </div>
         {step==="pwd"&&(<>
-          <div style={{textAlign:"center",marginBottom:20}}>
-            <div style={{fontSize:32,marginBottom:8}}>🛩</div>
-            <div style={{fontWeight:700,fontSize:16,color:"#0F1F3D"}}>Afrijet Sahara</div>
-            <div style={{fontSize:12,color:"#64748B"}}>KPI Dashboard — Accès restreint</div>
-          </div>
           <input type="password" value={pwd} placeholder="Mot de passe"
             onChange={e=>{setPwd(e.target.value);setErr("");}}
             onKeyDown={e=>{if(e.key==="Enter")submit();}}
+            autoFocus
             style={{width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:14,outline:"none",marginBottom:10}}/>
           {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
           <button onClick={submit}
-            style={{width:"100%",height:46,background:ok?"#00936A":"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer",transition:"background 0.3s"}}>
+            style={{width:"100%",height:46,background:ok?"#00936A":profile?.color||"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer",transition:"background 0.3s"}}>
             {ok?"✅ Connecté":"Se connecter"}
           </button>
         </>)}
         {step==="totp_setup"&&<TotpSetup secret={totpSecret} onVerified={handleTotpSetupVerified}/>}
-        {step==="totp_verify"&&<TotpVerify onVerified={handleTotpVerified}/>}
+        {step==="totp_verify"&&<TotpVerify profileId={profileId} onVerified={handleTotpVerified}/>}
       </div>
     </div>
   );
@@ -3973,20 +4030,30 @@ function ResetPasswordCheck({ onConfirm, onCancel }) {
 
 function App() {
   const [authed,setAuthed] = useState(()=>{
-    try{ return sessionStorage.getItem(PFX+"authed")==="1"; }catch(_e){ return false; }
+    try{
+      const p=sessionStorage.getItem(PFX+"active_profile");
+      return p && sessionStorage.getItem(PFX+"authed_"+p)==="1" ? p : null;
+    }catch(_e){ return null; }
   });
   const [loggedOut,setLoggedOut] = useState(false);
   if(loggedOut) return <LoggedOutScreen onReturnToLogin={()=>setLoggedOut(false)}/>;
-  if(!authed) return <LoginGate onAuth={()=>setAuthed(true)}/>;
-  return <AppMain onLogout={()=>{
-    try{ sessionStorage.removeItem(PFX+"authed"); }catch(_e){}
-    setAuthed(false);
+  if(!authed) return <LoginGate onAuth={(profileId)=>{
+    try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){}
+    setAuthed(profileId);
+  }}/>;
+  return <AppMain profileId={authed} onLogout={()=>{
+    try{ sessionStorage.removeItem(PFX+"authed_"+authed); sessionStorage.removeItem(PFX+"active_profile"); }catch(_e){}
+    setAuthed(null);
     setLoggedOut(true);
   }}/>;
 }
 
 
-function AppMain({ onLogout }) {
+function AppMain({ onLogout, profileId }) {
+  const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
+  const canForm = (id) => profile.forms===null || profile.forms.includes(id);
+  const canTab  = (id) => profile.tabs===null  || profile.tabs.includes(id);
+  const readOnly = (id) => profile.readOnly.includes(id);
   const [now,setNow]         = useState(new Date());
   const [tab,setTab]         = useState(() => {
     try { return sessionStorage.getItem(PFX+"tab") || "forms"; } catch(_e) { return "forms"; }
@@ -4098,6 +4165,7 @@ function AppMain({ onLogout }) {
           </div>
           <div style={{minWidth:0}}>
             <div style={{fontWeight:800,fontSize:13,color:C.navy,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>AFRIJET SAHARA</div>
+            <div style={{background:profile.color,color:"white",borderRadius:8,padding:"2px 8px",fontSize:9,fontWeight:700,flexShrink:0}}>{profile.label.toUpperCase()}</div>
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
@@ -4133,6 +4201,7 @@ function AppMain({ onLogout }) {
           aircraft={aircraft} onUpdateAircraft={setAircraft}
           lastBackup={lastBackup} setLastBackup={setLastBackup}
           melHist={melHist} setMelHist={setMelHist}
+          canForm={canForm} profileLabel={profile.label}
           onImport={data=>{
             if(data.flights)   setFlights(data.flights);
             if(data.maintData) setMaint(data.maintData);
@@ -4674,11 +4743,13 @@ function AppMain({ onLogout }) {
         {TABS.map(t=>{
           const active=tab===t.id;
           const badge=t.id==="alertes"&&critCount>0?critCount:null;
+          const locked=readOnly(t.id);
           return (
             <button key={t.id} onClick={()=>setTab(t.id)}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:"6px 2px",position:"relative",WebkitTapHighlightColor:"transparent",borderTop:active?"2.5px solid "+C.gold:"2.5px solid transparent"}}>
               <span style={{fontSize:17,lineHeight:1}}>{t.icon}</span>
               <span style={{fontSize:8,fontWeight:active?700:500,color:active?C.gold:C.slate}}>{t.label}</span>
+              {locked&&<span style={{fontSize:7,color:C.slateL}}>👁</span>}
               {badge&&(
                 <div style={{position:"absolute",top:4,right:"50%",transform:"translateX(10px)",background:C.danger,color:"white",borderRadius:10,minWidth:16,height:16,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>
                   {badge}
