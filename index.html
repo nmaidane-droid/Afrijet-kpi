@@ -3738,36 +3738,181 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
 }
 
 // ── Login Gate ──────────────────────────────────────────────────────────────
-function LoginGate({ onAuth }) {
-  const [pwd,setPwd]=useState("");
+// ── TOTP (Google Authenticator) ──────────────────────────────────────────────
+const TOTP_KEY = PFX + "totp_secret";
+const TOTP_ISSUER = "Afrijet Sahara";
+const TOTP_ACCOUNT = "rdoa@afrijet-sahara.ma";
+
+async function generateTotpSecret() {
+  const arr = new Uint8Array(20);
+  crypto.getRandomValues(arr);
+  const base32chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let secret = "";
+  for(let i=0; i<arr.length; i+=5) {
+    const b0=arr[i]||0,b1=arr[i+1]||0,b2=arr[i+2]||0,b3=arr[i+3]||0,b4=arr[i+4]||0;
+    secret += base32chars[(b0>>3)&31]+base32chars[((b0&7)<<2|(b1>>6))&31]+
+              base32chars[(b1>>1)&31]+base32chars[((b1&1)<<4|(b2>>4))&31]+
+              base32chars[((b2&15)<<1|(b3>>7))&31]+base32chars[(b3>>2)&31]+
+              base32chars[((b3&3)<<3|(b4>>5))&31]+base32chars[b4&31];
+  }
+  return secret;
+}
+
+function base32Decode(encoded) {
+  const base32chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  encoded = encoded.toUpperCase().replace(/=+$/, "");
+  let bits = 0, val = 0;
+  const output = [];
+  for(let i=0; i<encoded.length; i++) {
+    val = (val<<5) | base32chars.indexOf(encoded[i]);
+    bits += 5;
+    if(bits>=8) { output.push((val>>(bits-8))&255); bits-=8; }
+  }
+  return new Uint8Array(output);
+}
+
+async function computeTotp(secret, timeStep) {
+  const key = base32Decode(secret);
+  const counter = Math.floor(timeStep/30);
+  const counterBytes = new Uint8Array(8);
+  for(let i=7; i>=0; i--) { counterBytes[i]=counter&255; const c=counter>>8; }
+  // Write counter properly
+  let c = Math.floor(timeStep/30);
+  for(let i=7; i>=0; i--) { counterBytes[i]=c&0xff; c=Math.floor(c/256); }
+  const cryptoKey = await crypto.subtle.importKey("raw",key,{name:"HMAC",hash:"SHA-1"},false,["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", cryptoKey, counterBytes);
+  const hmac = new Uint8Array(sig);
+  const offset = hmac[19]&0xf;
+  const code = ((hmac[offset]&0x7f)<<24|(hmac[offset+1]&0xff)<<16|(hmac[offset+2]&0xff)<<8|(hmac[offset+3]&0xff)) % 1000000;
+  return String(code).padStart(6,"0");
+}
+
+async function verifyTotp(secret, userCode) {
+  const now = Date.now()/1000;
+  for(let delta=-1; delta<=1; delta++) {
+    const code = await computeTotp(secret, now+delta*30);
+    if(code===userCode) return true;
+  }
+  return false;
+}
+
+function TotpSetup({ secret, onVerified }) {
+  const [code,setCode]=useState("");
   const [err,setErr]=useState("");
-  const [ok,setOk]=useState(false);
-  const submit=async()=>{
-    if(await checkPassword(pwd)){
-      try{ sessionStorage.setItem(PFX+"authed","1"); }catch(_e){}
-      setOk(true);
-      setTimeout(onAuth,400);
+  const qr=`otpauth://totp/${encodeURIComponent(TOTP_ISSUER)}:${encodeURIComponent(TOTP_ACCOUNT)}?secret=${secret}&issuer=${encodeURIComponent(TOTP_ISSUER)}&algorithm=SHA1&digits=6&period=30`;
+  const qrUrl=`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qr)}`;
+  const verify=async()=>{
+    if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
+    if(await verifyTotp(secret,code)){
+      onVerified();
     } else {
-      setErr("Mot de passe incorrect");
+      setErr("Code incorrect. Vérifiez l'heure de votre téléphone.");
+      setCode("");
     }
   };
   return (
+    <div style={{textAlign:"center"}}>
+      <div style={{fontWeight:700,fontSize:14,color:"#0F1F3D",marginBottom:8}}>Configuration Google Authenticator</div>
+      <div style={{fontSize:11,color:"#64748B",marginBottom:12}}>1. Ouvrez Google Authenticator<br/>2. Scannez ce QR code<br/>3. Entrez le code affiché</div>
+      <img src={qrUrl} style={{width:160,height:160,borderRadius:8,marginBottom:12}} alt="QR Code TOTP"/>
+      <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="Code à 6 chiffres"
+        onKeyDown={e=>e.key==="Enter"&&verify()}
+        style={{width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:18,letterSpacing:8,outline:"none",marginBottom:8,textAlign:"center"}}/>
+      {err&&<div style={{color:"#DC2626",fontSize:12,marginBottom:8}}>{err}</div>}
+      <button onClick={verify}
+        style={{width:"100%",height:46,background:"#0F1F3D",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+        Confirmer
+      </button>
+    </div>
+  );
+}
+
+function TotpVerify({ onVerified }) {
+  const [code,setCode]=useState("");
+  const [err,setErr]=useState("");
+  const verify=async()=>{
+    if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
+    const secret=await sbGet(TOTP_KEY);
+    if(!secret){setErr("TOTP non configuré");return;}
+    if(await verifyTotp(secret,code)){
+      onVerified();
+    } else {
+      setErr("Code incorrect.");
+      setCode("");
+    }
+  };
+  return (
+    <div style={{textAlign:"center"}}>
+      <div style={{fontSize:32,marginBottom:8}}>🔐</div>
+      <div style={{fontWeight:700,fontSize:14,color:"#0F1F3D",marginBottom:4}}>Vérification 2FA</div>
+      <div style={{fontSize:11,color:"#64748B",marginBottom:12}}>Entrez le code Google Authenticator</div>
+      <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="000000"
+        onKeyDown={e=>e.key==="Enter"&&verify()}
+        style={{width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:18,letterSpacing:8,outline:"none",marginBottom:8,textAlign:"center"}}
+        autoFocus/>
+      {err&&<div style={{color:"#DC2626",fontSize:12,marginBottom:8}}>{err}</div>}
+      <button onClick={verify}
+        style={{width:"100%",height:46,background:"#0F1F3D",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+        Vérifier
+      </button>
+    </div>
+  );
+}
+
+function LoginGate({ onAuth }) {
+  const [step,setStep]=useState("pwd"); // pwd | totp_setup | totp_verify
+  const [pwd,setPwd]=useState("");
+  const [err,setErr]=useState("");
+  const [ok,setOk]=useState(false);
+  const [totpSecret,setTotpSecret]=useState("");
+
+  const submit=async()=>{
+    if(!await checkPassword(pwd)){ setErr("Mot de passe incorrect"); return; }
+    // Check if TOTP already configured
+    const existingSecret=await sbGet(TOTP_KEY);
+    if(existingSecret){
+      setStep("totp_verify");
+    } else {
+      const newSecret=await generateTotpSecret();
+      setTotpSecret(newSecret);
+      setStep("totp_setup");
+    }
+  };
+
+  const handleTotpVerified=async()=>{
+    try{ sessionStorage.setItem(PFX+"authed","1"); }catch(_e){}
+    setOk(true);
+    setTimeout(onAuth,400);
+  };
+
+  const handleTotpSetupVerified=async()=>{
+    await sbSet(TOTP_KEY,totpSecret);
+    try{ sessionStorage.setItem(PFX+"authed","1"); }catch(_e){}
+    setOk(true);
+    setTimeout(onAuth,400);
+  };
+
+  return (
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:20}}>
       <div style={{background:"#fff",borderRadius:16,padding:32,width:"100%",maxWidth:340,boxShadow:"0 20px 50px rgba(0,0,0,.3)"}}>
-        <div style={{textAlign:"center",marginBottom:20}}>
-          <div style={{fontSize:32,marginBottom:8}}>🛩</div>
-          <div style={{fontWeight:700,fontSize:16,color:"#0F1F3D"}}>Afrijet Sahara</div>
-          <div style={{fontSize:12,color:"#64748B"}}>KPI Dashboard — Accès restreint</div>
-        </div>
-        <input type="password" value={pwd} placeholder="Mot de passe"
-          onChange={e=>{setPwd(e.target.value);setErr("");}}
-          onKeyDown={e=>{if(e.key==="Enter")submit();}}
-          style={{width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:14,outline:"none",marginBottom:10}}/>
-        {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
-        <button onClick={submit}
-          style={{width:"100%",height:46,background:ok?"#00936A":"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer",transition:"background 0.3s"}}>
-          {ok?"✅ Connecté":"Se connecter"}
-        </button>
+        {step==="pwd"&&(<>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <div style={{fontSize:32,marginBottom:8}}>🛩</div>
+            <div style={{fontWeight:700,fontSize:16,color:"#0F1F3D"}}>Afrijet Sahara</div>
+            <div style={{fontSize:12,color:"#64748B"}}>KPI Dashboard — Accès restreint</div>
+          </div>
+          <input type="password" value={pwd} placeholder="Mot de passe"
+            onChange={e=>{setPwd(e.target.value);setErr("");}}
+            onKeyDown={e=>{if(e.key==="Enter")submit();}}
+            style={{width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:14,outline:"none",marginBottom:10}}/>
+          {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
+          <button onClick={submit}
+            style={{width:"100%",height:46,background:ok?"#00936A":"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer",transition:"background 0.3s"}}>
+            {ok?"✅ Connecté":"Se connecter"}
+          </button>
+        </>)}
+        {step==="totp_setup"&&<TotpSetup secret={totpSecret} onVerified={handleTotpSetupVerified}/>}
+        {step==="totp_verify"&&<TotpVerify onVerified={handleTotpVerified}/>}
       </div>
     </div>
   );
