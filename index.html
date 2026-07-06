@@ -54,22 +54,22 @@ const PROFILES = [
   {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
    pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
    forms:["avion","crew","vol","secu","docavion","regl","sat"],
-   tabs:["forms","ops"],  readOnly:["live","alerts","perf","secu_tab","maint","fin"] },
+   tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes","fin"] },
   {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
    pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
    forms:["maint"],
-   tabs:["forms"],        readOnly:["live","ops","alerts","perf","secu_tab","fin"] },
+   tabs:["forms"],       readOnly:["live","secu","ops","fin","perf","alertes"] },
   {id:"fin",   label:"Finances",    icon:"💰",  color:"#7C3AED",
    pwdHash:"2bb078f176007917292c786bdc9fd0a51a88eebf9bfbae142455c0c652f9475c",
    forms:["fin"],
-   tabs:["forms"],        readOnly:["live","ops","alerts","perf","secu_tab","maint"] },
+   tabs:["forms"],       readOnly:["live","secu","maint","ops","fin","alertes","perf"] },
   {id:"dir",   label:"Direction",   icon:"🏢",  color:"#A0720A",
    pwdHash:"ed494928275b93b897810bd7b090babaee8d4d92268cd96119eef7948b251184",
    forms:[],
-   tabs:[],               readOnly:["live","ops","alerts","perf","secu_tab","maint","fin"] },
-  {id:"rdoa",  label:"Administrateur",        icon:"🛡",  color:"#DC2626",
+   tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
+  {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
-   forms:null, tabs:null, readOnly:[] },  // null = accès total
+   forms:null, tabs:null, readOnly:[] },
 ];
 
 async function checkPassword(pwd, profileId) {
@@ -2245,14 +2245,13 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           const allowed = canAccessForm(fm.id);
           return (
           <button key={fm.id} onClick={()=>{
-            if(!allowed){ alert("🔒 Accès non autorisé\nVotre département n'a pas accès à ce formulaire."); return; }
+            if(!allowed){ return; }
             setActive(fm.id);
           }}
             style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",
-              borderColor:effectiveActive===fm.id?fm.color:allowed?C.border:"#E2E8F0",
-              background:effectiveActive===fm.id?fm.color+"15":allowed?"white":"#F8FAFC",
-              color:effectiveActive===fm.id?fm.color:allowed?C.slate:"#CBD5E1",
-              opacity:allowed?1:0.6}}>
+              borderColor:effectiveActive===fm.id?fm.color:C.border,
+              background:effectiveActive===fm.id?fm.color+"15":"white",
+              color:effectiveActive===fm.id?fm.color:C.slate}}>
             <div style={{fontSize:16,marginBottom:2}}>{fm.icon}</div>
             <div>{fm.label}</div>
             {!allowed&&<div style={{fontSize:7,color:"#94A3B8"}}>🔒</div>}
@@ -4150,7 +4149,7 @@ function AppMain({ onLogout, profileId }) {
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
   const canForm = (id) => profile.forms===null || profile.forms.includes(id);
   const canTab  = (id) => profile.tabs===null  || profile.tabs.includes(id);
-  const readOnly = (id) => profile.readOnly.includes(id);
+  const readOnly = (id) => (profile.readOnly||[]).includes(id);
   const [now,setNow]         = useState(new Date());
   const [tab,setTab]         = useState(() => {
     try { return sessionStorage.getItem(PFX+"tab") || "forms"; } catch(_e) { return "forms"; }
@@ -4864,13 +4863,13 @@ function AppMain({ onLogout, profileId }) {
         {TABS.map(t=>{
           const active=tab===t.id;
           const badge=t.id==="alertes"&&critCount>0?critCount:null;
-          const locked=readOnly(t.id);
+          const isRO=readOnly(t.id);
           return (
             <button key={t.id} onClick={()=>setTab(t.id)}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:"6px 2px",position:"relative",WebkitTapHighlightColor:"transparent",borderTop:active?"2.5px solid "+C.gold:"2.5px solid transparent"}}>
               <span style={{fontSize:17,lineHeight:1}}>{t.icon}</span>
               <span style={{fontSize:8,fontWeight:active?700:500,color:active?C.gold:C.slate}}>{t.label}</span>
-              {locked&&<span style={{fontSize:7,color:C.slateL}}>👁</span>}
+              {isRO&&<span style={{fontSize:7,color:C.slateL}}>👁</span>}
               {badge&&(
                 <div style={{position:"absolute",top:4,right:"50%",transform:"translateX(10px)",background:C.danger,color:"white",borderRadius:10,minWidth:16,height:16,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>
                   {badge}
