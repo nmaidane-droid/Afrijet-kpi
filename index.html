@@ -969,7 +969,7 @@ function computeAlerts(kpis, flights, maintData, aircraft) {
   else if(otp<90)a.push({id:"otp",sev:"warn",msg:"OTP en baisse: "+otp+"%",icon:"⏰"});
   if(delayMin>30)a.push({id:"del",sev:"danger",msg:"Retards: "+delayMin+" min",icon:"⚠"});
   else if(delayMin>15)a.push({id:"del",sev:"warn",msg:"Retards: "+delayMin+" min",icon:"⚠"});
-  const lfVal=volsDone.length>0?Math.round(volsDone.reduce((s,f)=>s+f.load,0)/volsDone.length):kpis.loadFactor||0;
+  const lfComVols=volsDone.filter(f=>!f.flightType||f.flightType==="Commercial");const lfVal=lfComVols.length>0?Math.round(lfComVols.reduce((s,f)=>s+f.load,0)/lfComVols.length):kpis.loadFactor||0;
   if(lfVal<70)a.push({id:"lf",sev:"warn",msg:"Load Factor: "+lfVal+"%",icon:"💺"});
   // Per-aircraft checks and MEL alerts
   const acList=aircraft||[];
@@ -1246,6 +1246,7 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
   const [date,setDate]=useState(today);
   const [cm1,setCm1]=useState("");
   const [cm2,setCm2]=useState("");
+  const [flightType,setFlightType]=useState("Commercial");
   const [cc,setCc]=useState("");
 
   const pn=Math.min(SIEGES,Math.max(0,Number(pax)||0));
@@ -1281,10 +1282,10 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
       if(diff>0) planDuree=diff;
     }
     onSubmit({num:num.trim().toUpperCase(),from:from_,to,dep,arr,depReal:"",arrReal:"",
-      status:"Planifie",pax:pn,load,date,acId,sieges:SIEGES,
+      status:"Planifie",pax:pn,load,date,acId,sieges:SIEGES,flightType:flightType||"Commercial",
       carbDep:0,carbArr:0,consomme:0,consoH:0,fuelPct:0,delayMin:0,
       cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0,dureeMin:planDuree});
-    setNum("");setFrom("");setTo("");setDep("");setPax("");
+    setNum("");setFrom("");setTo("");setDep("");setPax("");setFlightType("Commercial");
     setCm1("");setCm2("");setCc("");
   };
   return (
@@ -1304,6 +1305,19 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
           </div>
         )}
         <FGrid><FField label="N Vol *" value={num} onChange={setNum}/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
+        <div>
+          <FLabel>Type de vol</FLabel>
+          <div style={{display:"flex",gap:8}}>
+            {[{v:"Commercial",c:"#00936A",code:"COM"},{v:"Ferry",c:"#0369A1",code:"FRY"},{v:"Positioning",c:"#D97706",code:"POS"}].map(t=>(
+              <button key={t.v} onClick={()=>setFlightType(t.v)}
+                style={{flex:1,height:40,borderRadius:10,border:"2px solid "+(flightType===t.v?t.c:"#CBD5E1"),
+                  background:flightType===t.v?t.c:"white",color:flightType===t.v?"white":C.slate,
+                  fontWeight:700,fontSize:12,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                {t.code}
+              </button>
+            ))}
+          </div>
+        </div>
         <FSection title="Route" color="#0F1F3D"/>
         <FGrid><FAirport label="Depart — Code IATA" value={from_} onChange={setFrom}/><FAirport label="Arrivee — Code IATA" value={to} onChange={setTo}/></FGrid>
         <FSection title="Horaires planifies" color="#0F1F3D"/>
@@ -2869,6 +2883,11 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
             </button>
           ))}
         </div>
+        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+          <span style={{background:"#00936A",color:"white",borderRadius:5,padding:"1px 6px",fontSize:9,fontWeight:800}}>COM</span><span style={{fontSize:10,color:C.slate}}>Commercial</span>
+          <span style={{background:"#0369A1",color:"white",borderRadius:5,padding:"1px 6px",fontSize:9,fontWeight:800}}>FRY</span><span style={{fontSize:10,color:C.slate}}>Ferry</span>
+          <span style={{background:"#D97706",color:"white",borderRadius:5,padding:"1px 6px",fontSize:9,fontWeight:800}}>POS</span><span style={{fontSize:10,color:C.slate}}>Positioning</span>
+        </div>
       </div>
       <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,overflow:"hidden"}}>
         <div style={{padding:"9px 14px",background:C.bg,borderBottom:"1px solid "+C.border,fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase",display:"flex",justifyContent:"space-between"}}>
@@ -2888,6 +2907,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:13,color:C.text,display:"flex",alignItems:"center",gap:6}}>
                 {f.num} · {f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--"} · {f.from}→{f.to}
+                {(()=>{const t=f.flightType||"Commercial";const c=t==="Ferry"?"#0369A1":t==="Positioning"?"#D97706":"#00936A";const code=t==="Ferry"?"FRY":t==="Positioning"?"POS":"COM";return <span style={{background:c,color:"white",borderRadius:6,padding:"1px 5px",fontSize:9,fontWeight:800,flexShrink:0}}>{code}</span>;})()}
                 {hasSecu&&<span style={{background:"#FEE2E2",color:"#DC2626",borderRadius:6,padding:"1px 5px",fontSize:9,fontWeight:800}}>🛡 {secEvts.length}</span>}
               </div>
               <div style={{fontSize:11,color:C.textSub}}>
@@ -3284,7 +3304,7 @@ function ScreenPerf({ kpis, flights, finData }) {
   // Mini SVG line chart component
   const volsDone = flights.filter(f=>f.status==="Termine");
   const otpVal = volsDone.length>0 ? Math.round(volsDone.reduce((s,f)=>s+otpScore(f),0)/volsDone.length) : kpis.otp||0;
-  const lfVal = volsDone.length>0 ? Math.round(volsDone.reduce((s,f)=>s+f.load,0)/volsDone.length) : kpis.loadFactor||0;
+  const lfComVols=volsDone.filter(f=>!f.flightType||f.flightType==="Commercial");const lfVal=lfComVols.length>0?Math.round(lfComVols.reduce((s,f)=>s+f.load,0)/lfComVols.length):kpis.loadFactor||0;
   const delayVols = volsDone.filter(f=>f.delayMin>0);
   const delayVal = delayVols.length>0 ? Math.round(delayVols.reduce((s,f)=>s+f.delayMin,0)/delayVols.length) : kpis.delayMin||0;
 
@@ -3318,6 +3338,32 @@ function ScreenPerf({ kpis, flights, finData }) {
             info={"Formule :\nMoyenne NPS saisi post-vol (0-10)\n\n🟢 ≥ 7\n🟡 < 7"}/>;
         })()}
       </div>
+
+
+      {/* Répartition par type de vol */}
+      {(()=>{
+        const FTYPES=[{v:"Commercial",code:"COM",color:"#00936A"},{v:"Ferry",code:"FRY",color:"#0369A1"},{v:"Positioning",code:"POS",color:"#D97706"}];
+        const total=volsDone.length;
+        return total>0&&(
+          <Card>
+            <SectionTitle>Répartition par type — {total} vol(s)</SectionTitle>
+            {FTYPES.map((t,i)=>{
+              const n=volsDone.filter(f=>(!f.flightType&&t.v==="Commercial")||f.flightType===t.v).length;
+              const pct=total>0?Math.round(n/total*100):0;
+              return (
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<2?"1px solid "+C.border:"none"}}>
+                  <span style={{background:t.color,color:"white",borderRadius:5,padding:"2px 7px",fontSize:9,fontWeight:800,flexShrink:0,width:28,textAlign:"center"}}>{t.code}</span>
+                  <div style={{flex:1,background:C.bg,borderRadius:6,height:8,overflow:"hidden"}}>
+                    <div style={{height:8,borderRadius:6,background:t.color,width:pct+"%"}}/>
+                  </div>
+                  <div style={{fontSize:12,color:C.navy,fontWeight:700,width:24,textAlign:"right",flexShrink:0}}>{n}</div>
+                  <div style={{fontSize:11,color:C.slate,width:36,textAlign:"right",flexShrink:0}}>{pct}%</div>
+                </div>
+              );
+            })}
+          </Card>
+        );
+      })()}
 
       {/* Retards par cause */}
       {delayCauses.length>0&&(
@@ -3570,10 +3616,14 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
   const tCout=fd.reduce((s,f)=>s+f.couts,0);
   const marge=tRev>0?Math.round((1-tCout/tRev)*1000)/10:0;
 
+  // Flight type breakdown
+  const R_FTYPES=[{v:"Commercial",code:"COM",color:"#00936A"},{v:"Ferry",code:"FRY",color:"#0369A1"},{v:"Positioning",code:"POS",color:"#D97706"}];
+  const rFTypeData=R_FTYPES.map(t=>({...t,n:allDone.filter(f=>(!f.flightType&&t.v==="Commercial")||f.flightType===t.v).length}));
+
   // Computed KPIs from flights
   const otpScoreR=f=>f.delayMin<=0?100:f.delayMin<=15?85:f.delayMin<=30?70:f.delayMin<=45?50:25;
   const rOtp=volsDoneR.length>0?Math.round(volsDoneR.reduce((s,f)=>s+otpScoreR(f),0)/volsDoneR.length):kpis.otp||0;
-  const rLf=volsDoneR.length>0?Math.round(volsDoneR.reduce((s,f)=>s+f.load,0)/volsDoneR.length):kpis.loadFactor||0;
+  const rLfCom=volsDoneR.filter(f=>!f.flightType||f.flightType==="Commercial");const rLf=rLfCom.length>0?Math.round(rLfCom.reduce((s,f)=>s+f.load,0)/rLfCom.length):kpis.loadFactor||0;
   const rDelayVols=volsDoneR.filter(f=>f.delayMin>0);
   const rDelay=rDelayVols.length>0?Math.round(rDelayVols.reduce((s,f)=>s+f.delayMin,0)/rDelayVols.length):kpis.delayMin||0;
   const rTechDelayVols=rDelayVols.filter(f=>f.causeRetard==="Technique");
@@ -3670,6 +3720,17 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
   return (
     "<div style='font-family:Arial,sans-serif;background:#F8FAFC;padding-bottom:20px'><div style='background:linear-gradient(135deg,#0F1F3D,#1D3461);padding:16px 12px 14px;display:flex;align-items:center;gap:12px'><img src='"+LOGO_B64+"' alt='Afrijet' style='width:48px;height:34px;object-fit:contain;background:white;border-radius:6px;padding:2px;flex-shrink:0'/><div><div style='color:#A0720A;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Afrijet Sahara</div><div style='color:white;font-size:18px;font-weight:800;margin-bottom:2px'>Rapport KPI Opérationnel</div><div style='color:#94A3B8;font-size:11px'>"+ds+"</div></div></div>"+
     card(row(done,"Termines",G,flights.filter(f=>f.status==="En vol").length,"En vol",O,fmtMAD(tPax),"PAX total",N))+
+    card(sec("Répartition par type de vol","#0F1F3D")+
+      rFTypeData.map((t,i)=>(
+        "<div style='display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:"+(i<2?"1px solid #EEF2F8":"none")+";background:"+(i%2?"#F8FAFC":"white")+"'>"+
+        "<span style='background:"+t.color+";color:white;border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;flex-shrink:0;width:28px;text-align:center'>"+t.code+"</span>"+
+        "<div style='flex:1;background:#EEF2F8;border-radius:4px;height:8px;overflow:hidden'>"+
+        "<div style='height:8px;border-radius:4px;background:"+t.color+";width:"+Math.round(t.n/allDone.length*100)+"%'></div></div>"+
+        "<div style='font-size:12px;font-weight:700;color:#0F1F3D;width:24px;text-align:right;flex-shrink:0'>"+t.n+"</div>"+
+        "<div style='font-size:10px;color:#64748B;width:36px;text-align:right;flex-shrink:0'>"+Math.round(t.n/allDone.length*100)+"%</div>"+
+        "</div>"
+      )).join("")
+    )+
     card(sec("Performance","#0F1F3D")+
       kpiLine("OTP (ponctualite)",rOtp+"%","90%",rOtp>=90)+
       kpiLine("Load Factor",rLf+"%","80%",rLf>=80)+
@@ -3887,7 +3948,7 @@ function ProfileSelectScreen({ onSelect }) {
   return (
     <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:24}}>
       <div style={{textAlign:"center",marginBottom:28}}>
-        <div style={{fontSize:36,marginBottom:8}}>🛩</div>
+        <img src={LOGO_B64} style={{width:90,height:90,objectFit:"contain",borderRadius:12,marginBottom:8,background:"white",padding:6}} alt="Afrijet Sahara"/>
         <div style={{fontWeight:800,fontSize:20,color:"white"}}>Afrijet Sahara</div>
         <div style={{fontSize:12,color:"#94A3B8",marginTop:4}}>KPI Dashboard — Sélectionnez votre profil</div>
       </div>
@@ -4383,6 +4444,28 @@ function AppMain({ onLogout, profileId }) {
                 };
 
                 // ── Performance ──
+                // ── Répartition par type de vol ──
+                drawSection("  RÉPARTITION PAR TYPE DE VOL",15,31,61);
+                const pFTypes=[{v:"Commercial",code:"COM",color:[0,147,106]},{v:"Ferry",code:"FRY",color:[3,105,161]},{v:"Positioning",code:"POS",color:[217,119,6]}];
+                const pTotalF=pDoneVols.length;
+                pFTypes.forEach(t=>{
+                  if(y>270){doc.addPage();y=15;}
+                  const n=pDoneVols.filter(f=>(!f.flightType&&t.v==="Commercial")||f.flightType===t.v).length;
+                  const pct=pTotalF>0?Math.round(n/pTotalF*100):0;
+                  doc.setFillColor(248,250,252);doc.rect(M,y,CW,7,"F");
+                  doc.setFillColor(...t.color);doc.roundedRect(M+2,y+1.5,12,4,1,1,"F");
+                  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(7);
+                  doc.text(t.code,M+8,y+4.5,{align:"center"});
+                  const barW=(CW-60)*pct/100;
+                  doc.setFillColor(...t.color);if(barW>0)doc.rect(M+18,y+2.5,barW,2.5,"F");
+                  doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(8);
+                  doc.text(n+" vol(s)",M+CW-2,y+5,{align:"right"});
+                  doc.setTextColor(100,116,139);doc.setFont("helvetica","normal");doc.setFontSize(7);
+                  doc.text(pct+"%",M+CW-20,y+5,{align:"right"});
+                  y+=8;
+                });
+                y+=4;
+
                 drawSection("  PERFORMANCE OPERATIONNELLE",15,31,61);
                 drawRow("Ponctualite OTP",pOtp+"%",pOtp>=90);
                 drawRow("Load Factor",pLf+"%",pLf>=80);
