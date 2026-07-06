@@ -3823,7 +3823,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
 }
 
 // ── Login Gate ──────────────────────────────────────────────────────────────
-// ── TOTP (Google Authenticator) ──────────────────────────────────────────────
+// ── TOTP (Microsoft Authenticator) ──────────────────────────────────────────────
 const TOTP_KEY = PFX + "totp_secret";
 const TOTP_ISSUER = "Afrijet Sahara";
 const TOTP_ACCOUNT = "rdoa@afrijet-sahara.ma";
@@ -3897,8 +3897,8 @@ function TotpSetup({ secret, onVerified }) {
   };
   return (
     <div style={{textAlign:"center"}}>
-      <div style={{fontWeight:700,fontSize:14,color:"#0F1F3D",marginBottom:8}}>Configuration Google Authenticator</div>
-      <div style={{fontSize:11,color:"#64748B",marginBottom:12}}>1. Ouvrez Google Authenticator<br/>2. Scannez ce QR code<br/>3. Entrez le code affiché</div>
+      <div style={{fontWeight:700,fontSize:14,color:"#0F1F3D",marginBottom:8}}>Configuration Microsoft Authenticator</div>
+      <div style={{fontSize:11,color:"#64748B",marginBottom:12}}>1. Ouvrez Microsoft Authenticator<br/>2. Scannez ce QR code<br/>3. Entrez le code affiché</div>
       <img src={qrUrl} style={{width:160,height:160,borderRadius:8,marginBottom:12}} alt="QR Code TOTP"/>
       <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="Code à 6 chiffres"
         onKeyDown={e=>e.key==="Enter"&&verify()}
@@ -3930,7 +3930,7 @@ function TotpVerify({ profileId, onVerified }) {
     <div style={{textAlign:"center"}}>
       <div style={{fontSize:32,marginBottom:8}}>🔐</div>
       <div style={{fontWeight:700,fontSize:14,color:"#0F1F3D",marginBottom:4}}>Vérification 2FA</div>
-      <div style={{fontSize:11,color:"#64748B",marginBottom:12}}>Entrez le code Google Authenticator</div>
+      <div style={{fontSize:11,color:"#64748B",marginBottom:12}}>Entrez le code Microsoft Authenticator</div>
       <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="000000"
         onKeyDown={e=>e.key==="Enter"&&verify()}
         style={{width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:18,letterSpacing:8,outline:"none",marginBottom:8,textAlign:"center"}}
