@@ -2168,9 +2168,10 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     {id:"regl",     icon:"📋",  label:"Réglementation", color:"#B45309"},
     {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"}
   ];
-  const FORMS = canForm ? ALL_FORMS.filter(f=>canForm(f.id)) : ALL_FORMS;
+  const FORMS = ALL_FORMS; // Toujours afficher toutes les tuiles
+  const canAccessForm = (id) => !canForm || canForm(id);
   // Reset active if current form is not allowed for this profile
-  const activeAllowed = !active || FORMS.some(f=>f.id===active);
+  const activeAllowed = !active || canAccessForm(active);
   const effectiveActive = activeAllowed ? active : null;
   const f=FORMS.find(x=>x.id===effectiveActive);
   return (
@@ -2240,13 +2241,24 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
         );
       })()}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-        {FORMS.map(fm=>(
-          <button key={fm.id} onClick={()=>setActive(fm.id)}
-            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:effectiveActive===fm.id?fm.color:C.border,background:effectiveActive===fm.id?fm.color+"15":"white",color:effectiveActive===fm.id?fm.color:C.slate}}>
+        {FORMS.map(fm=>{
+          const allowed = canAccessForm(fm.id);
+          return (
+          <button key={fm.id} onClick={()=>{
+            if(!allowed){ alert("🔒 Accès non autorisé\nVotre département n'a pas accès à ce formulaire."); return; }
+            setActive(fm.id);
+          }}
+            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",
+              borderColor:effectiveActive===fm.id?fm.color:allowed?C.border:"#E2E8F0",
+              background:effectiveActive===fm.id?fm.color+"15":allowed?"white":"#F8FAFC",
+              color:effectiveActive===fm.id?fm.color:allowed?C.slate:"#CBD5E1",
+              opacity:allowed?1:0.6}}>
             <div style={{fontSize:16,marginBottom:2}}>{fm.icon}</div>
             <div>{fm.label}</div>
+            {!allowed&&<div style={{fontSize:7,color:"#94A3B8"}}>🔒</div>}
           </button>
-        ))}
+          );
+        })}
         {effectiveActive==="sat"&&(
           <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",flexDirection:"column",background:"#0F1F3D"}}>
             <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"2px solid #A0720A"}}>
