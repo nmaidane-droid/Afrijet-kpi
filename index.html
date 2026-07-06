@@ -3978,8 +3978,17 @@ function LoginGate({ onAuth }) {
 
   const selectProfile=(id)=>{ setProfileId(id); setStep("pwd"); setErr(""); setPwd(""); };
 
+  const TOTP_REQUIRED = ["dir","rdoa"]; // TOTP actif uniquement pour Direction et Administrateur
+
   const submit=async()=>{
     if(!await checkPassword(pwd, profileId)){ setErr("Mot de passe incorrect"); return; }
+    if(!TOTP_REQUIRED.includes(profileId)){
+      // Pas de TOTP pour ce département (mode test)
+      try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){}
+      setOk(true);
+      setTimeout(()=>onAuth(profileId),400);
+      return;
+    }
     const existingSecret=await sbGet(TOTP_KEY+"_"+profileId);
     if(existingSecret){
       setStep("totp_verify");
