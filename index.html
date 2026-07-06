@@ -1914,8 +1914,10 @@ function FormDocStore({ storeKey, label }) {
 
   const handleOpen = async (doc) => {
     setMsg("📥 Chargement...");
-    const b64 = await sbGet(PFX_DOCS + doc.id);
-    if (!b64) { setMsg("❌ Fichier introuvable."); return; }
+    let b64 = await sbGet(PFX_DOCS + doc.id);
+    if (!b64) b64 = await sbGet(PFX + "reglementation_" + doc.id);
+    if (!b64) b64 = await sbGet(PFX + "docavion_" + doc.id);
+    if (!b64) { setMsg("❌ Fichier introuvable. Veuillez le ré-importer."); return; }
     const link = document.createElement("a");
     link.href = b64; link.download = doc.name + ".pdf"; link.click();
     setMsg("");
