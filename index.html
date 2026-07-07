@@ -2162,41 +2162,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     return Math.floor((today.getTime()-backupDay.getTime())/(1000*60*60*24));
   })():null;
 
-  const doRestore=async()=>{
-    const choice=window.confirm("Restaurer depuis :\n\n✅ OK → ☁️ Supabase (cloud)\n❌ Annuler → 📂 Fichier local (JSON)");
-    if(choice){
-      // Restore from Supabase
-      const data=await sbGet(PFX+"lastBackupData");
-      if(!data){alert("Aucun backup trouvé dans le cloud.");return;}
-      const dateStr=data.exportDate
-        ? new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})
-        : "date inconnue";
-      const ok=window.confirm("Ce backup cloud date du "+dateStr+".\n\nConfirmer la restauration ? Cela remplacera les données actuelles.");
-      if(!ok) return;
-      if(onImport){ onImport(data); setSaved(true); setTimeout(()=>setSaved(false),2500); }
-    } else {
-      // Restore from local JSON file
-      const input=document.createElement("input");
-      input.type="file"; input.accept=".json";
-      input.onchange=async(e)=>{
-        const file=e.target.files[0]; if(!file) return;
-        const reader=new FileReader();
-        reader.onload=async(ev)=>{
-          try{
-            const data=JSON.parse(ev.target.result);
-            const dateStr=data.exportDate
-              ? new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})
-              : "date inconnue";
-            const ok=window.confirm("Fichier local du "+dateStr+".\n\nConfirmer la restauration ? Cela remplacera les données actuelles.");
-            if(!ok) return;
-            if(onImport){ onImport(data); setSaved(true); setTimeout(()=>setSaved(false),2500); }
-          } catch(_e){ alert("❌ Fichier JSON invalide."); }
-        };
-        reader.readAsText(file);
-      };
-      input.click();
-    }
-  };
+
 
   const ALL_FORMS=[
     {id:"avion",    icon:"🛩",  label:"Avion",          color:"#0369A1"},
@@ -4204,16 +4170,6 @@ function App() {
     }catch(_e){ return null; }
   });
   const [loggedOut,setLoggedOut] = useState(false);
-  const [appError,setAppError] = useState(null);
-
-  if(appError) return (
-    <div style={{padding:24,textAlign:"center",color:"#DC2626"}}>
-      <div style={{fontSize:24,marginBottom:8}}>⚠️</div>
-      <div style={{fontWeight:700}}>Une erreur s'est produite</div>
-      <div style={{fontSize:12,marginTop:8,color:"#64748B"}}>{appError}</div>
-      <button onClick={()=>{setAppError(null);setAuthed(null);}} style={{marginTop:16,padding:"8px 16px",background:"#0F1F3D",color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>Retour à la connexion</button>
-    </div>
-  );
   if(loggedOut) return <LoggedOutScreen onReturnToLogin={()=>setLoggedOut(false)}/>;
   if(!authed) return <LoginGate onAuth={(profileId)=>{
     try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){}
@@ -4230,7 +4186,6 @@ function App() {
 function AppMain({ onLogout, profileId }) {
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
   const canForm = (id) => profile.forms===null || profile.forms.includes(id);
-  const canTab  = (id) => profile.tabs===null  || profile.tabs.includes(id);
   const readOnly = (id) => (profile.readOnly||[]).includes(id);
   const [now,setNow]         = useState(new Date());
   const [tab,setTab]         = useState(() => {
@@ -4404,55 +4359,6 @@ function AppMain({ onLogout, profileId }) {
         {tab==="fin"     && <ScreenFin finData={finData}/>}
       </div>
 
-      {/* RESTORE MODAL */}
-      {showRestoreModal&&(
-        <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
-            <div style={{fontSize:32,textAlign:"center",marginBottom:12}}>📦</div>
-            <div style={{fontWeight:800,fontSize:16,color:C.navy,textAlign:"center",marginBottom:8}}>Restaurer les données</div>
-            <div style={{fontSize:13,color:C.slate,textAlign:"center",lineHeight:1.6,marginBottom:20}}>Choisissez la source de restauration.</div>
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <button onClick={async()=>{
-                setShowRestoreModal(false);
-                const data=await sbGet(PFX+"lastBackupData");
-                if(!data){alert("Aucun backup trouvé dans le cloud.");return;}
-                const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
-                if(window.confirm("Backup Supabase du "+dateStr+".\n\nConfirmer la restauration ?")){
-                  if(onImport){onImport(data);setSaved(true);setTimeout(()=>setSaved(false),2500);}
-                }
-              }} style={{height:48,background:"#EFF6FF",border:"1.5px solid #0369A1",borderRadius:10,color:"#0369A1",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                ☁️ Depuis Supabase (cloud)
-              </button>
-              <button onClick={()=>{
-                setShowRestoreModal(false);
-                const input=document.createElement("input");
-                input.type="file"; input.accept=".json";
-                input.onchange=async(e)=>{
-                  const file=e.target.files[0]; if(!file) return;
-                  const reader=new FileReader();
-                  reader.onload=async(ev)=>{
-                    try{
-                      const data=JSON.parse(ev.target.result);
-                      const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
-                      if(window.confirm("Fichier local du "+dateStr+".\n\nConfirmer la restauration ?")){
-                        if(onImport){onImport(data);setSaved(true);setTimeout(()=>setSaved(false),2500);}
-                      }
-                    }catch(_e){alert("❌ Fichier JSON invalide.");}
-                  };
-                  reader.readAsText(file);
-                };
-                input.click();
-              }} style={{height:48,background:"#F0FDF4",border:"1.5px solid #00936A",borderRadius:10,color:"#00936A",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                📂 Depuis fichier local (JSON)
-              </button>
-              <button onClick={()=>setShowRestoreModal(false)}
-                style={{height:44,background:"#F1F5F9",border:"1.5px solid #CBD5E1",borderRadius:10,color:"#64748B",fontSize:13,fontWeight:600,cursor:"pointer"}}>
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
 
       {/* RESET MODAL */}
