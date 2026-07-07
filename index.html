@@ -2107,6 +2107,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
 
 function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId }) {
   const isAdmin = profileId === "rdoa";
+  const [showRestoreModal,setShowRestoreModal] = useState(false);
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":null;
   const [active,setActive]=useState(defaultForm);
   const [saved,setSaved]=useState(false);
@@ -4233,7 +4234,6 @@ function AppMain({ onLogout, profileId }) {
   const [mTraffic,setMTraff] = useState([]);
   const [loading,setLoading] = useState(false);
   const [showReset,setReset] = useState(false);
-  const [showRestoreModal,setShowRestoreModal] = useState(false);
   const [report,setReport]   = useState(null);
 
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),30000);return()=>clearInterval(t);},[]);
@@ -4376,18 +4376,6 @@ function AppMain({ onLogout, profileId }) {
         {tab==="fin"     && <ScreenFin finData={finData}/>}
       </div>
 
-      {/* RESET MODAL */}
-      {showReset&&(
-        <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
-            <div style={{fontSize:32,textAlign:"center",marginBottom:12}}>🗑</div>
-            <div style={{fontWeight:800,fontSize:16,color:C.navy,textAlign:"center",marginBottom:8}}>Reinitialiser l application</div>
-            <div style={{fontSize:13,color:C.slate,textAlign:"center",lineHeight:1.6,marginBottom:16}}>Toutes les donnees demo seront effacees. Vous pourrez saisir vos vraies donnees.</div>
-            <ResetPasswordCheck onConfirm={doReset} onCancel={()=>setReset(false)}/>
-          </div>
-        </div>
-      )}
-
       {/* RESTORE MODAL */}
       {showRestoreModal&&(
         <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -4434,6 +4422,19 @@ function AppMain({ onLogout, profileId }) {
                 Annuler
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* RESET MODAL */}
+      {showReset&&(
+        <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
+            <div style={{fontSize:32,textAlign:"center",marginBottom:12}}>🗑</div>
+            <div style={{fontWeight:800,fontSize:16,color:C.navy,textAlign:"center",marginBottom:8}}>Reinitialiser l application</div>
+            <div style={{fontSize:13,color:C.slate,textAlign:"center",lineHeight:1.6,marginBottom:16}}>Toutes les donnees demo seront effacees. Vous pourrez saisir vos vraies donnees.</div>
+            <ResetPasswordCheck onConfirm={doReset} onCancel={()=>setReset(false)}/>
           </div>
         </div>
       )}
