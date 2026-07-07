@@ -2107,7 +2107,8 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
 
 function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId }) {
   const isAdmin = profileId === "rdoa";
-  const [active,setActive]=useState("vol");
+  const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":null;
+  const [active,setActive]=useState(defaultForm);
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
 
