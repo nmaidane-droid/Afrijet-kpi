@@ -4186,6 +4186,16 @@ function App() {
     }catch(_e){ return null; }
   });
   const [loggedOut,setLoggedOut] = useState(false);
+  const [appError,setAppError] = useState(null);
+
+  if(appError) return (
+    <div style={{padding:24,textAlign:"center",color:"#DC2626"}}>
+      <div style={{fontSize:24,marginBottom:8}}>⚠️</div>
+      <div style={{fontWeight:700}}>Une erreur s'est produite</div>
+      <div style={{fontSize:12,marginTop:8,color:"#64748B"}}>{appError}</div>
+      <button onClick={()=>{setAppError(null);setAuthed(null);}} style={{marginTop:16,padding:"8px 16px",background:"#0F1F3D",color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>Retour à la connexion</button>
+    </div>
+  );
   if(loggedOut) return <LoggedOutScreen onReturnToLogin={()=>setLoggedOut(false)}/>;
   if(!authed) return <LoginGate onAuth={(profileId)=>{
     try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){}
