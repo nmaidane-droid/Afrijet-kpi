@@ -3942,17 +3942,43 @@ function TotpSetup({ secret, onVerified }) {
 function TotpVerify({ profileId, onVerified }) {
   const [code,setCode]=useState("");
   const [err,setErr]=useState("");
+  const [addingDevice,setAddingDevice]=useState(false);
+  const [newSecret,setNewSecret]=useState("");
+
+  const startAddDevice=async()=>{
+    const secret=await generateTotpSecret();
+    setNewSecret(secret);
+    setAddingDevice(true);
+  };
+
+  const handleNewDeviceVerified=async()=>{
+    // Add new secret to existing list
+    const key=TOTP_KEY+"_"+(profileId||"rdoa");
+    const existing=await sbGet(key);
+    let secrets=[];
+    if(existing){
+      secrets=Array.isArray(existing)?existing:[existing];
+    }
+    secrets.push(newSecret);
+    await sbSet(key,secrets);
+    onVerified();
+  };
+
+  if(addingDevice){
+    return <TotpSetup secret={newSecret} onVerified={handleNewDeviceVerified}/>;
+  }
 
   const verify=async()=>{
     if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
-    const secret=await sbGet(TOTP_KEY+"_"+(profileId||"rdoa"));
-    if(!secret){setErr("TOTP non configuré");return;}
-    if(await verifyTotp(secret,code)){
-      onVerified();
-    } else {
-      setErr("Code incorrect.");
-      setCode("");
+    const key=TOTP_KEY+"_"+(profileId||"rdoa");
+    const stored=await sbGet(key);
+    if(!stored){setErr("TOTP non configuré");return;}
+    const secrets=Array.isArray(stored)?stored:[stored];
+    for(const secret of secrets){
+      if(await verifyTotp(secret,code)){onVerified();return;}
     }
+    setErr("Code incorrect.");
+    setCode("");
   };
   return (
     <div style={{textAlign:"center"}}>
@@ -3967,6 +3993,10 @@ function TotpVerify({ profileId, onVerified }) {
       <button onClick={verify}
         style={{width:"100%",height:46,background:"#0F1F3D",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer"}}>
         Vérifier
+      </button>
+      <button onClick={startAddDevice}
+        style={{width:"100%",marginTop:10,background:"none",border:"none",color:"#0369A1",fontSize:12,cursor:"pointer",textDecoration:"underline"}}>
+        + Ajouter cet appareil
       </button>
     </div>
   );
@@ -4034,7 +4064,7 @@ function LoginGate({ onAuth }) {
   };
 
   const handleTotpSetupVerified=async()=>{
-    await sbSet(TOTP_KEY+"_"+profileId,totpSecret);
+    await sbSet(TOTP_KEY+"_"+profileId,[totpSecret]);
     try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){}
     setOk(true);
     setTimeout(()=>onAuth(profileId),400);
