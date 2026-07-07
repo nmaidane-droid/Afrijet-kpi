@@ -3941,6 +3941,7 @@ function TotpSetup({ secret, onVerified }) {
 function TotpVerify({ profileId, onVerified }) {
   const [code,setCode]=useState("");
   const [err,setErr]=useState("");
+
   const verify=async()=>{
     if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
     const secret=await sbGet(TOTP_KEY+"_"+(profileId||"rdoa"));
