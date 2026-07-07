@@ -44,6 +44,24 @@
 // React hooks available globally via Babel standalone
 const { useState, useEffect, useRef } = React;
 
+class ErrorBoundary extends React.Component {
+  constructor(props){super(props);this.state={error:null};}
+  static getDerivedStateFromError(e){return {error:e?.message||String(e)};}
+  render(){
+    if(this.state.error) return (
+      <div style={{padding:24,textAlign:"center"}}>
+        <div style={{fontSize:24,marginBottom:8}}>⚠️</div>
+        <div style={{fontWeight:700,color:"#DC2626"}}>Erreur : {this.state.error}</div>
+        <button onClick={()=>{sessionStorage.clear();window.location.reload();}}
+          style={{marginTop:16,padding:"10px 20px",background:"#0F1F3D",color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>
+          Retour à la connexion
+        </button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://zulwubuzuylmwkittnbg.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1bHd1YnV6dXlsbXdraXR0bmJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3Mjk5MjQsImV4cCI6MjA5ODMwNTkyNH0.Bt2MXASzrqWPaxTxo7ImZu-FtdjahLG9FLOMIgz9SWA";
@@ -4201,11 +4219,11 @@ function App() {
     try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){}
     setAuthed(profileId);
   }}/>;
-  return <AppMain profileId={authed} onLogout={()=>{
+  return <ErrorBoundary><AppMain profileId={authed} onLogout={()=>{
     try{ sessionStorage.removeItem(PFX+"authed_"+authed); sessionStorage.removeItem(PFX+"active_profile"); }catch(_e){}
     setAuthed(null);
     setLoggedOut(true);
-  }}/>;
+  }}/></ErrorBoundary>;
 }
 
 
