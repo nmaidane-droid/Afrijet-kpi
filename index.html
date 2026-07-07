@@ -2123,9 +2123,8 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId }) {
   const isAdmin = profileId === "rdoa";
-  const [showRestoreModal,setShowRestoreModal] = useState(false);
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":null;
   const [active,setActive]=useState(defaultForm);
   const [saved,setSaved]=useState(false);
@@ -2199,7 +2198,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
             </button>
           )}
           {isAdmin&&(
-            <button onClick={()=>setShowRestoreModal(true)}
+            <button onClick={onRestore}
               style={{flex:1,height:36,background:"#DBEAFE",border:"1.5px solid #0369A1",borderRadius:8,color:"#0369A1",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
               ☁️ Restore
             </button>
@@ -4217,6 +4216,7 @@ function AppMain({ onLogout, profileId }) {
   const [mTraffic,setMTraff] = useState([]);
   const [loading,setLoading] = useState(false);
   const [showReset,setReset] = useState(false);
+  const [showRestoreModal,setShowRestoreModal] = useState(false);
   const [report,setReport]   = useState(null);
 
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),30000);return()=>clearInterval(t);},[]);
@@ -4330,6 +4330,7 @@ function AppMain({ onLogout, profileId }) {
           onSubmitFin={d=>setFin(f=>[...f,d])}
           onSubmitSafety={d=>setSafety(s=>[...s,d])}
           onReset={()=>setReset(true)}
+          onRestore={()=>setShowRestoreModal(true)}
           onLogout={onLogout}
           flights={flights} crew={crew} setCrew={setCrew}
           maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed} safetyData={safetyData}
@@ -4360,6 +4361,8 @@ function AppMain({ onLogout, profileId }) {
       </div>
 
 
+
+      {/* RESTORE MODAL */}
 
       {/* RESTORE MODAL */}
       {showRestoreModal&&(
