@@ -1322,17 +1322,49 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients }) {
     <Card accent="#0F1F3D">
       <FHeader icon="✈" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0F1F3D"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        {/* Client selector — en premier */}
-        {clients&&clients.length>0&&(
-          <div>
-            <FLabel>Client</FLabel>
-            <select value={clientId} onChange={e=>setClientId(e.target.value)}
-              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:clientId?C.text:C.slateL,fontSize:13,outline:"none",appearance:"none"}}>
-              <option value="">-- Sélectionner un client (optionnel) --</option>
-              {(clients||[]).map(c=><option key={c.id} value={c.id}>{c.nom} — {c.type}</option>)}
-            </select>
-          </div>
-        )}
+        {/* Client selector - custom dropdown */}
+        {clients&&clients.length>0&&(()=>{
+          const [open,setOpen]=useState(false);
+          const selClient=clients.find(c=>c.id===clientId);
+          return (
+            <div>
+              <FLabel>Client</FLabel>
+              <button onClick={()=>setOpen(o=>!o)}
+                style={{width:"100%",height:52,background:"white",border:"1.5px solid "+(clientId?"#0891B2":C.border),borderRadius:10,padding:"0 14px",fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                  <span style={{fontSize:18,flexShrink:0}}>🏢</span>
+                  <div style={{minWidth:0}}>
+                    {selClient
+                      ? <><div style={{fontWeight:700,fontSize:13,color:C.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selClient.nom}</div>
+                          <div style={{fontSize:10,color:"#0891B2"}}>{selClient.type} · {selClient.ville}</div></>
+                      : <div style={{color:C.slateL,fontSize:13}}>-- Sélectionner un client --</div>}
+                  </div>
+                </div>
+                <span style={{color:C.slate,fontSize:12,flexShrink:0}}>{open?"▲":"▼"}</span>
+              </button>
+              {open&&(
+                <div style={{marginTop:4,background:"white",border:"1.5px solid "+C.border,borderRadius:10,overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,0.12)",zIndex:100,position:"relative"}}>
+                  <div onClick={()=>{setClientId("");setOpen(false);}}
+                    style={{padding:"10px 14px",borderBottom:"1px solid "+C.border,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:16}}>✕</span>
+                    <div style={{fontSize:12,color:C.slate}}>Aucun client</div>
+                  </div>
+                  {clients.map((c,i)=>(
+                    <div key={c.id} onClick={()=>{setClientId(c.id);setOpen(false);}}
+                      style={{padding:"10px 14px",borderBottom:i<clients.length-1?"1px solid "+C.border:"none",cursor:"pointer",background:clientId===c.id?"#EFF6FF":"white",display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{fontSize:16,flexShrink:0}}>🏢</span>
+                      <div>
+                        <div style={{fontWeight:clientId===c.id?700:600,fontSize:13,color:clientId===c.id?"#0891B2":C.navy}}>{c.nom}</div>
+                        <div style={{fontSize:10,color:C.slate}}>{c.type} · {c.ville}</div>
+                      </div>
+                      {clientId===c.id&&<span style={{marginLeft:"auto",color:"#0891B2",fontSize:14}}>✓</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {/* Aircraft selector */}
         {aircraft&&aircraft.length>0&&(
           <div>
