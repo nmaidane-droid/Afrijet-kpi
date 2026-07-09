@@ -85,6 +85,9 @@ const PROFILES = [
    pwdHash:"ed494928275b93b897810bd7b090babaee8d4d92268cd96119eef7948b251184",
    forms:[],
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
+  {id:"comm",  label:"Commercial",     icon:"💼",  color:"#0891B2",
+   pwdHash:"d01acdec3a3b87b33882a0fb8959ffda858a0642f7f54190f67aa230e04d1547",
+   forms:[], tabs:[], readOnly:[], blocked:[] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
    forms:null, tabs:null, readOnly:[] },
@@ -1188,7 +1191,7 @@ const INIT_AIRCRAFT = [
   {
     id:"AC001", immat:"CN-KTA", type:"EMB 135", sieges:18,
     capa:5700, icao24:"CN-KTA",
-    ttaf:4350, nextCheckH:145, bCheckH:620, cCheckH:2400,
+    ttaf:4304.8, cycles:3186, nextCheckH:145, bCheckH:620, cCheckH:2400,
     evtMoteur:1, fiabMoteurs:98.9,
     mels:[
       {sys:"Passenger Address System", mel:"MEL 23-61", exp:"30/07/26", sev:"B"},
@@ -1200,7 +1203,7 @@ const INIT_AIRCRAFT = [
   {
     id:"AC002", immat:"CN-KTB", type:"EMB 145", sieges:8,
     capa:3800, icao24:"CN-KTB",
-    ttaf:2180, nextCheckH:210, bCheckH:890, cCheckH:3100,
+    ttaf:2121.6, cycles:1539, nextCheckH:210, bCheckH:890, cCheckH:3100,
     evtMoteur:0, fiabMoteurs:100,
     mels:[
       {sys:"APU Fire Detection",  mel:"MEL 26-21", exp:"10/07/26", sev:"A"},
@@ -1502,6 +1505,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   const initAc=aircraft&&aircraft.length>0?aircraft[0]:{};
   const [acId,setAcId]=useState(initAc.id||"");
   const [ttaf,setTtaf]=useState(String(initAc.ttaf||""));
+  const [cycles,setCycles]=useState(String(initAc.cycles||""));
   const [nextH,setNextH]=useState(String(initAc.nextCheckH||""));
   const [bCheckH,setBCheckH]=useState(String(initAc.bCheckH||""));
   const [cCheckH,setCCheckH]=useState(String(initAc.cCheckH||""));
@@ -1512,6 +1516,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   useEffect(()=>{
     const ac=aircraft?.find(a=>a.id===acId)||{};
     setTtaf(String(ac.ttaf||""));
+    setCycles(String(ac.cycles||""));
     setNextH(String(ac.nextCheckH||""));
     setBCheckH(String(ac.bCheckH||""));
     setCCheckH(String(ac.cCheckH||""));
@@ -1589,7 +1594,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
     const volsDone=Number(md.volsDone||0);
     const evt=Number(evtMoteur)||0;
     const fiabCalc=volsDone>0?Math.round(((volsDone-evt)/volsDone)*1000)/10:0;
-    onSubmit({acId,ttaf:Number(ttaf)||0,melCount:mels.length,nextCheckH:Number(nextH)||0,
+    onSubmit({acId,ttaf:Number(ttaf)||0,cycles:Number(cycles)||0,melCount:mels.length,nextCheckH:Number(nextH)||0,
       bCheckH:Number(bCheckH)||0,cCheckH:Number(cCheckH)||0,
       evtMoteur:evt,fiabMoteurs:fiabCalc,mels});
   };
@@ -1609,8 +1614,8 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
         )}
         <FSection title="Cellule" color="#00936A"/>
         <FGrid>
-          <FField label="TTAF (heures)" value={ttaf} onChange={setTtaf} type="number" min={0}/>
-          <FCalc label="Statut cellule" value="En service" color={C.emerald}/>
+          <FField label="TTAF (heures)" value={ttaf} onChange={setTtaf} type="number" min={0} step={0.1}/>
+          <FField label="Cycles" value={cycles} onChange={setCycles} type="number" min={0} step={1}/>
         </FGrid>
         <FSection title="Visites périodiques" color="#00936A"/>
         <FGrid>
@@ -2051,7 +2056,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
     if(sel==="new"){
       const duplicate=aircraft.find(a=>a.immat.toUpperCase()===icaoTrim);
       if(duplicate){alert("⛔ L'immatriculation "+icaoTrim+" existe déjà. Choisissez un autre identifiant.");return;}
-      const newAc={id:"AC"+Date.now(),immat:icaoTrim,type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim,ttaf:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
+      const newAc={id:"AC"+Date.now(),immat:icaoTrim,type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim,ttaf:0,cycles:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
       onUpdate([...aircraft,newAc]);
       setMsg("Avion ajouté ✅");
     } else {
@@ -2691,7 +2696,8 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
           if(a.id!==edit.acId) return a;
           return {
             ...a,
-            ttaf:     Math.round((a.ttaf+flightH)*100)/100,
+            ttaf:     Math.round((a.ttaf+flightH)*10)/10,
+            cycles:   (a.cycles||0)+1,
             nextCheckH: a.nextCheckH!=null ? Math.round(Math.max(0,(a.nextCheckH-flightH))*100)/100 : null,
             bCheckH:    a.bCheckH!=null    ? Math.round(Math.max(0,(a.bCheckH-flightH))*100)/100    : null,
             cCheckH:    a.cCheckH!=null    ? Math.round(Math.max(0,(a.cCheckH-flightH))*100)/100    : null,
@@ -3485,7 +3491,8 @@ function ScreenMaint({ kpis, maintData, flights, aircraft }) {
         </div>
       )}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <KpiTile title="TTAF" value={(md.ttaf||0).toLocaleString()} unit="h" accent={C.navy} icon="⏱"/>
+        <KpiTile title="TTAF" value={(md.ttaf||0).toFixed(1)} unit="h" accent={C.navy} icon="⏱"/>
+        <KpiTile title="Cycles" value={(md.cycles||0).toLocaleString()} unit="" accent={C.navy} icon="🔄"/>
         <KpiTile title="MEL actifs" value={mels.length} unit="" accent={mels.length>0?C.warn:C.emerald} icon="⚠"/>
       </div>
       <Card>
@@ -3814,7 +3821,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
                 "</div></div>";
             }).join("");
         return acTitle+
-          row((ac.ttaf||0)+"h","TTAF",N,(acMels).length,"MEL actifs",(acMels).length>0?O:G,"",""," ")+
+          row((ac.ttaf||0).toFixed(1)+"h","TTAF",N,(ac.cycles||0).toString(),"Cycles",N,(acMels).length,"MEL actifs",(acMels).length>0?O:G)+
           row((ac.nextCheckH||"--")+(ac.nextCheckH?"h":""),"A-Check dans",(ac.nextCheckH||999)<50?"#DC2626":(ac.nextCheckH||999)<100?O:G,(ac.bCheckH||"--")+(ac.bCheckH?"h":""),"B-Check dans",!ac.bCheckH||ac.bCheckH>300?G:ac.bCheckH>100?O:"#DC2626",(ac.cCheckH||"--")+(ac.cCheckH?"h":""),"C-Check dans",!ac.cCheckH||ac.cCheckH>500?G:ac.cCheckH>200?O:"#DC2626")+
           melSection;
       }).join("")+
@@ -4703,7 +4710,8 @@ function AppMain({ onLogout, profileId }) {
                   doc.setTextColor(15,31,61);doc.setFont("helvetica","bold");doc.setFontSize(9);
                   doc.text((ac.immat||"--")+" · "+(ac.type||""),M+6,y+5);
                   y+=10;
-                  drawRow("TTAF",(ac.ttaf||0)+" h",true);
+                  drawRow("TTAF",(ac.ttaf||0).toFixed(1)+" h",true);
+                  drawRow("Cycles",(ac.cycles||0).toString(),true);
                   drawRow("MEL actifs",(ac.mels||[]).length+" item(s)",(ac.mels||[]).length===0);
                   drawRow("A-Check dans",ac.nextCheckH?(ac.nextCheckH+" h"):"-- h",!ac.nextCheckH||ac.nextCheckH>100);
                   drawRow("B-Check dans",ac.bCheckH?(ac.bCheckH+" h"):"-- h",!ac.bCheckH||ac.bCheckH>300);
