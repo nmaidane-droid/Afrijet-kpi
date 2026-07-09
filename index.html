@@ -1931,6 +1931,64 @@ function FormFin({ onSubmit, saved }) {
   );
 }
 
+function ClientDetail({ c, flights, canEdit, onBack, onEdit, onDel }) {
+  const [histPer,setHistPer]=useState("Tout");
+  const vols=flights.filter(f=>f.clientId===c.id&&f.status==="Termine");
+  const totalH=vols.reduce((s,f)=>s+(f.dureeMin||0),0);
+  const totalPax=vols.reduce((s,f)=>s+(f.pax||0),0);
+  const now=new Date(); now.setHours(0,0,0,0);
+  const cutoff=new Date(now);
+  if(histPer==="7j") cutoff.setDate(cutoff.getDate()-7);
+  else if(histPer==="30j") cutoff.setDate(cutoff.getDate()-30);
+  else cutoff.setFullYear(2000);
+  const filtered=vols.filter(f=>!f.date||new Date(f.date)>=cutoff).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+
+  return (
+    <Card accent="#0891B2">
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+        <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:C.slate,fontSize:13}}>← Retour</button>
+        {canEdit&&<button onClick={onEdit} style={{marginLeft:"auto",background:"#EFF6FF",border:"1px solid #0891B2",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,color:"#0891B2",cursor:"pointer"}}>✏️ Modifier</button>}
+        {canEdit&&<button onClick={onDel} style={{background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,color:"#DC2626",cursor:"pointer"}}>🗑</button>}
+      </div>
+      <div style={{fontWeight:800,fontSize:16,color:C.navy,marginBottom:4}}>{c.nom}</div>
+      <div style={{fontSize:12,color:"#0891B2",fontWeight:600,marginBottom:12}}>{c.type} — {c.ville}, {c.pays}</div>
+      <div style={{display:"flex",gap:10,marginBottom:14}}>
+        {[{v:vols.length,l:"Vols"},{v:Math.floor(totalH/60)+"h"+(totalH%60?String(totalH%60).padStart(2,"0"):""),l:"Total"},{v:totalPax,l:"PAX"}].map((k,i)=>(
+          <div key={i} style={{flex:1,background:C.bg,borderRadius:10,padding:"10px",textAlign:"center"}}>
+            <div style={{fontWeight:800,fontSize:18,color:C.navy}}>{k.v}</div>
+            <div style={{fontSize:10,color:C.slate}}>{k.l}</div>
+          </div>
+        ))}
+      </div>
+      <SectionTitle>Coordonnées</SectionTitle>
+      {[[c.contact,"👤"],[c.tel,"📞"],[c.email,"📧"],[c.contrat,"📋"]].map(([v,icon],i)=>v?(
+        <div key={i} style={{fontSize:12,color:C.text,padding:"4px 0",borderBottom:"1px solid "+C.border}}><span style={{marginRight:8}}>{icon}</span>{v}</div>
+      ):null)}
+      {c.notes&&<div style={{marginTop:10,fontSize:11,color:C.slate,fontStyle:"italic"}}>{c.notes}</div>}
+      <div style={{marginTop:14}}>
+        <SectionTitle>Historique vols</SectionTitle>
+        <div style={{display:"flex",gap:6,margin:"8px 0"}}>
+          {["7j","30j","Tout"].map(p=>(
+            <button key={p} onClick={()=>setHistPer(p)}
+              style={{padding:"4px 10px",borderRadius:8,border:"1px solid "+C.border,fontSize:11,fontWeight:600,cursor:"pointer",
+                background:histPer===p?C.navy:"white",color:histPer===p?"white":C.slate}}>
+              {p}
+            </button>
+          ))}
+          <span style={{fontSize:11,color:C.slate,alignSelf:"center",marginLeft:4}}>{filtered.length} vol(s)</span>
+        </div>
+        {filtered.length===0&&<div style={{fontSize:12,color:C.slateL,textAlign:"center",padding:8}}>Aucun vol sur cette période</div>}
+        {filtered.map((f,i)=>(
+          <div key={i} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:"1px solid "+C.border,fontSize:11}}>
+            <span style={{color:C.slate,flexShrink:0}}>{f.date?.slice(8)}/{f.date?.slice(5,7)}/{f.date?.slice(2,4)}</span>
+            <span style={{fontWeight:600,color:C.navy}}>{f.from}→{f.to}</span>
+            <span style={{color:C.slate,marginLeft:"auto"}}>{f.pax} pax</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 function FormClients({ clients, setClients, flights, canEdit }) {
   const [selected,setSelected]=useState(null);
   const [showForm,setShowForm]=useState(false);
@@ -1954,7 +2012,6 @@ function FormClients({ clients, setClients, flights, canEdit }) {
     setShowForm(false);setSelected(null);
   };
   const del=(id)=>{if(window.confirm("Supprimer ce client ?")) setClients(clients.filter(c=>c.id!==id));};
-  const clientFlights=(id)=>flights.filter(f=>f.clientId===id&&f.status==="Termine");
 
   if(showForm) return (
     <Card accent="#0891B2">
@@ -1978,62 +2035,10 @@ function FormClients({ clients, setClients, flights, canEdit }) {
   if(selected){
     const c=clients.find(x=>x.id===selected);
     if(!c){setSelected(null);return null;}
-    const vols=clientFlights(c.id);
-    const totalH=vols.reduce((s,f)=>s+(f.dureeMin||0),0);
-    const totalPax=vols.reduce((s,f)=>s+(f.pax||0),0);
-    return (
-      <Card accent="#0891B2">
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-          <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",cursor:"pointer",color:C.slate,fontSize:13}}>← Retour</button>
-          {canEdit&&<button onClick={()=>openEdit(c)} style={{marginLeft:"auto",background:"#EFF6FF",border:"1px solid #0891B2",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,color:"#0891B2",cursor:"pointer"}}>✏️ Modifier</button>}
-          {canEdit&&<button onClick={()=>{del(c.id);setSelected(null);}} style={{background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,color:"#DC2626",cursor:"pointer"}}>🗑</button>}
-        </div>
-        <div style={{fontWeight:800,fontSize:16,color:C.navy,marginBottom:4}}>{c.nom}</div>
-        <div style={{fontSize:12,color:"#0891B2",fontWeight:600,marginBottom:12}}>{c.type} — {c.ville}, {c.pays}</div>
-        <div style={{display:"flex",gap:10,marginBottom:14}}>
-          {[{v:vols.length,l:"Vols"},{v:Math.floor(totalH/60)+"h"+(totalH%60?""+totalH%60:""),l:"Total"},{v:totalPax,l:"PAX"}].map((k,i)=>(
-            <div key={i} style={{flex:1,background:C.bg,borderRadius:10,padding:"10px",textAlign:"center"}}>
-              <div style={{fontWeight:800,fontSize:18,color:C.navy}}>{k.v}</div>
-              <div style={{fontSize:10,color:C.slate}}>{k.l}</div>
-            </div>
-          ))}
-        </div>
-        <SectionTitle>Coordonnées</SectionTitle>
-        {[[c.contact,"👤"],[c.tel,"📞"],[c.email,"📧"],[c.contrat,"📋"]].map(([v,icon],i)=>v?(
-          <div key={i} style={{fontSize:12,color:C.text,padding:"4px 0",borderBottom:"1px solid "+C.border}}><span style={{marginRight:8}}>{icon}</span>{v}</div>
-        ):null)}
-        {c.notes&&<div style={{marginTop:10,fontSize:11,color:C.slate,fontStyle:"italic"}}>{c.notes}</div>}
-        {vols.length>0&&(<>
-          <SectionTitle style={{marginTop:14}}>Historique vols</SectionTitle>
-          {(()=>{
-            const [histPer,setHistPer]=React.useState("Tout");
-            const now=new Date(); now.setHours(0,0,0,0);
-            const cutoff=new Date(now); if(histPer==="7j") cutoff.setDate(cutoff.getDate()-7); else if(histPer==="30j") cutoff.setDate(cutoff.getDate()-30); else cutoff.setFullYear(2000);
-            const filtered=vols.filter(f=>!f.date||new Date(f.date)>=cutoff).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-            return (<>
-              <div style={{display:"flex",gap:6,marginBottom:8}}>
-                {["7j","30j","Tout"].map(p=>(
-                  <button key={p} onClick={()=>setHistPer(p)}
-                    style={{padding:"4px 10px",borderRadius:8,border:"1px solid "+C.border,fontSize:11,fontWeight:600,cursor:"pointer",
-                      background:histPer===p?C.navy:"white",color:histPer===p?"white":C.slate}}>
-                    {p}
-                  </button>
-                ))}
-                <span style={{fontSize:11,color:C.slate,alignSelf:"center",marginLeft:4}}>{filtered.length} vol(s)</span>
-              </div>
-              {filtered.length===0&&<div style={{fontSize:12,color:C.slateL,textAlign:"center",padding:8}}>Aucun vol sur cette période</div>}
-              {filtered.map((f,i)=>(
-                <div key={i} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:"1px solid "+C.border,fontSize:11}}>
-                  <span style={{color:C.slate,flexShrink:0}}>{f.date?.slice(8)}/{f.date?.slice(5,7)}/{f.date?.slice(2,4)}</span>
-                  <span style={{fontWeight:600,color:C.navy}}>{f.from}→{f.to}</span>
-                  <span style={{color:C.slate,marginLeft:"auto"}}>{f.pax} pax</span>
-                </div>
-              ))}
-            </>);
-          })()}
-        </>)}
-      </Card>
-    );
+    return <ClientDetail c={c} flights={flights} canEdit={canEdit}
+      onBack={()=>setSelected(null)}
+      onEdit={()=>openEdit(c)}
+      onDel={()=>{del(c.id);setSelected(null);}}/>;
   }
 
   return (
@@ -2041,7 +2046,7 @@ function FormClients({ clients, setClients, flights, canEdit }) {
       {canEdit&&<button onClick={openNew} style={{height:46,background:"#0891B2",border:"none",borderRadius:10,color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Nouveau client</button>}
       {clients.length===0&&<div style={{textAlign:"center",color:C.slate,fontSize:13,padding:32}}>Aucun client enregistré</div>}
       {clients.map(c=>{
-        const vols=clientFlights(c.id);
+        const vols=flights.filter(f=>f.clientId===c.id&&f.status==="Termine");
         return (
           <div key={c.id} onClick={()=>setSelected(c.id)} style={{background:"white",borderRadius:12,border:"1.5px solid "+C.border,padding:"14px 16px",cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
