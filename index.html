@@ -2886,6 +2886,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
               <div>
                 <div style={{fontWeight:800,fontSize:17,color:C.navy}}>{edit.num}</div>
                 <div style={{fontSize:12,color:C.slate}}>{edit.from} vers {edit.to} | {edit.dep} - {edit.arr}</div>
+                {edit.clientId&&clients&&(()=>{const cl=clients.find(x=>x.id===edit.clientId);return cl?<div style={{fontSize:12,color:"#0891B2",fontWeight:600,marginTop:2}}>🏢 {cl.nom}</div>:null;})()}
               </div>
               <button onClick={()=>setEdit(null)} style={{background:"none",border:"none",fontSize:22,color:C.slate,cursor:"pointer"}}>x</button>
             </div>
