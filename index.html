@@ -1972,7 +1972,7 @@ function FormClients({ clients, setClients, flights, canEdit }) {
   const [contact,setContact]=useState(""); const [tel,setTel]=useState("");
   const [email,setEmail]=useState(""); const [contrat,setContrat]=useState("");
   const [notes,setNotes]=useState("");
-  const TYPES=["Corporate","Institutionnel","Gouvernemental","ONG","Autre"];
+  const TYPES=["Corporate","Institutionnel","Gouvernemental","ONG","Privé"];
 
   const openNew=()=>{setNom("");setType("Corporate");setPays("Maroc");setVille("");setContact("");setTel("");setEmail("");setContrat("");setNotes("");setEditId(null);setShowForm(true);};
   const openEdit=(c)=>{setNom(c.nom);setType(c.type);setPays(c.pays);setVille(c.ville);setContact(c.contact);setTel(c.tel);setEmail(c.email);setContrat(c.contrat);setNotes(c.notes||"");setEditId(c.id);setShowForm(true);};
@@ -1991,7 +1991,12 @@ function FormClients({ clients, setClients, flights, canEdit }) {
     <Card accent="#0891B2">
       <FHeader icon="🏢" title={editId?"Modifier client":"Nouveau client"} subtitle="Afrijet Sahara" color="#0891B2"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        <FGrid><FField label="Nom *" value={nom} onChange={setNom}/><FSelect label="Type" value={type} onChange={setType} options={TYPES.map(t=>({value:t,label:t}))}/></FGrid>
+        <FGrid><FField label="Nom *" value={nom} onChange={setNom}/></FGrid>
+        <div>
+          <FLabel>Type</FLabel>
+          <CustomSelect value={type} onChange={setType}
+            options={TYPES.map(t=>({value:t,label:t}))}/>
+        </div>
         <FGrid><FField label="Pays" value={pays} onChange={setPays}/><FField label="Ville" value={ville} onChange={setVille}/></FGrid>
         <FSection title="Contact" color="#0891B2"/>
         <FGrid><FField label="Nom contact" value={contact} onChange={setContact}/><FField label="Téléphone" value={tel} onChange={setTel}/></FGrid>
