@@ -1323,58 +1323,22 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients }) {
       <FHeader icon="✈" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0F1F3D"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         {/* Client selector - custom dropdown */}
-        {clients&&clients.length>0&&(()=>{
-          const [open,setOpen]=useState(false);
-          const selClient=clients.find(c=>c.id===clientId);
-          return (
-            <div>
-              <FLabel>Client</FLabel>
-              <button onClick={()=>setOpen(o=>!o)}
-                style={{width:"100%",height:52,background:"white",border:"1.5px solid "+(clientId?"#0891B2":C.border),borderRadius:10,padding:"0 14px",fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-                  <span style={{fontSize:18,flexShrink:0}}>🏢</span>
-                  <div style={{minWidth:0}}>
-                    {selClient
-                      ? <><div style={{fontWeight:700,fontSize:13,color:C.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selClient.nom}</div>
-                          <div style={{fontSize:10,color:"#0891B2"}}>{selClient.type} · {selClient.ville}</div></>
-                      : <div style={{color:C.slateL,fontSize:13}}>-- Sélectionner un client --</div>}
-                  </div>
-                </div>
-                <span style={{color:C.slate,fontSize:12,flexShrink:0}}>{open?"▲":"▼"}</span>
-              </button>
-              {open&&(
-                <div style={{marginTop:4,background:"white",border:"1.5px solid "+C.border,borderRadius:10,overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,0.12)",zIndex:100,position:"relative"}}>
-                  <div onClick={()=>{setClientId("");setOpen(false);}}
-                    style={{padding:"10px 14px",borderBottom:"1px solid "+C.border,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
-                    <span style={{fontSize:16}}>✕</span>
-                    <div style={{fontSize:12,color:C.slate}}>Aucun client</div>
-                  </div>
-                  {clients.map((c,i)=>(
-                    <div key={c.id} onClick={()=>{setClientId(c.id);setOpen(false);}}
-                      style={{padding:"10px 14px",borderBottom:i<clients.length-1?"1px solid "+C.border:"none",cursor:"pointer",background:clientId===c.id?"#EFF6FF":"white",display:"flex",alignItems:"center",gap:10}}>
-                      <span style={{fontSize:16,flexShrink:0}}>🏢</span>
-                      <div>
-                        <div style={{fontWeight:clientId===c.id?700:600,fontSize:13,color:clientId===c.id?"#0891B2":C.navy}}>{c.nom}</div>
-                        <div style={{fontSize:10,color:C.slate}}>{c.type} · {c.ville}</div>
-                      </div>
-                      {clientId===c.id&&<span style={{marginLeft:"auto",color:"#0891B2",fontSize:14}}>✓</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        {clients&&clients.length>0&&(
+          <div>
+            <FLabel>Client</FLabel>
+            <CustomSelect
+              value={clientId} onChange={setClientId} searchable
+              icon="🏢" placeholder="-- Sélectionner un client --"
+              options={(clients||[]).map(c=>({value:c.id,label:c.nom,sub:c.type+' · '+c.ville}))}
+            />
+          </div>
+        )}
         {/* Aircraft selector */}
         {aircraft&&aircraft.length>0&&(
           <div>
             <FLabel>Avion</FLabel>
-            <select value={acId} onChange={e=>setAcId(e.target.value)}
-              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.gold,borderRadius:10,padding:"0 14px",color:C.text,fontSize:13,outline:"none",appearance:"none",fontWeight:700}}>
-              {aircraft.map(a=>(
-                <option key={a.id} value={a.id}>{a.immat} · {a.type} · {a.sieges}s</option>
-              ))}
-            </select>
+            <CustomSelect value={acId} onChange={setAcId} placeholder='-- Choisir un avion --' icon='🛩'
+              options={(aircraft||[]).map(a=>({value:a.id,label:a.immat+' · '+a.type,sub:a.sieges+' sièges · TTAF '+(a.ttaf||0).toFixed(1)+'h'}))}/>
           </div>
         )}
         <FGrid><FField label="N Vol *" value={num} onChange={setNum}/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
@@ -1404,34 +1368,19 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients }) {
         <FGrid>
           <div>
             <FLabel>CM1 — Commandant</FLabel>
-            <select value={cm1} onChange={e=>setCm1(e.target.value)}
-              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:cm1?C.text:C.slateL,fontSize:13,outline:"none",appearance:"none"}}>
-              <option value="">-- Choisir --</option>
-              {(crew||[]).filter(m=>(m.role==="CM1"||m.role==="TRI")&&m.prenom+" "+m.nom!==cm2).map(m=>(
-                <option key={m.id} value={m.prenom+" "+m.nom}>{m.prenom} {m.nom} — {m.role==="TRI"?"TRI":m.role==="CM1"?"CDB":"OPL"}</option>
-              ))}
-            </select>
+            <CustomSelect value={cm1} onChange={setCm1} placeholder='-- Choisir --' icon='👨‍✈️' searchable
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.prenom+' '+m.nom!==cm2).map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:m.role==='TRI'?'TRI':m.role==='CM1'?'CDB':'OPL'}))}/>
           </div>
           <div>
             <FLabel>CM2 — Copilote</FLabel>
-            <select value={cm2} onChange={e=>setCm2(e.target.value)}
-              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:cm2?C.text:C.slateL,fontSize:13,outline:"none",appearance:"none"}}>
-              <option value="">-- Choisir --</option>
-              {(crew||[]).filter(m=>(m.role==="CM1"||m.role==="CM2"||m.role==="TRI")&&m.prenom+" "+m.nom!==cm1).map(m=>(
-                <option key={m.id} value={m.prenom+" "+m.nom}>{m.prenom} {m.nom} — {m.role==="TRI"?"TRI":m.role==="CM1"?"CDB":"OPL"}</option>
-              ))}
-            </select>
+            <CustomSelect value={cm2} onChange={setCm2} placeholder='-- Choisir --' icon='👨‍✈️' searchable
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.prenom+' '+m.nom!==cm1).map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:m.role==='TRI'?'TRI':m.role==='CM1'?'CDB':'OPL'}))}/>
           </div>
         </FGrid>
         <div>
           <FLabel>CC — Hotesse / Steward</FLabel>
-          <select value={cc} onChange={e=>setCc(e.target.value)}
-            style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:cc?C.text:C.slateL,fontSize:13,outline:"none",appearance:"none"}}>
-            <option value="">-- Choisir --</option>
-            {(crew||[]).filter(m=>m.role==="CC").map(m=>(
-              <option key={m.id} value={m.prenom+" "+m.nom}>{m.prenom} {m.nom}</option>
-            ))}
-          </select>
+          <CustomSelect value={cc} onChange={setCc} placeholder='-- Choisir --' icon='🧑‍✈️'
+            options={(crew||[]).filter(m=>m.role==='CC').map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:'CC'}))}/>
         </div>
         <FSubmit label="Planifier le vol" onClick={submit} saved={saved}/>
       </div>
@@ -1658,10 +1607,8 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
         {aircraft&&aircraft.length>0&&(
           <div>
             <FLabel>Avion</FLabel>
-            <select value={acId} onChange={e=>setAcId(e.target.value)}
-              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid #00936A",borderRadius:10,padding:"0 14px",color:C.text,fontSize:13,fontWeight:700,outline:"none",appearance:"none"}}>
-              {aircraft.map(a=><option key={a.id} value={a.id}>{a.immat} · {a.type}</option>)}
-            </select>
+            <CustomSelect value={acId} onChange={setAcId} placeholder='-- Choisir un avion --' icon='🛩'
+              options={(aircraft||[]).map(a=>({value:a.id,label:a.immat+' · '+a.type,sub:'TTAF '+(a.ttaf||0).toFixed(1)+'h · '+a.sieges+' sièges'}))}/>
           </div>
         )}
         <FSection title="Cellule" color="#00936A"/>
@@ -1785,17 +1732,10 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.slate,marginBottom:4}}>CATÉGORIE</div>
-                  <select value={mSev} onChange={e=>setMSev(e.target.value)}
-                    style={{width:"100%",height:44,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:13,outline:"none"}}>
-                    <option value="">-- Choisir --</option>
-                    <option value="A">A — Immédiat (délai dans MEL)</option>
-                    <option value="B">B — 3 jours calendaires</option>
-                    <option value="C">C — 10 jours calendaires</option>
-                    <option value="D">D — 120 jours calendaires</option>
-                  </select>
+                  <CustomSelect value={mSev} onChange={setMSev} placeholder='-- Choisir --'
+                    options={[{value:'A',label:'Catégorie A',sub:'Immédiat (délai dans MEL)'},{value:'B',label:'Catégorie B',sub:'3 jours calendaires'},{value:'C',label:'Catégorie C',sub:'10 jours calendaires'},{value:'D',label:'Catégorie D',sub:'120 jours calendaires'}]}/>
                 </div>
               </div>
-            </div>
             {editIdx!==null&&(
               <div style={{display:"flex",flexDirection:"column",gap:10,padding:"12px 0",borderTop:"1px solid "+C.border,marginTop:8}}>
                 <div style={{fontSize:11,fontWeight:700,color:"#D97706",marginBottom:2}}>📋 EXTENSION DE VALIDITÉ</div>
@@ -1811,6 +1751,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                 </div>
               </div>
             )}
+            </div>
             <div style={{display:"flex",gap:10,marginTop:16}}>
               <button onClick={()=>setShowMelForm(false)}
                 style={{flex:1,height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
@@ -1904,13 +1845,8 @@ function FormSafety({ onSubmit, flights, saved }) {
         <input value={secuSearch} onChange={e=>setSecuSearch(e.target.value)} placeholder="🔍  CN-KTA  /  30/06/2026  /  CN-KTA 30/06/2026"
           style={{width:"100%",height:42,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 14px",fontSize:13,outline:"none",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
 
-        <select value={volNum} onChange={e=>setVolNum(e.target.value)}
-          style={{width:"100%",height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",fontSize:14,color:C.text,outline:"none"}}>
-          <option value="">-- Sélectionner un vol ({filteredSecuFlights.length}) --</option>
-          {filteredSecuFlights.map((f,i)=>(
-            <option key={f.num+f.date+i} value={f.num+"|"+f.date}>{f.num} · {f.date?.slice(8)}/{f.date?.slice(5,7)}/{f.date?.slice(0,4)} · {f.from}→{f.to}</option>
-          ))}
-        </select>
+        <CustomSelect value={volNum} onChange={setVolNum} placeholder={'-- Sélectionner un vol ('+filteredSecuFlights.length+') --'} icon='✈️' searchable
+          options={filteredSecuFlights.map((f,i)=>({value:f.num+'|'+f.date,label:f.num+' · '+f.from+'→'+f.to,sub:f.date?.slice(8)+'/'+f.date?.slice(5,7)+'/'+f.date?.slice(0,4)}))}/>
         {filteredSecuFlights.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12}}>Aucun vol terminé sur cette période</div>}
 
         <FSection title="Événements" color="#DC2626"/>
@@ -2271,11 +2207,8 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div>
           <FLabel>Sélectionner un avion</FLabel>
-          <select value={sel} onChange={e=>setSel(e.target.value)}
-            style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:C.text,fontSize:13,outline:"none",appearance:"none"}}>
-            {aircraft.map(a=><option key={a.id} value={a.id}>{a.immat} · {a.type}</option>)}
-            <option value="new">➕ Nouvel avion</option>
-          </select>
+          <CustomSelect value={sel} onChange={setSel} placeholder='-- Choisir --' icon='🛩'
+            options={[...(aircraft||[]).map(a=>({value:a.id,label:a.immat+" · "+a.type,sub:"TTAF "+(a.ttaf||0).toFixed(1)+"h"})),{value:"new",label:"➕ Nouvel avion",sub:"Créer une nouvelle fiche"}]}/>
         </div>
         <FGrid>
           <FField label="Immatriculation *" value={immat} onChange={v=>setImmat(v.toUpperCase())}/>
@@ -2711,14 +2644,8 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
       {/* Aircraft selector */}
       {aircraft&&aircraft.length>0&&(
         <div>
-          <select value={icao24} onChange={e=>setIcao24(e.target.value)}
-            style={{width:"100%",height:44,boxSizing:"border-box",background:C.navy,border:"none",borderRadius:10,padding:"0 14px",color:"white",fontSize:13,fontWeight:700,outline:"none",appearance:"none"}}>
-            {aircraft.map(a=>(
-              <option key={a.id} value={a.icao24||""} style={{background:"white",color:C.navy}}>
-                {a.immat} · {a.type} {a.icao24?"("+a.icao24+")":"(immatriculation non définie)"}
-              </option>
-            ))}
-          </select>
+          <CustomSelect value={icao24} onChange={setIcao24} icon='🛩'
+            options={(aircraft||[]).map(a=>({value:a.icao24||'',label:a.immat+' · '+a.type,sub:a.icao24?'ICAO: '+a.icao24:'ICAO non défini'}))}/>
         </div>
       )}
       <Card>
@@ -2990,19 +2917,8 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
                   </div>
                   <div style={{gridColumn:"1 / -1"}}>
                     <FLabel>Cause du retard</FLabel>
-                    <select value={edit.causeRetard||""} onChange={e=>setEdit({...edit,causeRetard:e.target.value})}
-                      style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box",color:C.text}}>
-                      <option value="">-- Sélectionner --</option>
-                      <option value="Technique">🔧 Technique</option>
-                      <option value="Météo">⛈ Météo</option>
-                      <option value="ATC">📡 ATC</option>
-                      <option value="Commercial">💼 Commercial</option>
-                      <option value="Équipage">👨‍✈️ Équipage</option>
-                      <option value="Handling">🛂 Handling</option>
-                      <option value="Passagers">🧳 Passagers</option>
-                      <option value="Carburant">⛽ Carburant</option>
-                      <option value="Autre">📋 Autre</option>
-                    </select>
+                    <CustomSelect value={edit.causeRetard||''} onChange={v=>setEdit({...edit,causeRetard:v})} placeholder='-- Sélectionner --'
+                      options={[{value:'Technique',label:'🔧 Technique'},{value:'Météo',label:'⛈ Météo'},{value:'ATC',label:'📡 ATC'},{value:'Commercial',label:'💼 Commercial'},{value:'Équipage',label:'👨‍✈️ Équipage'},{value:'Handling',label:'🛂 Handling'},{value:'Passagers',label:'🧳 Passagers'},{value:'Carburant',label:'⛽ Carburant'},{value:'Autre',label:'📋 Autre'}]}/>
                   </div>
                   {edit.causeRetard&&edit.delayMin>0&&(
                     <div style={{gridColumn:"1 / -1"}}>
@@ -3679,10 +3595,8 @@ function ScreenMaint({ kpis, maintData, flights, aircraft }) {
       {/* Aircraft selector */}
       {aircraft&&aircraft.length>0&&(
         <div>
-          <select value={selAc} onChange={e=>setSelAc(e.target.value)}
-            style={{width:"100%",height:44,boxSizing:"border-box",background:C.navy,border:"none",borderRadius:10,padding:"0 14px",color:"white",fontSize:13,fontWeight:700,outline:"none",appearance:"none"}}>
-            {aircraft.map(a=><option key={a.id} value={a.id} style={{background:"white",color:C.navy}}>{a.immat} · {a.type}</option>)}
-          </select>
+          <CustomSelect value={selAc} onChange={setSelAc} icon='🛩'
+            options={(aircraft||[]).map(a=>({value:a.id,label:a.immat+' · '+a.type,sub:'TTAF '+(a.ttaf||0).toFixed(1)+'h'}))}/>
         </div>
       )}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -4205,6 +4119,61 @@ function TotpVerify({ profileId, onVerified }) {
         style={{width:"100%",marginTop:10,background:"none",border:"none",color:"#0369A1",fontSize:12,cursor:"pointer",textDecoration:"underline"}}>
         + Ajouter cet appareil
       </button>
+    </div>
+  );
+}
+
+function CustomSelect({ value, onChange, options, placeholder, icon, searchable }) {
+  const [open,setOpen]=useState(false);
+  const [search,setSearch]=useState("");
+  const sel=options.find(o=>o.value===value);
+  const filtered=searchable&&search
+    ? options.filter(o=>o.label.toLowerCase().includes(search.toLowerCase())||(o.sub||"").toLowerCase().includes(search.toLowerCase()))
+    : options;
+  return (
+    <div style={{position:"relative"}}>
+      <button onClick={()=>{setOpen(o=>!o);setSearch("");}}
+        style={{width:"100%",minHeight:52,background:"white",border:"1.5px solid "+(value?C.navy:C.border),borderRadius:10,padding:"0 14px",fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",WebkitTapHighlightColor:"transparent",textAlign:"left"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:1}}>
+          {icon&&<span style={{fontSize:18,flexShrink:0}}>{icon}</span>}
+          <div style={{minWidth:0,flex:1}}>
+            {sel
+              ? <><div style={{fontWeight:700,fontSize:13,color:C.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sel.label}</div>
+                  {sel.sub&&<div style={{fontSize:10,color:C.slate}}>{sel.sub}</div>}</>
+              : <div style={{color:C.slateL,fontSize:13}}>{placeholder||"-- Sélectionner --"}</div>}
+          </div>
+        </div>
+        <span style={{color:C.slate,fontSize:12,flexShrink:0,marginLeft:8}}>{open?"▲":"▼"}</span>
+      </button>
+      {open&&(
+        <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"white",border:"1.5px solid "+C.border,borderRadius:10,overflow:"hidden",boxShadow:"0 8px 24px rgba(0,0,0,0.15)",zIndex:500}}>
+          {searchable&&(
+            <div style={{padding:"8px 10px",borderBottom:"1px solid "+C.border}}>
+              <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..."
+                style={{width:"100%",boxSizing:"border-box",height:34,border:"1px solid "+C.border,borderRadius:8,padding:"0 10px",fontSize:12,outline:"none"}}/>
+            </div>
+          )}
+          <div style={{maxHeight:240,overflowY:"auto"}}>
+            <div onClick={()=>{onChange("");setOpen(false);setSearch("");}}
+              style={{padding:"10px 14px",borderBottom:"1px solid "+C.border,cursor:"pointer",fontSize:12,color:C.slateL}}>
+              {placeholder||"-- Aucun --"}
+            </div>
+            {filtered.map((o,i)=>(
+              <div key={o.value} onClick={()=>{onChange(o.value);setOpen(false);setSearch("");}}
+                style={{padding:"10px 14px",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none",cursor:"pointer",
+                  background:value===o.value?"#EFF6FF":"white",display:"flex",alignItems:"center",gap:10}}>
+                {o.icon&&<span style={{fontSize:16,flexShrink:0}}>{o.icon}</span>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:value===o.value?700:600,fontSize:13,color:value===o.value?C.navy:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.label}</div>
+                  {o.sub&&<div style={{fontSize:10,color:C.slate}}>{o.sub}</div>}
+                </div>
+                {value===o.value&&<span style={{color:C.navy,fontSize:14,flexShrink:0}}>✓</span>}
+              </div>
+            ))}
+            {filtered.length===0&&<div style={{padding:12,textAlign:"center",color:C.slateL,fontSize:12}}>Aucun résultat</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
