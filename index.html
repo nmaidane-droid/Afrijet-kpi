@@ -2005,13 +2005,32 @@ function FormClients({ clients, setClients, flights, canEdit }) {
         {c.notes&&<div style={{marginTop:10,fontSize:11,color:C.slate,fontStyle:"italic"}}>{c.notes}</div>}
         {vols.length>0&&(<>
           <SectionTitle style={{marginTop:14}}>Historique vols</SectionTitle>
-          {vols.slice(0,10).map((f,i)=>(
-            <div key={i} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:"1px solid "+C.border,fontSize:11}}>
-              <span style={{color:C.slate,flexShrink:0}}>{f.date?.slice(8)}/{f.date?.slice(5,7)}/{f.date?.slice(2,4)}</span>
-              <span style={{fontWeight:600,color:C.navy}}>{f.from}→{f.to}</span>
-              <span style={{color:C.slate,marginLeft:"auto"}}>{f.pax} pax</span>
-            </div>
-          ))}
+          {(()=>{
+            const [histPer,setHistPer]=React.useState("Tout");
+            const now=new Date(); now.setHours(0,0,0,0);
+            const cutoff=new Date(now); if(histPer==="7j") cutoff.setDate(cutoff.getDate()-7); else if(histPer==="30j") cutoff.setDate(cutoff.getDate()-30); else cutoff.setFullYear(2000);
+            const filtered=vols.filter(f=>!f.date||new Date(f.date)>=cutoff).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+            return (<>
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                {["7j","30j","Tout"].map(p=>(
+                  <button key={p} onClick={()=>setHistPer(p)}
+                    style={{padding:"4px 10px",borderRadius:8,border:"1px solid "+C.border,fontSize:11,fontWeight:600,cursor:"pointer",
+                      background:histPer===p?C.navy:"white",color:histPer===p?"white":C.slate}}>
+                    {p}
+                  </button>
+                ))}
+                <span style={{fontSize:11,color:C.slate,alignSelf:"center",marginLeft:4}}>{filtered.length} vol(s)</span>
+              </div>
+              {filtered.length===0&&<div style={{fontSize:12,color:C.slateL,textAlign:"center",padding:8}}>Aucun vol sur cette période</div>}
+              {filtered.map((f,i)=>(
+                <div key={i} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:"1px solid "+C.border,fontSize:11}}>
+                  <span style={{color:C.slate,flexShrink:0}}>{f.date?.slice(8)}/{f.date?.slice(5,7)}/{f.date?.slice(2,4)}</span>
+                  <span style={{fontWeight:600,color:C.navy}}>{f.from}→{f.to}</span>
+                  <span style={{color:C.slate,marginLeft:"auto"}}>{f.pax} pax</span>
+                </div>
+              ))}
+            </>);
+          })()}
         </>)}
       </Card>
     );
