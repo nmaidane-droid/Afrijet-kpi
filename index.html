@@ -71,7 +71,7 @@ const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813
 const PROFILES = [
   {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
    pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
-   forms:["avion","crew","vol","secu","docavion","regl","sat"],
+   forms:["avion","crew","vol","secu","docavion","regl","sat","clients"],
    tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes","fin"] },
   {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
    pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
@@ -87,7 +87,7 @@ const PROFILES = [
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
   {id:"comm",  label:"Commercial",     icon:"💼",  color:"#0891B2",
    pwdHash:"d01acdec3a3b87b33882a0fb8959ffda858a0642f7f54190f67aa230e04d1547",
-   forms:[], tabs:[], readOnly:[], blocked:[] },
+   forms:["clients"], tabs:["forms"], readOnly:["live","secu","ops","fin","perf","alertes","maint"], blocked:[] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
    forms:null, tabs:null, readOnly:[] },
@@ -1219,6 +1219,14 @@ const INIT_KPIS = {
 
 const INIT_MAINT = {};
 
+const INIT_CLIENTS = [
+  {id:"C001",nom:"OCP Group",type:"Corporate",pays:"Maroc",ville:"Casablanca",contact:"Hassan Benali",tel:"+212 522 000 001",email:"ops@ocpgroup.ma",contrat:"OCP-2026-001",notes:"Client prioritaire — rotations hebdomadaires"},
+  {id:"C002",nom:"TotalEnergies Maroc",type:"Corporate",pays:"Maroc",ville:"Casablanca",contact:"Marie Dupont",tel:"+212 522 000 002",email:"aviation@total.ma",contrat:"TEM-2026-007",notes:"Vols vers sites offshore"},
+  {id:"C003",nom:"Ministère de l'Intérieur",type:"Gouvernemental",pays:"Maroc",ville:"Rabat",contact:"Col. Ahmed Tazi",tel:"+212 537 000 003",email:"aviation@interieur.gov.ma",contrat:"MI-2026-012",notes:"Missions officielles"},
+  {id:"C004",nom:"UNHCR Dakhla",type:"ONG",pays:"Maroc",ville:"Dakhla",contact:"Sara Klein",tel:"+212 689 000 004",email:"logistics@unhcr.org",contrat:"UNHCR-2026-003",notes:"Transport humanitaire"},
+  {id:"C005",nom:"Chariot Energy",type:"Corporate",pays:"Maroc",ville:"Dakhla",contact:"James Cooper",tel:"+212 528 000 005",email:"ops@chariot-energy.com",contrat:"CHR-2026-002",notes:"Rotations vers sites exploration"},
+];
+
 const INIT_SAFETY = [
   {date:"2026-06-03",num:"CN-KTA",from:"FEZ",to:"CMN",approche:false,tcas:false,gpws:false,hardLanding:false,safa:true,timestamp:1751000000},
   {date:"2026-06-17",num:"CN-KTB",from:"FEZ",to:"CMN",approche:false,tcas:true,gpws:false,hardLanding:false,safa:false,timestamp:1751003600},
@@ -1247,7 +1255,7 @@ const INIT_FIN = [
 ];
 
 // ── Forms ────────────────────────────────────────────────────────────────────
-function FormVol({ onSubmit, crew, aircraft, saved }) {
+function FormVol({ onSubmit, crew, aircraft, saved, clients }) {
   const today=new Date().toISOString().slice(0,10);
   const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
 
@@ -1269,6 +1277,7 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
   const [cm2,setCm2]=useState("");
   const [flightType,setFlightType]=useState("Commercial");
   const [cc,setCc]=useState("");
+  const [clientId,setClientId]=useState("");
 
   const pn=Math.min(SIEGES,Math.max(0,Number(pax)||0));
   const load=Math.round(pn/SIEGES*100);
@@ -1303,7 +1312,7 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
       if(diff>0) planDuree=diff;
     }
     onSubmit({num:num.trim().toUpperCase(),from:from_,to,dep,arr,depReal:"",arrReal:"",
-      status:"Planifie",pax:pn,load,date,acId,sieges:SIEGES,flightType:flightType||"Commercial",
+      status:"Planifie",pax:pn,load,date,acId,sieges:SIEGES,flightType:flightType||"Commercial",clientId:clientId||"",
       carbDep:0,carbArr:0,consomme:0,consoH:0,fuelPct:0,delayMin:0,
       cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0,dureeMin:planDuree});
     setNum("");setFrom("");setTo("");setDep("");setPax("");setFlightType("Commercial");
@@ -1382,6 +1391,16 @@ function FormVol({ onSubmit, crew, aircraft, saved }) {
           </select>
         </div>
         <FSubmit label="Planifier le vol" onClick={submit} saved={saved}/>
+        {clients&&clients.length>0&&(
+          <div>
+            <FLabel>Client</FLabel>
+            <select value={clientId} onChange={e=>setClientId(e.target.value)}
+              style={{width:"100%",height:48,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 14px",color:clientId?C.text:C.slateL,fontSize:13,outline:"none",appearance:"none"}}>
+              <option value="">-- Sélectionner un client (optionnel) --</option>
+              {(clients||[]).map(c=><option key={c.id} value={c.id}>{c.nom} — {c.type}</option>)}
+            </select>
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -1911,6 +1930,118 @@ function FormFin({ onSubmit, saved }) {
   );
 }
 
+function FormClients({ clients, setClients, flights, canEdit }) {
+  const [selected,setSelected]=useState(null);
+  const [showForm,setShowForm]=useState(false);
+  const [editId,setEditId]=useState(null);
+  const [nom,setNom]=useState(""); const [type,setType]=useState("Corporate");
+  const [pays,setPays]=useState("Maroc"); const [ville,setVille]=useState("");
+  const [contact,setContact]=useState(""); const [tel,setTel]=useState("");
+  const [email,setEmail]=useState(""); const [contrat,setContrat]=useState("");
+  const [notes,setNotes]=useState("");
+  const TYPES=["Corporate","Institutionnel","Gouvernemental","ONG","Autre"];
+
+  const openNew=()=>{setNom("");setType("Corporate");setPays("Maroc");setVille("");setContact("");setTel("");setEmail("");setContrat("");setNotes("");setEditId(null);setShowForm(true);};
+  const openEdit=(c)=>{setNom(c.nom);setType(c.type);setPays(c.pays);setVille(c.ville);setContact(c.contact);setTel(c.tel);setEmail(c.email);setContrat(c.contrat);setNotes(c.notes||"");setEditId(c.id);setShowForm(true);};
+  const save=()=>{
+    if(!nom.trim()){alert("Nom requis");return;}
+    if(editId){
+      setClients(clients.map(c=>c.id===editId?{...c,nom,type,pays,ville,contact,tel,email,contrat,notes}:c));
+    } else {
+      setClients([...clients,{id:"C"+Date.now(),nom,type,pays,ville,contact,tel,email,contrat,notes}]);
+    }
+    setShowForm(false);setSelected(null);
+  };
+  const del=(id)=>{if(window.confirm("Supprimer ce client ?")) setClients(clients.filter(c=>c.id!==id));};
+  const clientFlights=(id)=>flights.filter(f=>f.clientId===id&&f.status==="Termine");
+
+  if(showForm) return (
+    <Card accent="#0891B2">
+      <FHeader icon="🏢" title={editId?"Modifier client":"Nouveau client"} subtitle="Afrijet Sahara" color="#0891B2"/>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <FGrid><FField label="Nom *" value={nom} onChange={setNom}/><FSelect label="Type" value={type} onChange={setType} options={TYPES.map(t=>({value:t,label:t}))}/></FGrid>
+        <FGrid><FField label="Pays" value={pays} onChange={setPays}/><FField label="Ville" value={ville} onChange={setVille}/></FGrid>
+        <FSection title="Contact" color="#0891B2"/>
+        <FGrid><FField label="Nom contact" value={contact} onChange={setContact}/><FField label="Téléphone" value={tel} onChange={setTel}/></FGrid>
+        <FField label="Email" value={email} onChange={setEmail}/>
+        <FField label="N° Contrat" value={contrat} onChange={setContrat}/>
+        <FField label="Notes" value={notes} onChange={setNotes}/>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>setShowForm(false)} style={{flex:1,height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,cursor:"pointer"}}>Annuler</button>
+          <button onClick={save} style={{flex:2,height:46,background:"#0891B2",border:"none",borderRadius:10,color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>Enregistrer</button>
+        </div>
+      </div>
+    </Card>
+  );
+
+  if(selected){
+    const c=clients.find(x=>x.id===selected);
+    if(!c){setSelected(null);return null;}
+    const vols=clientFlights(c.id);
+    const totalH=vols.reduce((s,f)=>s+(f.dureeMin||0),0);
+    const totalPax=vols.reduce((s,f)=>s+(f.pax||0),0);
+    return (
+      <Card accent="#0891B2">
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",cursor:"pointer",color:C.slate,fontSize:13}}>← Retour</button>
+          {canEdit&&<button onClick={()=>openEdit(c)} style={{marginLeft:"auto",background:"#EFF6FF",border:"1px solid #0891B2",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,color:"#0891B2",cursor:"pointer"}}>✏️ Modifier</button>}
+          {canEdit&&<button onClick={()=>{del(c.id);setSelected(null);}} style={{background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,color:"#DC2626",cursor:"pointer"}}>🗑</button>}
+        </div>
+        <div style={{fontWeight:800,fontSize:16,color:C.navy,marginBottom:4}}>{c.nom}</div>
+        <div style={{fontSize:12,color:"#0891B2",fontWeight:600,marginBottom:12}}>{c.type} — {c.ville}, {c.pays}</div>
+        <div style={{display:"flex",gap:10,marginBottom:14}}>
+          {[{v:vols.length,l:"Vols"},{v:Math.floor(totalH/60)+"h"+(totalH%60?""+totalH%60:""),l:"Total"},{v:totalPax,l:"PAX"}].map((k,i)=>(
+            <div key={i} style={{flex:1,background:C.bg,borderRadius:10,padding:"10px",textAlign:"center"}}>
+              <div style={{fontWeight:800,fontSize:18,color:C.navy}}>{k.v}</div>
+              <div style={{fontSize:10,color:C.slate}}>{k.l}</div>
+            </div>
+          ))}
+        </div>
+        <SectionTitle>Coordonnées</SectionTitle>
+        {[[c.contact,"👤"],[c.tel,"📞"],[c.email,"📧"],[c.contrat,"📋"]].map(([v,icon],i)=>v?(
+          <div key={i} style={{fontSize:12,color:C.text,padding:"4px 0",borderBottom:"1px solid "+C.border}}><span style={{marginRight:8}}>{icon}</span>{v}</div>
+        ):null)}
+        {c.notes&&<div style={{marginTop:10,fontSize:11,color:C.slate,fontStyle:"italic"}}>{c.notes}</div>}
+        {vols.length>0&&(<>
+          <SectionTitle style={{marginTop:14}}>Historique vols</SectionTitle>
+          {vols.slice(0,10).map((f,i)=>(
+            <div key={i} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:"1px solid "+C.border,fontSize:11}}>
+              <span style={{color:C.slate,flexShrink:0}}>{f.date?.slice(8)}/{f.date?.slice(5,7)}/{f.date?.slice(2,4)}</span>
+              <span style={{fontWeight:600,color:C.navy}}>{f.from}→{f.to}</span>
+              <span style={{color:C.slate,marginLeft:"auto"}}>{f.pax} pax</span>
+            </div>
+          ))}
+        </>)}
+      </Card>
+    );
+  }
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {canEdit&&<button onClick={openNew} style={{height:46,background:"#0891B2",border:"none",borderRadius:10,color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Nouveau client</button>}
+      {clients.length===0&&<div style={{textAlign:"center",color:C.slate,fontSize:13,padding:32}}>Aucun client enregistré</div>}
+      {clients.map(c=>{
+        const vols=clientFlights(c.id);
+        return (
+          <div key={c.id} onClick={()=>setSelected(c.id)} style={{background:"white",borderRadius:12,border:"1.5px solid "+C.border,padding:"14px 16px",cursor:"pointer"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:38,height:38,borderRadius:10,background:"#E0F2FE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🏢</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:13,color:C.navy}}>{c.nom}</div>
+                <div style={{fontSize:11,color:C.slate}}>{c.type} · {c.ville}</div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#0891B2"}}>{vols.length}</div>
+                <div style={{fontSize:9,color:C.slate}}>vols</div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function FormDocStore({ storeKey, label }) {
   const PFX_DOCS = PFX + storeKey + "_";
   const [docs, setDocs] = React.useState([]);
@@ -2128,7 +2259,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients }) {
   const isAdmin = profileId === "rdoa";
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":null;
   const [active,setActive]=useState(defaultForm);
@@ -2146,6 +2277,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       kpis,
       dismissed,
       safetyData,
+      clients,
     };
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
@@ -2177,7 +2309,8 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     {id:"fin",      icon:"💰",  label:"Finances",       color:"#7C3AED"},
     {id:"docavion", icon:"📁",  label:"Doc Avion",      color:"#0369A1"},
     {id:"regl",     icon:"📋",  label:"Réglementation", color:"#B45309"},
-    {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"}
+    {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"},
+    {id:"clients",  icon:"🏢",  label:"Clients",         color:"#0891B2"},
   ];
   const FORMS = ALL_FORMS; // Toujours afficher toutes les tuiles
   const canAccessForm = (id) => !canForm || canForm(id);
@@ -2500,13 +2633,14 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           </div>
         )}
       </div>
-      {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved}/>}
+      {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients}/>}
       {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
       {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} saved={saved}/>}
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {effectiveActive==="regl"     && <FormReglementation/>}
       {effectiveActive==="docavion" && <FormDocAvion/>}
+      {effectiveActive==="clients"  && <FormClients clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
   );
@@ -2562,7 +2696,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
   );
 }
 
-function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit }) {
+function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, clients }) {
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
   const [opsSaved,setOpsSaved]=useState(false);
@@ -2952,7 +3086,10 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
                 {f.dep} - {f.arr} · {f.pax} pax · {f.load}%
                 {(()=>{if(f.dureeMin>0)return<span style={{color:C.emerald,fontWeight:700}}> · {Math.floor(f.dureeMin/60)}h{String(f.dureeMin%60).padStart(2,"0")}</span>;return null;})()}
               </div>
-              {(f.cm1||f.cm2||f.cc)&&<div style={{fontSize:10,color:C.slateL,marginTop:1,fontStyle:"italic"}}>{[f.cm1,f.cm2,f.cc].filter(Boolean).join(" · ")}</div>}
+              {(f.cm1||f.cm2||f.cc||f.clientId)&&<div style={{fontSize:10,color:C.slateL,marginTop:1,fontStyle:"italic"}}>
+                {[f.cm1,f.cm2,f.cc].filter(Boolean).join(" · ")}
+                {f.clientId&&clients&&(()=>{const c=clients.find(x=>x.id===f.clientId);return c?<span style={{color:"#0891B2",fontWeight:600}}> · 🏢 {c.nom}</span>:null;})()}
+              </div>}
             </div>
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
               <span style={{fontSize:10,fontWeight:700,color:sTx(f.status),background:sBg(f.status),padding:"2px 8px",borderRadius:8}}>{f.status}</span>
@@ -4213,6 +4350,7 @@ function AppMain({ onLogout, profileId }) {
   const [finData,setFin]     = usePersist("fin",INIT_FIN);
   const [safetyData,setSafety] = usePersist("safety",INIT_SAFETY);
   const [crew,setCrew]       = usePersist("crew",INIT_CREW);
+  const [clients,setClients] = usePersist("clients",INIT_CLIENTS);
   const [aircraft,setAircraft] = usePersist("aircraft",INIT_AIRCRAFT);
   const [dismissed,setDism]  = usePersist("dismissed",[]);
   const [alertHist,setAlertHist] = usePersist("alertHist",[]);
@@ -4345,6 +4483,7 @@ function AppMain({ onLogout, profileId }) {
           lastBackup={lastBackup} setLastBackup={setLastBackup}
           melHist={melHist} setMelHist={setMelHist}
           canForm={canForm} profileLabel={profile.label} profileId={profileId}
+          clients={clients} setClients={setClients}
           onImport={data=>{
             if(data.flights)   setFlights(data.flights);
             if(data.maintData) setMaint(data.maintData);
@@ -4353,6 +4492,7 @@ function AppMain({ onLogout, profileId }) {
             if(data.kpis)      setKpis(data.kpis);
             if(data.dismissed) setDism(data.dismissed);
             if(data.safetyData)setSafety(data.safetyData);
+            if(data.clients)setClients(data.clients);
             if(data.alertHist) setAlertHist(data.alertHist);
             if(data.melHist)   setMelHist(data.melHist);
             if(data.aircraft)  setAircraft(data.aircraft);
@@ -4360,7 +4500,7 @@ function AppMain({ onLogout, profileId }) {
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist}/>}
-        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"}/>}
+        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
