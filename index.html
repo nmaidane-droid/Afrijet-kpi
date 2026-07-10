@@ -2306,17 +2306,16 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     }catch(e){
       alert("❌ Erreur cloud : "+e.message);
     }
-    // Download JSON locally
+    // Download JSON locally (iOS 12 compatible)
     try{
-      const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-      const url=URL.createObjectURL(blob);
+      const json=JSON.stringify(data,null,2);
+      const dataUrl="data:application/json;charset=utf-8,"+encodeURIComponent(json);
       const a=document.createElement("a");
-      a.href=url;
+      a.href=dataUrl;
       a.download="afrijet_backup_"+new Date().toISOString().slice(0,10)+".json";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     }catch(e){
       alert("⚠️ Téléchargement local échoué (cloud OK) : "+e.message);
     }
