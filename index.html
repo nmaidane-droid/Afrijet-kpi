@@ -2285,7 +2285,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
 
-  const doExport=()=>{
+  const doExport=async()=>{
     const data={
       version:"1.0",
       exportDate:new Date().toISOString(),
@@ -2298,16 +2298,28 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       safetyData,
       clients,
     };
-    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;
-    a.download="afrijet_backup_"+new Date().toISOString().slice(0,10)+".json";
-    a.click();
-    URL.revokeObjectURL(url);
-    // Save last backup date + content (synced via Supabase, accessible from any device)
-    setLastBackup(data.exportDate);
-    sbSet(PFX+"lastBackupData", data);
+    // Save to Supabase first
+    try{
+      await sbSet(PFX+"lastBackupData", data);
+      setLastBackup(data.exportDate);
+      alert("✅ Backup sauvegardé dans le cloud avec succès.");
+    }catch(e){
+      alert("❌ Erreur cloud : "+e.message);
+    }
+    // Download JSON locally
+    try{
+      const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download="afrijet_backup_"+new Date().toISOString().slice(0,10)+".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }catch(e){
+      alert("⚠️ Téléchargement local échoué (cloud OK) : "+e.message);
+    }
   };
 
   // Compute days since last backup
