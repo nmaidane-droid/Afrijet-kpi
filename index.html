@@ -2029,7 +2029,11 @@ function FormClients({ clients, setClients, flights, canEdit }) {
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {canEdit&&<button onClick={openNew} style={{height:46,background:"#0891B2",border:"none",borderRadius:10,color:"white",fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Nouveau client</button>}
       {clients.length===0&&<div style={{textAlign:"center",color:C.slate,fontSize:13,padding:32}}>Aucun client enregistré</div>}
-      {clients.map(c=>{
+      {[...clients].sort((a,b)=>{
+        const va=flights.filter(f=>f.clientId===a.id&&f.status==="Termine").length;
+        const vb=flights.filter(f=>f.clientId===b.id&&f.status==="Termine").length;
+        return vb-va;
+      }).map(c=>{
         const vols=flights.filter(f=>f.clientId===c.id&&f.status==="Termine");
         return (
           <div key={c.id} onClick={()=>setSelected(c.id)} style={{background:"white",borderRadius:12,border:"1.5px solid "+C.border,padding:"14px 16px",cursor:"pointer"}}>
