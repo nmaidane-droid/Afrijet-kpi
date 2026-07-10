@@ -1365,24 +1365,27 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients }) {
           <FCalc label="Remplissage" value={pax===''?'--':load+"%"} color={pax===''?C.border:load>=80?"#00936A":load>=60?"#D97706":"#DC2626"}/>
         </FGrid>
         <FSection title="Equipage" color="#0F1F3D"/>
-        <FGrid>
-          <div>
-            <FLabel>CM1 — Commandant</FLabel>
-            <CustomSelect value={cm1} onChange={setCm1} placeholder='-- Choisir --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.prenom+' '+m.nom!==cm2).map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:m.role==='TRI'?'TRI':m.role==='CM1'?'CDB':'OPL'}))}/>
+        <div style={{display:'flex',gap:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <FLabel>CM1</FLabel>
+            <CustomSelect value={cm1} onChange={setCm1} placeholder='-- --' icon='👨‍✈️' searchable
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.prenom+' '+m.nom!==cm2).map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:m.role==='TRI'?'TRI':'CDB'}))}/>
           </div>
-          <div>
-            <FLabel>CM2 — Copilote</FLabel>
-            <CustomSelect value={cm2} onChange={setCm2} placeholder='-- Choisir --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.prenom+' '+m.nom!==cm1).map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:m.role==='TRI'?'TRI':m.role==='CM1'?'CDB':'OPL'}))}/>
+          <div style={{flex:1,minWidth:0}}>
+            <FLabel>CM2</FLabel>
+            <CustomSelect value={cm2} onChange={setCm2} placeholder='-- --' icon='👨‍✈️' searchable
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.prenom+' '+m.nom!==cm1).map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:m.role==='TRI'?'TRI':'OPL'}))}/>
           </div>
-        </FGrid>
+        </div>
         <div>
           <FLabel>CC — Hotesse / Steward</FLabel>
           <CustomSelect value={cc} onChange={setCc} placeholder='-- Choisir --' icon='🧑‍✈️'
             options={(crew||[]).filter(m=>m.role==='CC').map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:'CC'}))}/>
         </div>
-        <FSubmit label="Planifier le vol" onClick={submit} saved={saved}/>
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={()=>setActive(null)} style={{flex:1,height:50,background:C.bg,border:'1.5px solid '+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,cursor:'pointer'}}>← Retour</button>
+          <div style={{flex:2}}><FSubmit label="Planifier le vol" onClick={submit} saved={saved}/></div>
+        </div>
       </div>
     </Card>
   );
