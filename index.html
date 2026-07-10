@@ -1369,18 +1369,18 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients }) {
           <div style={{flex:1,minWidth:0}}>
             <FLabel>CM1</FLabel>
             <CustomSelect value={cm1} onChange={setCm1} placeholder='-- --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.prenom+' '+m.nom!==cm2).map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:m.role==='TRI'?'TRI':'CDB'}))}/>
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm2).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:m.role==='TRI'?'TRI':'CDB'}))}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
             <FLabel>CM2</FLabel>
             <CustomSelect value={cm2} onChange={setCm2} placeholder='-- --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.prenom+' '+m.nom!==cm1).map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:m.role==='TRI'?'TRI':'OPL'}))}/>
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm1).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:m.role==='TRI'?'TRI':'OPL'}))}/>
           </div>
         </div>
         <div>
           <FLabel>CC — Hotesse / Steward</FLabel>
           <CustomSelect value={cc} onChange={setCc} placeholder='-- Choisir --' icon='🧑‍✈️'
-            options={(crew||[]).filter(m=>m.role==='CC').map(m=>({value:m.prenom+' '+m.nom,label:m.prenom+' '+m.nom,sub:'CC'}))}/>
+            options={(crew||[]).filter(m=>m.role==='CC').map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:'CC'}))}/>
         </div>
         <div style={{display:'flex',gap:10}}>
           <button onClick={()=>setActive(null)} style={{flex:1,height:50,background:C.bg,border:'1.5px solid '+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,cursor:'pointer'}}>← Retour</button>
