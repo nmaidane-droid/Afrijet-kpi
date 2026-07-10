@@ -23,13 +23,22 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+  <script>
+    Babel.registerPreset('env-plus', {
+      presets: [['env', {targets: {safari: '12'}}]],
+      plugins: [
+        'proposal-optional-chaining',
+        'proposal-nullish-coalescing-operator'
+      ]
+    });
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script>
     window.addEventListener('load', function() {
       try {
         var code = document.getElementById('app-code').textContent;
-        var compiled = Babel.transform(code, { presets: ['react'] }).code;
+        var compiled = Babel.transform(code, { presets: ['react'], plugins: ['proposal-optional-chaining','proposal-nullish-coalescing-operator'] }).code;
         var fn = new Function('React', 'ReactDOM', compiled + '\nreturn App;');
         var App = fn(React, ReactDOM);
         var root = ReactDOM.createRoot(document.getElementById('root'));
