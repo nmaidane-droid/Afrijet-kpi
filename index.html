@@ -23,22 +23,13 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
-  <script>
-    Babel.registerPreset('env-plus', {
-      presets: [['env', {targets: {safari: '12'}}]],
-      plugins: [
-        'proposal-optional-chaining',
-        'proposal-nullish-coalescing-operator'
-      ]
-    });
-  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script>
     window.addEventListener('load', function() {
       try {
         var code = document.getElementById('app-code').textContent;
-        var compiled = Babel.transform(code, { presets: ['react'], plugins: ['proposal-optional-chaining','proposal-nullish-coalescing-operator'] }).code;
+        var compiled = Babel.transform(code, { presets: ['react'] }).code;
         var fn = new Function('React', 'ReactDOM', compiled + '\nreturn App;');
         var App = fn(React, ReactDOM);
         var root = ReactDOM.createRoot(document.getElementById('root'));
@@ -2285,7 +2276,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
 
-  const doExport=async()=>{
+  const doExport=()=>{
     const data={
       version:"1.0",
       exportDate:new Date().toISOString(),
@@ -2298,27 +2289,17 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       safetyData,
       clients,
     };
-    // Save to Supabase first
-    try{
-      await sbSet(PFX+"lastBackupData", data);
-      setLastBackup(data.exportDate);
-      alert("✅ Backup sauvegardé dans le cloud avec succès.");
-    }catch(e){
-      alert("❌ Erreur cloud : "+e.message);
-    }
-    // Download JSON locally (iOS 12 compatible)
-    try{
-      const json=JSON.stringify(data,null,2);
-      const dataUrl="data:application/json;charset=utf-8,"+encodeURIComponent(json);
-      const a=document.createElement("a");
-      a.href=dataUrl;
-      a.download="afrijet_backup_"+new Date().toISOString().slice(0,10)+".json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }catch(e){
-      alert("⚠️ Téléchargement local échoué (cloud OK) : "+e.message);
-    }
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download="afrijet_backup_"+new Date().toISOString().slice(0,10)+".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setLastBackup(data.exportDate);
+    sbSet(PFX+"lastBackupData", data);
   };
 
   // Compute days since last backup
