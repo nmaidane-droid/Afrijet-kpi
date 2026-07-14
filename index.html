@@ -1255,7 +1255,7 @@ const INIT_FIN = [
 ];
 
 // ── Forms ────────────────────────────────────────────────────────────────────
-function FormVol({ onSubmit, crew, aircraft, saved, clients }) {
+function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
   const today=new Date().toISOString().slice(0,10);
   const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
 
@@ -2644,7 +2644,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           </div>
         )}
       </div>
-      {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients}/>}
+      {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)}/>}
       {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
       {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} saved={saved}/>}
