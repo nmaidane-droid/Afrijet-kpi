@@ -1382,8 +1382,11 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
           <CustomSelect value={cc} onChange={setCc} placeholder='-- Choisir --' icon='🧑‍✈️'
             options={(crew||[]).filter(m=>m.role==='CC').map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:'CC'}))}/>
         </div>
-        <div style={{display:'flex',gap:10}}>
-          <button onClick={()=>setActive(null)} style={{flex:1,height:50,background:C.bg,border:'1.5px solid '+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,cursor:'pointer'}}>← Retour</button>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onBack}
+            style={{flex:1,height:52,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            ← Retour
+          </button>
           <div style={{flex:2}}><FSubmit label="Planifier le vol" onClick={submit} saved={saved}/></div>
         </div>
       </div>
