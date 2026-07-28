@@ -17,6 +17,10 @@
       <div style="font-size:48px;">&#x2708;</div>
       <div style="font-weight:800;font-size:18px;color:#0F1F3D;">Afrijet Sahara</div>
       <div style="color:#64748B;font-size:13px;">Chargement en cours...</div>
+      <div style="background:#E2E8F0;border-radius:6px;height:6px;overflow:hidden;width:240px;">
+        <div id="load-bar" style="height:6px;border-radius:6px;background:linear-gradient(90deg,#0F1F3D,#2563EB);width:10%;transition:width 0.4s;"></div>
+      </div>
+      <div id="load-label" style="font-size:11px;color:#64748B;">Initialisation...</div>
       <div id="err" style="display:none;color:#DC2626;font-size:12px;padding:0 20px;text-align:center;"></div>
     </div>
   </div>
@@ -27,11 +31,18 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script>
     window.addEventListener('load', function() {
+      var bar = document.getElementById('load-bar');
+      var lbl = document.getElementById('load-label');
+      function prog(p, t){ if(bar){bar.style.width=p+'%';} if(lbl){lbl.textContent=t;} }
       try {
+        prog(30, 'Chargement des bibliothèques...');
         var code = document.getElementById('app-code').textContent;
+        prog(50, 'Compilation de l\'application...');
         var compiled = Babel.transform(code, { presets: ['react'] }).code;
+        prog(80, 'Démarrage...');
         var fn = new Function('React', 'ReactDOM', compiled + '\nreturn App;');
         var App = fn(React, ReactDOM);
+        prog(95, 'Chargement des données...');
         var root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(React.createElement(App));
       } catch(e) {
@@ -2279,7 +2290,13 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
 
-  const doExport=()=>{
+  const [progress,setProgress]=useState(null); // {title,icon,steps,currentStep,pct}
+  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+
+  const doExport=async()=>{
+    const steps=["Préparation des données","Envoi vers Supabase","Téléchargement local"];
+    setProgress({title:"Sauvegarde en cours",icon:"📥",steps,currentStep:0,pct:10});
+    await sleep(300);
     const data={
       version:"1.0",
       exportDate:new Date().toISOString(),
@@ -2292,6 +2309,13 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       safetyData,
       clients,
     };
+    setProgress(p=>({...p,currentStep:1,pct:40}));
+    try{
+      await sbSet(PFX+"lastBackupData", data);
+      setLastBackup(data.exportDate);
+    }catch(_e){}
+    setProgress(p=>({...p,currentStep:2,pct:75}));
+    await sleep(300);
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
@@ -2301,8 +2325,9 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setLastBackup(data.exportDate);
-    sbSet(PFX+"lastBackupData", data);
+    setProgress(p=>({...p,currentStep:3,pct:100}));
+    await sleep(600);
+    setProgress(null);
   };
 
   // Compute days since last backup
@@ -2334,6 +2359,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
   const f=FORMS.find(x=>x.id===effectiveActive);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {progress&&<ProgressModal title={progress.title} icon={progress.icon} steps={progress.steps} currentStep={progress.currentStep} pct={progress.pct}/>}
       <Card accent="#0F1F3D">
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <div style={{width:44,height:44,borderRadius:10,background:"#0F1F3D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>📝</div>
@@ -4202,6 +4228,28 @@ function CustomSelect({ value, onChange, options, placeholder, icon, searchable 
   );
 }
 
+function ProgressModal({ title, icon, steps, currentStep, pct }) {
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:900,background:"rgba(15,31,61,0.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:320,textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
+        <div style={{fontSize:32,marginBottom:8}}>{icon}</div>
+        <div style={{fontWeight:800,fontSize:16,color:"#0F1F3D",marginBottom:16}}>{title}</div>
+        {steps.map((s,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",fontSize:13,textAlign:"left",
+            color:i<currentStep?"#00936A":i===currentStep?"#0F1F3D":"#CBD5E1",
+            fontWeight:i===currentStep?700:400}}>
+            {i<currentStep?"\u2705":i===currentStep?"\u23f3":"\u25cb"} {s}
+          </div>
+        ))}
+        <div style={{background:"#E2E8F0",borderRadius:6,height:8,overflow:"hidden",marginTop:16}}>
+          <div style={{height:8,borderRadius:6,background:"linear-gradient(90deg,#0F1F3D,#2563EB)",width:pct+"%",transition:"width 0.4s"}}/>
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:"#0F1F3D",marginTop:6}}>{pct}%</div>
+      </div>
+    </div>
+  );
+}
+
 function ProfileSelectScreen({ onSelect }) {
   return (
     <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:24}}>
@@ -4413,6 +4461,8 @@ function AppMain({ onLogout, profileId }) {
   const [loading,setLoading] = useState(false);
   const [showReset,setReset] = useState(false);
   const [showRestoreModal,setShowRestoreModal] = useState(false);
+  const [restoreProgress,setRestoreProgress] = useState(null);
+  const rSleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   const [report,setReport]   = useState(null);
 
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),30000);return()=>clearInterval(t);},[]);
@@ -4561,8 +4611,7 @@ function AppMain({ onLogout, profileId }) {
 
 
       {/* RESTORE MODAL */}
-
-      {/* RESTORE MODAL */}
+      {restoreProgress&&<ProgressModal title={restoreProgress.title} icon={restoreProgress.icon} steps={restoreProgress.steps} currentStep={restoreProgress.currentStep} pct={restoreProgress.pct}/>}
       {showRestoreModal&&(
         <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
@@ -4572,11 +4621,21 @@ function AppMain({ onLogout, profileId }) {
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <button onClick={async()=>{
                 setShowRestoreModal(false);
+                const steps=["Récupération depuis Supabase","Restauration des données","Finalisation"];
+                setRestoreProgress({title:"Restauration en cours",icon:"📦",steps,currentStep:0,pct:15});
                 const data=await sbGet(PFX+"lastBackupData");
-                if(!data){alert("Aucun backup trouvé dans le cloud.");return;}
+                if(!data){setRestoreProgress(null);alert("Aucun backup trouvé dans le cloud.");return;}
+                setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
                 const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
                 if(window.confirm("Backup Supabase du "+dateStr+".\n\nConfirmer la restauration ?")){
-                  if(onImport){onImport(data);setSaved(true);setTimeout(()=>setSaved(false),2500);}
+                  if(onImport){onImport(data);}
+                  setRestoreProgress(p=>({...p,currentStep:2,pct:85}));
+                  await rSleep(400);
+                  setRestoreProgress(p=>({...p,currentStep:3,pct:100}));
+                  await rSleep(600);
+                  setRestoreProgress(null);
+                } else {
+                  setRestoreProgress(null);
                 }
               }} style={{height:48,background:"#EFF6FF",border:"1.5px solid #0369A1",borderRadius:10,color:"#0369A1",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                 ☁️ Depuis Supabase (cloud)
@@ -4590,12 +4649,22 @@ function AppMain({ onLogout, profileId }) {
                   const reader=new FileReader();
                   reader.onload=async(ev)=>{
                     try{
+                      const steps=["Lecture du fichier","Restauration des données","Finalisation"];
+                      setRestoreProgress({title:"Restauration en cours",icon:"📂",steps,currentStep:0,pct:20});
                       const data=JSON.parse(ev.target.result);
+                      setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
                       const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
                       if(window.confirm("Fichier local du "+dateStr+".\n\nConfirmer la restauration ?")){
-                        if(onImport){onImport(data);setSaved(true);setTimeout(()=>setSaved(false),2500);}
+                        if(onImport){onImport(data);}
+                        setRestoreProgress(p=>({...p,currentStep:2,pct:85}));
+                        await rSleep(400);
+                        setRestoreProgress(p=>({...p,currentStep:3,pct:100}));
+                        await rSleep(600);
+                        setRestoreProgress(null);
+                      } else {
+                        setRestoreProgress(null);
                       }
-                    }catch(_e){alert("❌ Fichier JSON invalide.");}
+                    }catch(_e){setRestoreProgress(null);alert("❌ Fichier JSON invalide.");}
                   };
                   reader.readAsText(file);
                 };
