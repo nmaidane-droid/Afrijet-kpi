@@ -2470,6 +2470,24 @@ function ndsExportPDF(state, opts={}){
 
 
 
+
+/* ── Champ éditable en place — équivalent React de [contenteditable] + syncStateFromDOM ── */
+function NdsEditable({ html, onCommit, style, tag }){
+  const ref = useRef(null);
+  useEffect(()=>{
+    if(ref.current && ref.current.innerText !== (html||'')) ref.current.innerText = html||'';
+  },[html]);
+  const commit=()=>{ if(ref.current && onCommit) onCommit(ref.current.innerText.trim()); };
+  const T = tag || 'div';
+  return React.createElement(T, {
+    ref, contentEditable:true, suppressContentEditableWarning:true,
+    onBlur: commit,
+    style: {...(style||{}), outline:"none", cursor:"text", borderRadius:3, transition:"background .15s"},
+    onFocus: e=>{ e.currentTarget.style.background="rgba(15,31,61,0.05)"; },
+    onMouseDown: e=>{ e.stopPropagation(); }
+  });
+}
+
 function FormNDS({ onBack }){
   const [tab,setTab]=useState("editor");           // editor | archive
   const [cat,setCat]=useState(NDS_CATEGORIES[2]);
@@ -2711,8 +2729,11 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
     );
   }
 
-  // ══ APERÇU NOTE ══
-  if(note) return (
+  // ══ APERÇU NOTE — édition en place ══
+  if(note){
+    const upd=(patch)=>setNote(n=>({...n,...patch}));
+    const updSec=(i,patch)=>setNote(n=>({...n,sections:n.sections.map((s,j)=>j===i?{...s,...patch}:s)}));
+    return (
     <Card accent="#0F1F3D">
       {Toast}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
@@ -2721,18 +2742,42 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
         <button onClick={()=>{try{ndsExportPDF(note);}catch(e){alert("Erreur PDF : "+e.message);}}}
           style={{marginLeft:"auto",background:C.navy,border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",color:"white",fontSize:11.5,fontWeight:700}}>📄 PDF</button>
       </div>
+      <div style={{fontSize:10.5,color:C.slate,marginBottom:8,fontStyle:"italic"}}>✏️ Touchez un texte pour le modifier directement.</div>
       <div style={{background:"white",border:"1px solid "+C.border,borderRadius:10,padding:"18px 16px",maxHeight:"58vh",overflowY:"auto"}}>
         <div style={{fontSize:10,color:C.slate,letterSpacing:"0.08em",marginBottom:4}}>NOTE DE SERVICE</div>
-        <div style={{fontWeight:800,fontSize:14,color:C.navy,fontFamily:"monospace"}}>{note.ref}</div>
-        <div style={{fontSize:11,color:C.slate,marginTop:2,marginBottom:12}}>{note.date} · {note.classification} · Rév. {note.revision}</div>
-        <div style={{fontSize:11,color:C.slate,marginBottom:2}}><b>De :</b> {note.from}</div>
-        <div style={{fontSize:11,color:C.slate,marginBottom:12}}><b>À :</b> {note.to}</div>
-        <div style={{fontWeight:700,fontSize:13,color:C.navy,marginBottom:8,paddingBottom:8,borderBottom:"1px solid "+C.border}}>Objet : {note.objet}</div>
-        <div style={{fontSize:12,lineHeight:1.6,color:C.text,marginBottom:14}}>{note.intro}</div>
+        <NdsEditable html={note.ref} onCommit={v=>upd({ref:v})}
+          style={{fontWeight:800,fontSize:14,color:C.navy,fontFamily:"monospace"}}/>
+        <div style={{display:"flex",gap:6,alignItems:"center",fontSize:11,color:C.slate,marginTop:2,marginBottom:12,flexWrap:"wrap"}}>
+          <NdsEditable html={note.date} onCommit={v=>upd({date:v})} style={{display:"inline-block"}}/>
+          <span>·</span>
+          <NdsEditable html={note.classification} onCommit={v=>upd({classification:v})} style={{display:"inline-block"}}/>
+          <span>· Rév.</span>
+          <NdsEditable html={note.revision} onCommit={v=>upd({revision:v})} style={{display:"inline-block",minWidth:22}}/>
+        </div>
+        <div style={{display:"flex",gap:6,fontSize:11,color:C.slate,marginBottom:2}}>
+          <b style={{flexShrink:0}}>De :</b>
+          <NdsEditable html={note.from} onCommit={v=>upd({from:v})} style={{flex:1}}/>
+        </div>
+        <div style={{display:"flex",gap:6,fontSize:11,color:C.slate,marginBottom:12}}>
+          <b style={{flexShrink:0}}>À :</b>
+          <NdsEditable html={note.to} onCommit={v=>upd({to:v})} style={{flex:1}}/>
+        </div>
+        <div style={{marginBottom:8,paddingBottom:8,borderBottom:"1px solid "+C.border}}>
+          <span style={{fontWeight:700,fontSize:13,color:C.navy}}>Objet : </span>
+          <NdsEditable html={note.objet} onCommit={v=>upd({objet:v})}
+            style={{fontWeight:700,fontSize:13,color:C.navy,display:"inline-block",width:"100%"}}/>
+        </div>
+        <NdsEditable html={note.intro} onCommit={v=>upd({intro:v})}
+          style={{fontSize:12,lineHeight:1.6,color:C.text,marginBottom:14}}/>
         {(note.sections||[]).map((s,i)=>(
           <div key={i} style={{marginBottom:14}}>
-            <div style={{fontWeight:700,fontSize:12,color:C.navy,marginBottom:5}}>{i+1}. {s.title}</div>
-            <div style={{fontSize:11.5,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}>{s.content}</div>
+            <div style={{display:"flex",gap:5,alignItems:"baseline"}}>
+              <span style={{fontWeight:700,fontSize:12,color:C.navy,flexShrink:0}}>{i+1}.</span>
+              <NdsEditable html={s.title} onCommit={v=>updSec(i,{title:v})}
+                style={{fontWeight:700,fontSize:12,color:C.navy,flex:1,marginBottom:5}}/>
+            </div>
+            <NdsEditable html={s.content} onCommit={v=>updSec(i,{content:v})}
+              style={{fontSize:11.5,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}/>
             {s.table&&s.table.rows&&(
               <div style={{marginTop:8,overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
@@ -2750,10 +2795,13 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
             )}
           </div>
         ))}
-        <div style={{fontSize:11,lineHeight:1.6,color:C.slate,fontStyle:"italic",paddingTop:10,borderTop:"1px solid "+C.border}}>{note.closing}</div>
+        <NdsEditable html={note.closingText||note.closing} onCommit={v=>upd({closing:v,closingText:v})}
+          style={{fontSize:11,lineHeight:1.6,color:C.slate,fontStyle:"italic",paddingTop:10,borderTop:"1px solid "+C.border}}/>
       </div>
     </Card>
-  );
+    );
+  }
+
 
   // ══ FORMULAIRE ══
   return (
