@@ -2103,17 +2103,31 @@ function ndsTodayStamp(){
   const n=new Date();
   return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}`;
 }
+// Plus haut numéro déjà utilisé pour ce préfixe et cette date, d'après les archives.
+// Le compteur localStorage seul ne suffit pas : une note importée ou un compteur
+// réinitialisé conduirait à proposer un numéro déjà attribué.
+function ndsMaxSeqInArchive(prefix, stamp){
+  const re = new RegExp('^NS-'+prefix+'-'+stamp+'-(\\d+)$');
+  let max = 0;
+  try{
+    (JSON.parse(localStorage.getItem(NDS_ARCHIVE_KEY)||'[]')).forEach(r=>{
+      const m = re.exec(String(r.ref||'').trim());
+      if(m){ const n=parseInt(m[1],10); if(n>max) max=n; }
+    });
+  }catch(_e){}
+  return max;
+}
 function ndsNextRef(prefix){
-  const p=prefix||'OPS';
-  const key=`ns:seq:${p}-${ndsTodayStamp()}`;
-  const seq=parseInt(lsGet(key)||'0',10)+1;
-  return `NS-${p}-${ndsTodayStamp()}-${String(seq).padStart(2,'0')}`;
+  const p=prefix||'OPS', stamp=ndsTodayStamp();
+  const counter=parseInt(lsGet(`ns:seq:${p}-${stamp}`)||'0',10);
+  const seq=Math.max(counter, ndsMaxSeqInArchive(p,stamp))+1;
+  return `NS-${p}-${stamp}-${String(seq).padStart(2,'0')}`;
 }
 function ndsCommitRef(prefix){
-  const p=prefix||'OPS';
-  const key=`ns:seq:${p}-${ndsTodayStamp()}`;
-  const seq=parseInt(lsGet(key)||'0',10)+1;
-  lsSet(key,String(seq));
+  const p=prefix||'OPS', stamp=ndsTodayStamp();
+  const counter=parseInt(lsGet(`ns:seq:${p}-${stamp}`)||'0',10);
+  const seq=Math.max(counter, ndsMaxSeqInArchive(p,stamp))+1;
+  lsSet(`ns:seq:${p}-${stamp}`, String(seq));
 }
 function ndsRenumber(sections){
   return sections.map((sec,idx)=>{
@@ -3234,6 +3248,10 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
               🗑 Reset
             </button>
           )}
+          <a href="Manuel_Utilisateur_Afrijet_v2.pdf" target="_blank" rel="noopener"
+            style={{flex:1,height:36,background:"#EFF6FF",border:"1.5px solid #0369A1",borderRadius:8,color:"#0369A1",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",boxSizing:"border-box"}}>
+            📖 Manuel
+          </a>
           <button onClick={onLogout}
             style={{flex:1,height:36,background:"#F1F5F9",border:"1.5px solid #64748B",borderRadius:8,color:"#64748B",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             🔒 Exit
