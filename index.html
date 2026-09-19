@@ -2167,7 +2167,7 @@ function ndsExportPDF(state, opts={}){
   // invisible text that still "exists" (found by copy/paste or text
   // extraction) but never shows up when rendered. setText() is now the only
   // way body content sets its style, so newPage() can always put it back.
-  let curFont = 'times', curStyle = 'normal', curSize = 10.5, curColor = [26,26,46];
+  let curFont = 'times', curStyle = 'normal', curSize = 10.5, curColor = [30,41,59];
   function setText(font, style, size, color){
     curFont = font; curStyle = style; curSize = size; curColor = color;
     doc.setFont(font, style);
@@ -2208,7 +2208,7 @@ function ndsExportPDF(state, opts={}){
     const fontSize = opts.fontSize || 10.5;
     const lineHeight = opts.lineHeight || 5.2;
     const bold = opts.bold || false;
-    setText('times', bold ? 'bold' : 'normal', fontSize, [26,26,46]);
+    setText('times', bold ? 'bold' : 'normal', fontSize, [30,41,59]);
     const lines = doc.splitTextToSize(text, contentWidth);
     lines.forEach(line=>{
       checkSpace(lineHeight);
@@ -2219,7 +2219,7 @@ function ndsExportPDF(state, opts={}){
 
   function writeSectionTitle(text){
     y += 3;
-    setText('helvetica', 'bold', 10.5, [139,0,0]);
+    setText('helvetica', 'bold', 10.5, [15,31,61]);
     doc.text(text.toUpperCase(), marginX, y);
     y += 7.5;
   }
@@ -2246,13 +2246,13 @@ function ndsExportPDF(state, opts={}){
       if(isSubheader){
         checkSpace(lineHeight + 4);
         y += 2.5;
-        setText('helvetica', 'bold', fontSize + 0.1, [26,26,46]);
+        setText('helvetica', 'bold', fontSize + 0.1, [30,41,59]);
         const wrapped = doc.splitTextToSize(line, contentWidth - (subheaderX - marginX));
         wrapped.forEach(w=>{ checkSpace(lineHeight); doc.text(w, subheaderX, y); y += lineHeight; });
         y += 1;
       } else if(isBullet){
         const bulletText = line.replace(/^•\s*/, '');
-        setText('times', 'normal', fontSize, [26,26,46]);
+        setText('times', 'normal', fontSize, [30,41,59]);
         const wrapped = doc.splitTextToSize(bulletText, contentWidth - (bulletTextX - marginX));
         wrapped.forEach((w,idx)=>{
           checkSpace(lineHeight);
@@ -2261,7 +2261,7 @@ function ndsExportPDF(state, opts={}){
           y += lineHeight;
         });
       } else {
-        setText('times', 'normal', fontSize, [26,26,46]);
+        setText('times', 'normal', fontSize, [30,41,59]);
         const wrapped = doc.splitTextToSize(line, contentWidth);
         wrapped.forEach(w=>{ checkSpace(lineHeight); doc.text(w, marginX, y); y += lineHeight; });
       }
@@ -2323,13 +2323,13 @@ function ndsExportPDF(state, opts={}){
       const rowH = rowHeightFor(cells, fontSize);
       checkSpace(rowH);
       if(header){
-        doc.setFillColor(26,26,46);
+        doc.setFillColor(15,31,61);
         doc.rect(marginX, y, contentWidth, rowH, 'F');
       } else if(shade){
-        doc.setFillColor(245,243,239);
+        doc.setFillColor(244,247,251);
         doc.rect(marginX, y, contentWidth, rowH, 'F');
       }
-      doc.setDrawColor(200,197,190);
+      doc.setDrawColor(221,227,237);
       doc.setLineWidth(0.15);
       doc.rect(marginX, y, contentWidth, rowH);
       for(let k=1;k<cols;k++){
@@ -2337,7 +2337,7 @@ function ndsExportPDF(state, opts={}){
       }
       doc.setFont('helvetica', header ? 'bold' : 'normal');
       doc.setFontSize(fontSize);
-      doc.setTextColor(header ? 255 : 26, header ? 255 : 26, header ? 255 : 46);
+      doc.setTextColor(header ? 255 : 30, header ? 255 : 41, header ? 255 : 59);
       cells.forEach((cell,idx)=>{
         const w = colWidths[idx] - cellPad*2;
         const lines = doc.splitTextToSize(String(cell), w);
@@ -2352,7 +2352,7 @@ function ndsExportPDF(state, opts={}){
     y += 3;
 
     if(table.note && table.note.trim()){
-      setText('times', 'normal', 9.5, [26,26,46]);
+      setText('times', 'normal', 9.5, [30,41,59]);
       const noteLines = doc.splitTextToSize(table.note, contentWidth);
       noteLines.forEach(line=>{ checkSpace(4.8); doc.text(line, marginX, y); y += 4.8; });
     }
@@ -2364,17 +2364,17 @@ function ndsExportPDF(state, opts={}){
   // Title block (left-aligned, ink navy — matches original, NOT bordeaux)
   doc.setFont('helvetica','bold');
   doc.setFontSize(17);
-  doc.setTextColor(26,26,46);
+  doc.setTextColor(30,41,59);
   doc.text('NOTE DE SERVICE', marginX, y);
   y += 6;
   doc.setFont('helvetica','normal');
   doc.setFontSize(9);
-  doc.setTextColor(110,110,120);
+  doc.setTextColor(100,116,139);
   doc.text('SERVICE MEMORANDUM — INTERNATIONAL FORMAT (ICAO Annex 6 / EASA Part-OPS reference)', marginX, y);
   y += 6;
 
   // Bordeaux rule opening the meta block
-  doc.setDrawColor(139,0,0);
+  doc.setDrawColor(15,31,61);
   doc.setLineWidth(0.5);
   doc.line(marginX, y, pageWidth - marginX, y);
   y += 6;
@@ -2388,12 +2388,12 @@ function ndsExportPDF(state, opts={}){
   const colW = contentWidth/2;
   const labelW = 24;
   rows.forEach(([k1,v1,k2,v2])=>{
-    setText('helvetica', 'bold', 9.3, [26,26,46]);
+    setText('helvetica', 'bold', 9.3, [30,41,59]);
     const v1Lines = doc.splitTextToSize(v1, colW - labelW - 4);
     const v2Lines = doc.splitTextToSize(v2, colW - labelW - 4);
     const rowH = Math.max(v1Lines.length, v2Lines.length) * 4.6 + 2.5;
     checkSpace(rowH);
-    setText('helvetica', 'bold', 9.3, [26,26,46]);
+    setText('helvetica', 'bold', 9.3, [30,41,59]);
     doc.text(k1, marginX, y);
     doc.text(k2, marginX + colW, y);
     doc.setFont('helvetica','normal');
@@ -2404,7 +2404,7 @@ function ndsExportPDF(state, opts={}){
   y += 2;
 
   // Bordeaux rule closing the meta block
-  doc.setDrawColor(139,0,0);
+  doc.setDrawColor(15,31,61);
   doc.setLineWidth(0.5);
   doc.line(marginX, y, pageWidth - marginX, y);
   y += 8;
@@ -2426,26 +2426,26 @@ function ndsExportPDF(state, opts={}){
 
   // Closing
   y += 2;
-  setText('times', 'normal', 9.8, [26,26,46]);
+  setText('times', 'normal', 9.8, [30,41,59]);
   const closingLines = doc.splitTextToSize(state.closingText || state.closing, contentWidth);
   closingLines.forEach(line=>{ checkSpace(5); doc.text(line, marginX, y); y+=5; });
 
   // Signatures
   checkSpace(28);
   y += 10;
-  doc.setDrawColor(180,175,165);
+  doc.setDrawColor(221,227,237);
   doc.line(marginX, y, marginX + 70, y);
   doc.line(pageWidth - marginX - 70, y, pageWidth - marginX, y);
   y += 5;
   doc.setFont('helvetica','bold');
   doc.setFontSize(9);
-  doc.setTextColor(26,26,46);
+  doc.setTextColor(30,41,59);
   doc.text('Émis par :', marginX, y);
   doc.text('Approuvé par :', pageWidth - marginX - 70, y);
   y += 4.5;
   doc.setFont('helvetica','normal');
   doc.setFontSize(7.8);
-  doc.setTextColor(100,95,95);
+  doc.setTextColor(100,116,139);
   doc.text('Direction des Opérations Aériennes\nSahara Aviation SAS — Afrijet Sahara', marginX, y);
   doc.text('Commandant de Bord / Directeur\ndes Opérations Aériennes', pageWidth - marginX - 70, y);
 
@@ -2453,12 +2453,12 @@ function ndsExportPDF(state, opts={}){
   const totalPages = doc.internal.getNumberOfPages();
   for(let p = 1; p <= totalPages; p++){
     doc.setPage(p);
-    doc.setDrawColor(200,200,205);
+    doc.setDrawColor(221,227,237);
     doc.setLineWidth(0.2);
     doc.line(marginX, pageHeight - 14, pageWidth - marginX, pageHeight - 14);
     doc.setFont('helvetica','normal');
     doc.setFontSize(7.8);
-    doc.setTextColor(120,120,128);
+    doc.setTextColor(148,163,184);
     doc.text(`${state.ref} — Diffusion : ${state.to || 'PNT / Encadrement opérationnel'} — Document interne`, marginX, pageHeight - 10);
     doc.text(`Page ${p}`, pageWidth - marginX, pageHeight - 10, { align:'right' });
   }
