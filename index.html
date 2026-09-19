@@ -82,7 +82,7 @@ const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813
 const PROFILES = [
   {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
    pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
-   forms:["avion","crew","vol","secu","docavion","regl","sat","clients"],
+   forms:["avion","crew","vol","secu","docavion","regl","sat"],
    tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes","fin"] },
   {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
    pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
@@ -1295,6 +1295,11 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
 
   const submit=()=>{
     if(!num.trim()||!dep){alert("N° vol et départ requis");return;}
+    // Le client est obligatoire pour un vol commercial ; ferry et positionnement en sont dispensés.
+    if(flightType==="Commercial" && !clientId){
+      alert("⚠️ Un client est requis pour un vol commercial.\n\nSélectionnez un client, ou choisissez le type FRY (ferry) ou POS (positionnement).");
+      return;
+    }
     const todayStr=new Date().toISOString().slice(0,10);
     if(date<todayStr){alert("⚠️ La date du vol ne peut pas être dans le passé.");return;}
     // Vérification MEL expiré à la planification
@@ -1331,28 +1336,8 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
   };
   return (
     <Card accent="#0F1F3D">
-      <FHeader icon="✈" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0F1F3D"/>
+      <FHeader icon="🛫" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0F1F3D"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        {/* Client selector - custom dropdown */}
-        {clients&&clients.length>0&&(
-          <div>
-            <FLabel>Client</FLabel>
-            <CustomSelect
-              value={clientId} onChange={setClientId} searchable
-              icon="🏢" placeholder="-- Sélectionner un client --"
-              options={(clients||[]).map(c=>({value:c.id,label:c.nom,sub:c.type+' · '+c.ville}))}
-            />
-          </div>
-        )}
-        {/* Aircraft selector */}
-        {aircraft&&aircraft.length>0&&(
-          <div>
-            <FLabel>Avion</FLabel>
-            <CustomSelect value={acId} onChange={setAcId} placeholder='-- Choisir un avion --' icon='🛩'
-              options={(aircraft||[]).map(a=>({value:a.id,label:a.immat+' · '+a.type,sub:a.sieges+' sièges · TTAF '+(a.ttaf||0).toFixed(1)+'h'}))}/>
-          </div>
-        )}
-        <FGrid><FField label="N Vol *" value={num} onChange={setNum}/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
         <div>
           <FLabel>Type de vol</FLabel>
           <div style={{display:"flex",gap:8}}>
@@ -1366,6 +1351,26 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
             ))}
           </div>
         </div>
+        {/* Client selector - custom dropdown */}
+        {clients&&clients.length>0&&(
+          <div>
+            <FLabel>{flightType==="Commercial"?"Client *":"Client (optionnel)"}</FLabel>
+            <CustomSelect
+              value={clientId} onChange={setClientId} searchable
+              icon="🏢" placeholder={flightType==="Commercial"?"-- Sélectionner un client --":"-- Aucun client --"}
+              options={(clients||[]).map(c=>({value:c.id,label:c.nom,sub:c.type+' · '+c.ville}))}
+            />
+          </div>
+        )}
+        {/* Aircraft selector */}
+        {aircraft&&aircraft.length>0&&(
+          <div>
+            <FLabel>Avion</FLabel>
+            <CustomSelect value={acId} onChange={setAcId} placeholder='-- Choisir un avion --' icon='🛩'
+              options={(aircraft||[]).map(a=>({value:a.id,label:a.immat+' · '+a.type,sub:a.sieges+' sièges · TTAF '+(a.ttaf||0).toFixed(1)+'h'}))}/>
+          </div>
+        )}
+        <FGrid><FField label="N Vol *" value={num} onChange={setNum}/><FField label="Date" value={date} onChange={setDate} type="date"/></FGrid>
         <FSection title="Route" color="#0F1F3D"/>
         <FGrid><FAirport label="Depart — Code IATA" value={from_} onChange={setFrom}/><FAirport label="Arrivee — Code IATA" value={to} onChange={setTo}/></FGrid>
         <FSection title="Horaires planifies" color="#0F1F3D"/>
@@ -3202,7 +3207,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     {id:"avion",    icon:"🛩",  label:"Avion",          color:"#0369A1"},
     {id:"crew",     icon:"👨‍✈️", label:"Equipage",       color:"#0369A1"},
     {id:"maint",    icon:"🔧",  label:"Maintenance",    color:"#00936A"},
-    {id:"vol",      icon:"✈",   label:"Vol",            color:"#0F1F3D"},
+    {id:"vol",      icon:"🛫",  label:"Vol",            color:"#0F1F3D"},
     {id:"secu",     icon:"🛡",  label:"Sécurité",       color:"#DC2626"},
     {id:"fin",      icon:"💰",  label:"Finances",       color:"#7C3AED"},
     {id:"docavion", icon:"📁",  label:"Doc Avion",      color:"#0369A1"},
@@ -5392,7 +5397,7 @@ function AppMain({ onLogout, profileId }) {
     {id:"forms",icon:"📝",label:"Formulaires"},
     {id:"live", icon:"📡",label:"Live"},
     {id:"alertes",icon:"🔔",label:"Alertes"},
-    {id:"ops",  icon:"✈", label:"Ops."},
+    {id:"ops",  icon:"🛫", label:"Ops."},
     {id:"perf", icon:"📊",label:"Perf."},
     {id:"secu", icon:"🛡",label:"Sécurité"},
     {id:"maint",icon:"🔧",label:"Maint."},
