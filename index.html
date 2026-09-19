@@ -2132,7 +2132,21 @@ function ndsRenumber(sections){
 /* ── Archives NDS (localStorage) ── */
 const NDS_ARCHIVE_KEY = 'ns:archive';
 function ndsLoadArchive(){
-  try{ return JSON.parse(localStorage.getItem(NDS_ARCHIVE_KEY) || '[]'); }
+  try{
+    const arch = JSON.parse(localStorage.getItem(NDS_ARCHIVE_KEY) || '[]');
+    // Répare les archives dont l'identifiant est dupliqué ou absent : sans cela,
+    // supprimer une note en effacerait plusieurs (la suppression filtre par id).
+    const seen = new Set(); let fixed = false;
+    arch.forEach((r,i)=>{
+      if(!r.id || seen.has(r.id)){
+        r.id = (r.ref||'NS')+'-'+Date.now()+'-'+i+'-'+Math.random().toString(36).slice(2,8);
+        fixed = true;
+      }
+      seen.add(r.id);
+    });
+    if(fixed){ try{ localStorage.setItem(NDS_ARCHIVE_KEY, JSON.stringify(arch)); }catch(_e){} }
+    return arch;
+  }
   catch(_e){ return []; }
 }
 function ndsPersistArchive(archive){
@@ -2540,8 +2554,10 @@ function FormNDS({ onBack }){
     const arch=ndsLoadArchive();
     const idx=arch.findIndex(r=>r.ref===cur.ref);
     const record={
-      id: idx>=0?arch[idx].id:(cur.ref+'-'+Date.now()),
       ...cur,
+      // id placé APRÈS le spread : sinon l'id hérité de la note ouverte
+      // écrase le nouvel identifiant et deux archives partagent la même clé.
+      id: idx>=0?arch[idx].id:(cur.ref+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),
       category: cat?cat.label:'',
       savedAt: new Date().toISOString()
     };
@@ -2577,7 +2593,7 @@ function FormNDS({ onBack }){
         records.forEach(rec=>{
           if(!rec||!rec.ref||!Array.isArray(rec.sections)) return;
           const entry={
-            id: rec.id||(rec.ref+'-'+Date.now()+'-'+imported),
+            id: rec.ref+'-'+Date.now()+'-'+imported+'-'+Math.random().toString(36).slice(2,8),
             ref: rec.ref,
             date: rec.date||'',
             from: rec.from||'Direction des Opérations Aériennes',
