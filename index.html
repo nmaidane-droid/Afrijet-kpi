@@ -94,7 +94,7 @@ const PROFILES = [
    tabs:["forms"],       readOnly:["live","secu","maint","ops","fin","alertes","perf"] },
   {id:"dir",   label:"Direction",   icon:"🏢",  color:"#A0720A",
    pwdHash:"ed494928275b93b897810bd7b090babaee8d4d92268cd96119eef7948b251184",
-   forms:[],
+   forms:["rapport"],
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
   {id:"comm",  label:"Commercial",     icon:"💼",  color:"#0891B2",
    pwdHash:"d01acdec3a3b87b33882a0fb8959ffda858a0642f7f54190f67aa230e04d1547",
@@ -3038,7 +3038,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients }) {
   const isAdmin = profileId === "rdoa";
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="comm"?"clients":null;
   const [active,setActive]=useState(defaultForm);
@@ -3106,6 +3106,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"},
     {id:"clients",  icon:"🏢",  label:"Clients",         color:"#0891B2"},
     {id:"nds",      icon:"📋",  label:"Note Service",    color:"#0F1F3D"},
+    {id:"rapport",  icon:"📊",  label:"Rapport",         color:"#00936A"},
   ];
   const FORMS = ALL_FORMS; // Toujours afficher toutes les tuiles
   const canAccessForm = (id) => !canForm || canForm(id);
@@ -3186,6 +3187,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           return (
           <button key={fm.id} onClick={()=>{
             if(!allowed){ return; }
+            if(fm.id==="rapport"){ if(onReport) onReport(); return; }
             setActive(fm.id);
           }}
             style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",
@@ -5310,12 +5312,6 @@ function AppMain({ onLogout, profileId }) {
             <span style={{fontSize:11,color:C.slate,fontWeight:600}}>{ac&&!ac.simulated?"LIVE":"SIM"}</span>
           </div>
           <span style={{fontSize:12,fontWeight:700,color:C.navy}}>{timeStr}</span>
-          {(profileId==="rdoa"||profileId==="dir")&&(
-            <button onClick={()=>setReport(buildReport(flights,kpis,now,finData,maintData,safetyData,aircraft))}
-              style={{height:36,padding:"0 12px",background:C.emerald,border:"none",borderRadius:9,cursor:"pointer",color:"white",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}}>
-              📋 Rapport
-            </button>
-          )}
         </div>
       </div>
 
@@ -5334,6 +5330,7 @@ function AppMain({ onLogout, profileId }) {
           onSubmitSafety={d=>setSafety(s=>[...s,d])}
           onReset={()=>setReset(true)}
           onRestore={()=>setShowRestoreModal(true)}
+          onReport={()=>setReport(buildReport(flights,kpis,now,finData,maintData,safetyData,aircraft))}
           onLogout={onLogout}
           flights={flights} crew={crew} setCrew={setCrew}
           maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed} safetyData={safetyData}
