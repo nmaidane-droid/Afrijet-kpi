@@ -2537,6 +2537,7 @@ function FormNDS({ onBack }){
   const [classification,setClassification]=useState("Diffusion interne");
   const [revision,setRevision]=useState("01");
   const [loading,setLoading]=useState(false);
+  const [progress,setProgress]=useState(null);   // {done,total} sections reçues
   const [err,setErr]=useState("");
   const [note,setNote]=useState(null);
   const [archive,setArchive]=useState(()=>ndsLoadArchive());
@@ -2646,6 +2647,7 @@ function FormNDS({ onBack }){
     setErr("");
     if(!subject.trim()){ setErr("Le sujet de la note est requis."); return; }
     if(!cat){ setErr("Sélectionnez une catégorie."); return; }
+    setProgress(null);
     setLoading(true);
     const to=computeTo();
     const touchesMaint=diffusion.includes('Maintenance / Technique');
@@ -2684,15 +2686,68 @@ Catégorie : ${cat.label}
 Diffusion : ${to}
 ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
 
-    try{
-      const response=await fetch("/api/generate",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({max_tokens:5000,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})
+    const body={max_tokens:5000,system:systemPrompt,messages:[{role:"user",content:userPrompt}]};
+
+    // Lit la réponse en flux. Le JSON n'est analysé qu'une fois le flux terminé :
+    // un JSON partiel n'est jamais parsable. La progression sert uniquement d'affichage.
+    const readStream=async()=>{
+      const r=await fetch("/api/generate",{
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({...body,stream:true})
       });
-      const data=await response.json();
-      if(!response.ok) throw new Error((data.error&&data.error.message)||data.error||'Erreur API');
-      const raw=(data.content||[]).map(b=>b.text||'').join('\n');
+      if(!r.ok){
+        let d={}; try{ d=await r.json(); }catch(_e){}
+        const e=new Error((d.error&&d.error.message)||d.error||'Erreur API');
+        e.fatal=true; throw e;   // erreur de l'API : le repli échouerait pareil
+      }
+      if(!r.body||!r.body.getReader) throw new Error('STREAM_UNSUPPORTED');
+      const reader=r.body.getReader(), dec=new TextDecoder();
+      let buf='', text='';
+      while(true){
+        const {done,value}=await reader.read();
+        if(done) break;
+        buf+=dec.decode(value,{stream:true});
+        const lines=buf.split('\n'); buf=lines.pop()||'';
+        for(const line of lines){
+          if(!line.startsWith('data:')) continue;
+          const payload=line.slice(5).trim();
+          if(!payload||payload==='[DONE]') continue;
+          let ev; try{ ev=JSON.parse(payload); }catch(_e){ continue; }
+          if(ev.type==='content_block_delta'&&ev.delta&&typeof ev.delta.text==='string'){
+            text+=ev.delta.text;
+            // Titres de section déjà reçus, pour situer l'avancement
+            const n=(text.match(/"title"\s*:/g)||[]).length;
+            setProgress({done:Math.min(n,skeleton.length), total:skeleton.length});
+          } else if(ev.type==='error'){
+            const e=new Error((ev.error&&ev.error.message)||'Erreur pendant la génération');
+            e.fatal=true; throw e;
+          }
+        }
+      }
+      if(!text.trim()) throw new Error('Réponse vide');
+      return text;
+    };
+
+    // Appel classique, conservé comme repli si le flux échoue.
+    const readPlain=async()=>{
+      const r=await fetch("/api/generate",{
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body)
+      });
+      const d=await r.json();
+      if(!r.ok) throw new Error((d.error&&d.error.message)||d.error||'Erreur API');
+      return (d.content||[]).map(b=>b.text||'').join('\n');
+    };
+
+    try{
+      let raw;
+      try{
+        raw=await readStream();
+      }catch(se){
+        if(se && se.fatal) throw se;      // inutile de réessayer
+        setProgress(null);                 // flux indisponible ou vide : repli
+        raw=await readPlain();
+      }
       let clean=raw.replace(/```json|```/g,'').trim();
       let parsed;
       try{ parsed=JSON.parse(clean); }
@@ -2718,6 +2773,7 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
       setErr(net?'Connexion interrompue pendant la génération (délai serveur dépassé sur les notes longues). Réessayez.':'Erreur de génération : '+(e.message||'réessayez.'));
     }
     setLoading(false);
+    setProgress(null);
   };
 
   const TabBar = (
@@ -2923,8 +2979,19 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
         <div style={{display:"flex",gap:10}}>
           <button onClick={onBack} style={{flex:1,height:52,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,cursor:"pointer"}}>← Retour</button>
           <button onClick={generate} disabled={loading}
-            style={{flex:2,height:52,background:loading?C.slate:C.navy,border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:loading?"wait":"pointer",boxShadow:"0 2px 12px "+(loading?C.slate:C.navy)+"55"}}>
-            {loading?"⏳ Génération en cours...":"✨ Générer la note"}
+            style={{flex:2,height:52,background:loading?C.slate:C.navy,border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:loading?"wait":"pointer",boxShadow:"0 2px 12px "+(loading?C.slate:C.navy)+"55",position:"relative",overflow:"hidden"}}>
+            {loading&&(
+              <span style={{position:"absolute",left:0,top:0,bottom:0,background:C.navy,opacity:.55,
+                width:(progress&&progress.total?Math.round(progress.done/progress.total*100):8)+"%",
+                transition:"width .5s ease"}}/>
+            )}
+            <span style={{position:"relative"}}>
+              {loading
+                ? (progress&&progress.total
+                    ? "Rédaction — section "+Math.min(progress.done+1,progress.total)+" sur "+progress.total
+                    : "Génération en cours...")
+                : "Générer la note"}
+            </span>
           </button>
         </div>
       </div>
