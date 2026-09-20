@@ -2982,13 +2982,15 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
             style={{flex:2,height:52,background:loading?C.slate:C.navy,border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:loading?"wait":"pointer",boxShadow:"0 2px 12px "+(loading?C.slate:C.navy)+"55",position:"relative",overflow:"hidden"}}>
             {loading&&(
               <span style={{position:"absolute",left:0,top:0,bottom:0,background:C.navy,opacity:.55,
-                width:(progress&&progress.total?Math.round(progress.done/progress.total*100):8)+"%",
+                width:(progress&&progress.total?Math.max(8,Math.round(progress.done/progress.total*100)):8)+"%",
                 transition:"width .5s ease"}}/>
             )}
             <span style={{position:"relative"}}>
               {loading
                 ? (progress&&progress.total
-                    ? "Rédaction — section "+Math.min(progress.done+1,progress.total)+" sur "+progress.total
+                    ? (progress.done>=progress.total
+                        ? "Finalisation de la note..."
+                        : "Rédaction — section "+(progress.done+1)+" sur "+progress.total)
                     : "Génération en cours...")
                 : "Générer la note"}
             </span>
