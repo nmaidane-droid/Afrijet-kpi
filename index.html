@@ -1498,6 +1498,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   const [licence,setLic]   = useState("");
   const [dates,setDates]   = useState({});     // échéances saisies
   const [editing,setEditing] = useState(null); // id en cours d edition
+  const ficheRef = useRef(null);               // pour remonter à la fiche en modification
 
   const addOrUpdate = () => {
     if (!nom.trim()||!prenom.trim()) { alert("Nom et prenom requis"); return; }
@@ -1517,6 +1518,12 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   const startEdit = m => {
     setEditing(m.id); setNom(m.nom); setPrenom(m.prenom);
     setRole(m.role); setLic(m.licence||""); setDates({...(m.dates||{})});
+    // Le formulaire est au-dessus de la liste : on y remonte pour éviter
+    // que l'utilisateur ait à faire défiler l'écran.
+    setTimeout(()=>{
+      if(ficheRef.current&&ficheRef.current.scrollIntoView)
+        ficheRef.current.scrollIntoView({behavior:"smooth",block:"start"});
+    },60);
   };
 
   const remove = id => setCrew(c => c.filter(m => m.id!==id));
@@ -1527,6 +1534,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div ref={ficheRef} style={{scrollMarginTop:70}}/>
       <Card accent="#0369A1">
         <FHeader icon="👨‍✈️" title={editing!==null?"Modifier membre":"Ajouter membre"} subtitle="Registre equipage CN-KTA" color="#0369A1"/>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
