@@ -278,7 +278,7 @@ function FLabel({ children }) {
   );
 }
 
-function FField({ label, value, onChange, type="text", min, max, placeholder, step, raw }) {
+function FField({ label, value, onChange, type="text", min, max, placeholder, step, raw, small }) {
   const [focused, setFocused] = useState(false);
   const handleChange = e => {
     // raw : conserve la casse saisie (noms propres). Sinon, majuscules comme avant.
@@ -293,7 +293,7 @@ function FField({ label, value, onChange, type="text", min, max, placeholder, st
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={{ width:"100%", height:48, boxSizing:"border-box",
                  background:focused?"#FFF":C.bg, border:"1.5px solid "+(focused?C.gold:C.border),
-                 borderRadius:10, padding:"0 14px", color:C.text, fontSize:14, outline:"none" }}/>
+                 borderRadius:10, padding:small?"0 10px":"0 14px", color:C.text, fontSize:small?12:14, outline:"none" }}/>
     </div>
   );
 }
@@ -1075,7 +1075,7 @@ function joursAvant(d){
 function statutEcheance(d){
   const j=joursAvant(d);
   if(j===null) return {code:'vide',  color:'#94A3B8', bg:'#F4F7FB', label:'Non renseigné'};
-  if(j<0)      return {code:'echu',  color:'#FFFFFF', bg:'#DC2626', label:'Échu depuis '+(-j)+' j'};
+  if(j<0)      return {code:'echu',  color:'#FFFFFF', bg:'#DC2626', label:'Échu · '+(-j)+' j'};
   if(j<=30)    return {code:'proche',color:'#FFFFFF', bg:'#D97706', label:j+' j restants'};
   if(j<=90)    return {code:'alerte',color:'#92400E', bg:'#FEF3C7', label:j+' j restants'};
   return              {code:'ok',    color:'#065F46', bg:'#D1FAE5', label:j+' j restants'};
@@ -1534,15 +1534,19 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
             <FField label="Nom *" value={nom} onChange={setNom}/>
             <FField label="Prenom *" value={prenom} onChange={setPrenom}/>
           </FGrid>
-          <div style={{display:'flex',gap:12}}>
-            <div style={{flex:1}}>
+          <div style={{display:'flex',gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
               <FLabel>Rôle</FLabel>
               <CustomSelect value={role} onChange={setRole} placeholder='-- Choisir --'
-                options={ROLES.map(r=>({value:r,label:r==="TRI"?"TRI — Instructeur":r==="CM1"?"CDB — Commandant":r==="CM2"?"OPL — Co-pilote":"CC — Hôtesse / Steward"}))}/>
+                options={ROLES.map(r=>({
+                  value:r,
+                  label:r==="CM1"?"CDB":r==="CM2"?"OPL":r,
+                  sub:r==="TRI"?"Instructeur":r==="CM1"?"Commandant de bord":r==="CM2"?"Co-pilote":"Hôtesse / Steward"
+                }))}/>
             </div>
-            <div style={{flex:1}}>
+            <div style={{flex:1,minWidth:0}}>
               <FLabel>N° de licence</FLabel>
-              <FField label='' value={licence} onChange={setLic} raw/>
+              <FField label='' value={licence} onChange={setLic} raw small/>
             </div>
           </div>
 
@@ -1568,9 +1572,10 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
                           border:"1.5px solid "+C.border,borderRadius:9,padding:"0 10px",
                           fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
                     </div>
-                    <div style={{width:92,flexShrink:0,textAlign:"center",alignSelf:"flex-end",
-                      background:st.bg,color:st.color,borderRadius:8,padding:"9px 4px",
-                      fontSize:9.5,fontWeight:700,lineHeight:1.2}}>
+                    <div style={{width:100,height:38,flexShrink:0,alignSelf:"flex-end",
+                      background:st.bg,color:st.color,borderRadius:9,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:9.5,fontWeight:700,whiteSpace:"nowrap"}}>
                       {st.label}
                     </div>
                   </div>
