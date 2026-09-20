@@ -2151,6 +2151,27 @@ function ndsRenumber(sections){
 
 /* ── Archives NDS (localStorage) ── */
 const NDS_ARCHIVE_KEY = 'ns:archive';
+// Clé de tri d'une note : on privilégie la date contenue dans la référence
+// (NS-XXX-AAAAMMJJ-NN), sinon la date affichée en français, sinon l'horodatage
+// d'enregistrement. Retourne un nombre comparable, 0 si rien n'est exploitable.
+const NDS_MOIS = {janvier:1,'février':2,fevrier:2,mars:3,avril:4,mai:5,juin:6,
+  juillet:7,'août':8,aout:8,septembre:9,octobre:10,novembre:11,'décembre':12,decembre:12};
+function ndsDateKey(r){
+  const m = /^NS-[A-Z]+-(\d{4})(\d{2})(\d{2})-/.exec(String(r.ref||'').trim());
+  if(m) return Number(m[1]+m[2]+m[3]);
+  const d = String(r.date||'').trim().toLowerCase();
+  const dm = /^(\d{1,2})\s+([a-zéûôA-ZÉÛÔ]+)\s+(\d{4})$/.exec(d);
+  if(dm){
+    const mo = NDS_MOIS[dm[2]];
+    if(mo) return Number(dm[3]) * 10000 + mo * 100 + Number(dm[1]);
+  }
+  if(r.savedAt){
+    const t = Date.parse(r.savedAt);
+    if(!isNaN(t)) return t / 1000;
+  }
+  return 0;
+}
+
 function ndsLoadArchive(){
   try{
     const arch = JSON.parse(localStorage.getItem(NDS_ARCHIVE_KEY) || '[]');
@@ -2818,7 +2839,8 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
     const filtered=archive.filter(r=>
       (r.ref||'').toLowerCase().includes(f)||
       (r.objet||'').toLowerCase().includes(f)||
-      (r.category||'').toLowerCase().includes(f));
+      (r.category||'').toLowerCase().includes(f))
+      .slice().sort((a,b)=>ndsDateKey(b)-ndsDateKey(a));   // plus récente en tête
     return (
       <Card accent="#0F1F3D">
         {Toast}
