@@ -2162,6 +2162,10 @@ const NDS_DIFFUSION = [
   'Ensemble du personnel'
 ];
 
+// Le compte rendu destiné à l'autorité ne circule pas en interne :
+// les services concernés reçoivent le rapport d'événement (RE).
+const DGAC_DESTINATAIRE = "Direction Générale de l'Aviation Civile";
+
 const NDS_STYLE_REF = `Registre : note de service aéronautique interne, rigoureuse, factuelle, rédigée à la troisième personne ou à l'impératif de consigne. Vocabulaire technique précis (aviation, EASA/ICAO le cas échéant). Phrases construites, paragraphes courts, puces "•" pour les énumérations. Aucune familiarité. Chaque section doit être autonome et actionnable pour un équipage ou un service. La société est Sahara Aviation SAS — Afrijet Sahara, basée à Dakhla, Maroc.
 
 PARC AÉRIEN — RÈGLE STRICTE : la flotte exploitée est l'Embraer EMB-140 LR, équipé de moteurs Rolls-Royce AE3007. Toute mention d'appareil, de moteur, de type de cellule ou de caractéristique technique (compresseur, ITT/EGT, capacité, etc.) doit obligatoirement se référer à cette configuration exacte : EMB-140 LR / AE3007. N'invente et ne mentionne aucun autre type d'appareil (pas d'EMB-145, pas d'autre motorisation) sauf si le sujet fourni par l'utilisateur le nomme explicitement autrement.`;
@@ -2665,10 +2669,22 @@ function FormNDS({ onBack, safetyData, flights, aircraft }){
 
   const refBase=()=> mode==="re" ? "RE" : mode==="dgac" ? "ND" : mode==="as" ? "AS" : "NS-"+((cat&&cat.prefix)||"OPS");
   const selectCat=(c)=>{ setCat(c); if(mode==="nds") setRef(ndsNextRef("NS-"+c.prefix)); };
-  const selectMode=(m)=>{ if(!m) return; setMode(m); setErr(""); setRef(ndsNextRef(
-    m==="re"?"RE":m==="dgac"?"ND":m==="as"?"AS":"NS-"+((cat&&cat.prefix)||"OPS"))); };
+  const selectMode=(m)=>{
+    if(!m) return;
+    setMode(m); setErr("");
+    setRef(ndsNextRef(m==="re"?"RE":m==="dgac"?"ND":m==="as"?"AS":"NS-"+((cat&&cat.prefix)||"OPS")));
+    // Mention par défaut : un compte rendu adressé à l'autorité ne relève pas
+    // de la diffusion interne. Le champ reste modifiable document par document.
+    setClassification(prev=>{
+      if(m==="dgac") return prev==="Diffusion interne" ? "Notification à l'autorité" : prev;
+      return prev==="Notification à l'autorité" ? "Diffusion interne" : prev;
+    });
+  };
   const toggleDiff=(opt)=>setDiffusion(d=>d.includes(opt)?d.filter(x=>x!==opt):[...d,opt]);
-  const computeTo=()=>{ const p=[...diffusion]; if(toCustom.trim()) p.push(toCustom.trim()); return p.join(', '); };
+  const computeTo=()=>{
+    if(mode==="dgac") return DGAC_DESTINATAIRE;   // pas de diffusion interne
+    const p=[...diffusion]; if(toCustom.trim()) p.push(toCustom.trim()); return p.join(', ');
+  };
 
   // Fusionne les saisies en cours dans la note — équivalent de syncStateFromDOM()
   const syncNote=(n)=>{
@@ -3305,6 +3321,15 @@ Diffusion prévue : ${to||'Non précisée'}`;
             style={{width:"100%",minHeight:56,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",resize:"vertical"}}/>
         </div>
         <FSection title="Diffusion" color="#0F1F3D"/>
+        {mode==="dgac" ? (
+          <div style={{background:"#EFF6FF",border:"1.5px solid #0369A1",borderRadius:10,padding:"12px 14px"}}>
+            <div style={{fontWeight:700,fontSize:12.5,color:"#0369A1"}}>{DGAC_DESTINATAIRE}</div>
+            <div style={{fontSize:10.5,color:C.slate,marginTop:4,lineHeight:1.5}}>
+              Ce compte rendu est destiné à l’autorité. Les services internes — équipage, maintenance,
+              direction — sont informés par le rapport d’événement (RE), qui comporte l’analyse.
+            </div>
+          </div>
+        ) : (
         <div style={{display:"flex",flexDirection:"column",gap:2}}>
           {NDS_DIFFUSION.map(opt=>{
             const on=diffusion.includes(opt);
@@ -3317,7 +3342,8 @@ Diffusion prévue : ${to||'Non précisée'}`;
             );
           })}
         </div>
-        <FField label="Destinataire complémentaire" value={toCustom} onChange={setToCustom}/>
+        )}
+        {mode!=="dgac"&&<FField label="Destinataire complémentaire" value={toCustom} onChange={setToCustom}/>}
         <FSection title="En-tête du document" color="#0F1F3D"/>
         <FField label="Émetteur" value={from} onChange={setFrom}/>
         <FField label="Approuvé par" value={approbNom} onChange={setApprobNom} raw/>
