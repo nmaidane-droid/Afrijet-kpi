@@ -2091,6 +2091,53 @@ const NDS_CATEGORIES = [
    sections:['Contexte','Décision','Modalités pratiques','Personnel concerné','Contact / Questions']}
 ];
 
+// ── Les trois familles de documents produits par le générateur ──────────────
+// Toutes aboutissent au même objet note (ref, date, objet, intro, sections…),
+// ce qui permet de réutiliser tel quel l'archivage, l'édition et l'export PDF.
+const NDS_MODES = [
+  {id:'nds', label:'Note de service',      hint:'Consigne, décision',     docType:'NOTE DE SERVICE'},
+  {id:'re',  label:"Rapport d'événement",  hint:'Occurrence — EASA',      docType:"RAPPORT D'ÉVÉNEMENT"},
+  {id:'as',  label:'Analyse de sécurité',  hint:'Tendances sur période',  docType:'ANALYSE DE SÉCURITÉ'},
+];
+
+// Trame alignée sur le règlement (UE) 376/2014 relatif aux comptes rendus
+// d'événements dans l'aviation civile.
+const RE_SECTIONS = [
+  'Identification de l\u2019événement',
+  'Description factuelle',
+  'Conditions et circonstances',
+  'Conséquences',
+  'Actions immédiates',
+  'Analyse et facteurs contributifs',
+  'Évaluation du risque',
+  'Mesures correctives et préventives',
+];
+
+const AS_SECTIONS = [
+  'Périmètre et méthode',
+  'Données de la période',
+  'Tendances observées',
+  'Récurrences et signaux faibles',
+  'Évaluation globale du risque',
+  'Recommandations',
+];
+
+// Phases de vol (taxonomie OACI/ECCAIRS, formulation courante)
+const RE_PHASES = ['Stationnement','Roulage','Décollage','Montée','Croisière',
+  'Descente','Approche','Atterrissage','Après atterrissage','Au sol — maintenance'];
+
+// Libellés des indicateurs enregistrés dans le formulaire Sécurité
+const SAFETY_FLAGS = [
+  {k:'approche',    l:'Approche non stabilisée'},
+  {k:'tcas',        l:'TCAS RA'},
+  {k:'gpws',        l:'Alerte GPWS / EGPWS'},
+  {k:'hardLanding', l:'Atterrissage dur'},
+  {k:'safa',        l:'Constat SAFA'},
+];
+function safetyLabels(e){
+  return SAFETY_FLAGS.filter(f=>e && e[f.k]).map(f=>f.l);
+}
+
 const NDS_DIFFUSION = [
   'Ensemble des Pilotes (PNT)',
   'Encadrement Opérations',
@@ -2112,8 +2159,8 @@ function ndsTodayStamp(){
 // Plus haut numéro déjà utilisé pour ce préfixe et cette date, d'après les archives.
 // Le compteur localStorage seul ne suffit pas : une note importée ou un compteur
 // réinitialisé conduirait à proposer un numéro déjà attribué.
-function ndsMaxSeqInArchive(prefix, stamp){
-  const re = new RegExp('^NS-'+prefix+'-'+stamp+'-(\\d+)$');
+function ndsMaxSeqInArchive(base, stamp){
+  const re = new RegExp('^'+base+'-'+stamp+'-(\\d+)$');
   let max = 0;
   try{
     (JSON.parse(localStorage.getItem(NDS_ARCHIVE_KEY)||'[]')).forEach(r=>{
@@ -2123,17 +2170,19 @@ function ndsMaxSeqInArchive(prefix, stamp){
   }catch(_e){}
   return max;
 }
-function ndsNextRef(prefix){
-  const p=prefix||'OPS', stamp=ndsTodayStamp();
-  const counter=parseInt(lsGet(`ns:seq:${p}-${stamp}`)||'0',10);
-  const seq=Math.max(counter, ndsMaxSeqInArchive(p,stamp))+1;
-  return `NS-${p}-${stamp}-${String(seq).padStart(2,'0')}`;
+// base vaut 'NS-OPS', 'NS-TEC'… pour les notes, 'RE' pour un rapport
+// d'événement, 'AS' pour une analyse de sécurité.
+function ndsNextRef(base){
+  const b=base||'NS-OPS', stamp=ndsTodayStamp();
+  const counter=parseInt(lsGet(`ns:seq:${b}-${stamp}`)||'0',10);
+  const seq=Math.max(counter, ndsMaxSeqInArchive(b,stamp))+1;
+  return `${b}-${stamp}-${String(seq).padStart(2,'0')}`;
 }
-function ndsCommitRef(prefix){
-  const p=prefix||'OPS', stamp=ndsTodayStamp();
-  const counter=parseInt(lsGet(`ns:seq:${p}-${stamp}`)||'0',10);
-  const seq=Math.max(counter, ndsMaxSeqInArchive(p,stamp))+1;
-  lsSet(`ns:seq:${p}-${stamp}`, String(seq));
+function ndsCommitRef(base){
+  const b=base||'NS-OPS', stamp=ndsTodayStamp();
+  const counter=parseInt(lsGet(`ns:seq:${b}-${stamp}`)||'0',10);
+  const seq=Math.max(counter, ndsMaxSeqInArchive(b,stamp))+1;
+  lsSet(`ns:seq:${b}-${stamp}`, String(seq));
 }
 function ndsRenumber(sections){
   return sections.map((sec,idx)=>{
@@ -2157,7 +2206,7 @@ const NDS_ARCHIVE_KEY = 'ns:archive';
 const NDS_MOIS = {janvier:1,'février':2,fevrier:2,mars:3,avril:4,mai:5,juin:6,
   juillet:7,'août':8,aout:8,septembre:9,octobre:10,novembre:11,'décembre':12,decembre:12};
 function ndsDateKey(r){
-  const m = /^NS-[A-Z]+-(\d{4})(\d{2})(\d{2})-/.exec(String(r.ref||'').trim());
+  const m = /^(?:NS-[A-Z]+|RE|AS)-(\d{4})(\d{2})(\d{2})-/.exec(String(r.ref||'').trim());
   if(m) return Number(m[1]+m[2]+m[3]);
   const d = String(r.date||'').trim().toLowerCase();
   const dm = /^(\d{1,2})\s+([a-zéûôA-ZÉÛÔ]+)\s+(\d{4})$/.exec(d);
@@ -2420,7 +2469,7 @@ function ndsExportPDF(state, opts={}){
   doc.setFont('helvetica','bold');
   doc.setFontSize(17);
   doc.setTextColor(30,41,59);
-  doc.text('NOTE DE SERVICE', marginX, y);
+  doc.text(state.docType || 'NOTE DE SERVICE', marginX, y);
   y += 6;
   doc.setFont('helvetica','normal');
   doc.setFontSize(9);
@@ -2553,16 +2602,24 @@ function NdsEditable({ html, field, live, onCommit, style, tag }){
   });
 }
 
-function FormNDS({ onBack }){
+function FormNDS({ onBack, safetyData, flights, aircraft }){
   const [tab,setTab]=useState("editor");           // editor | archive
   const [cat,setCat]=useState(NDS_CATEGORIES[2]);
-  const [ref,setRef]=useState(ndsNextRef('OPS'));
+  const [ref,setRef]=useState(ndsNextRef('NS-OPS'));
   const [subject,setSubject]=useState("");
   const [keyPoints,setKeyPoints]=useState("");
   const [toCustom,setToCustom]=useState("");
   const [diffusion,setDiffusion]=useState(["Ensemble des Pilotes (PNT)","Encadrement Opérations"]);
   const [from,setFrom]=useState("Direction des Opérations Aériennes");
   const [approbNom,setApprobNom]=useState("CDB Noureddine ERRAZI");
+  const [mode,setMode]=useState("nds");              // nds | re | as
+  const [reEvent,setReEvent]=useState("");           // événement sélectionné
+  const [reNarratif,setReNarratif]=useState("");     // récit des faits
+  const [rePhase,setRePhase]=useState("");
+  const [reMeteo,setReMeteo]=useState("");
+  const [reConseq,setReConseq]=useState("");
+  const [reActions,setReActions]=useState("");
+  const [asPeriode,setAsPeriode]=useState("90");     // jours
   const [classification,setClassification]=useState("Diffusion interne");
   const [revision,setRevision]=useState("01");
   const [loading,setLoading]=useState(false);
@@ -2575,7 +2632,27 @@ function FormNDS({ onBack }){
   const [toast,setToast]=useState("");
 
   const flash=(m)=>{ setToast(m); setTimeout(()=>setToast(""),2800); };
-  const selectCat=(c)=>{ setCat(c); setRef(ndsNextRef(c.prefix)); };
+  // Événements de sécurité, du plus récent au plus ancien
+  const sortedEvents=()=> (safetyData||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  const eventKey=(e)=> `${e.date}|${e.num}|${e.from||''}|${e.to||''}`;
+  const selectedEvent=()=> sortedEvents().find(e=>eventKey(e)===reEvent) || null;
+  // Vol correspondant à l'événement, pour enrichir le rapport
+  const linkedFlight=(e)=> (flights||[]).find(f=>
+      f.date===e.date && (f.acId===e.acId || f.num===e.num ||
+      ((f.from===e.from)&&(f.to===e.to)))) || null;
+  // Événements compris dans la période d'analyse
+  const asEvents=()=>{
+    const j=Number(asPeriode)||90;
+    const lim=new Date(); lim.setHours(0,0,0,0); lim.setDate(lim.getDate()-j);
+    return (safetyData||[]).filter(e=>{
+      const d=new Date(e.date); return !isNaN(d) && d>=lim;
+    }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  };
+
+  const refBase=()=> mode==="re" ? "RE" : mode==="as" ? "AS" : "NS-"+((cat&&cat.prefix)||"OPS");
+  const selectCat=(c)=>{ setCat(c); if(mode==="nds") setRef(ndsNextRef("NS-"+c.prefix)); };
+  const selectMode=(m)=>{ setMode(m); setErr(""); setRef(ndsNextRef(
+    m==="re"?"RE":m==="as"?"AS":"NS-"+((cat&&cat.prefix)||"OPS"))); };
   const toggleDiff=(opt)=>setDiffusion(d=>d.includes(opt)?d.filter(x=>x!==opt):[...d,opt]);
   const computeTo=()=>{ const p=[...diffusion]; if(toCustom.trim()) p.push(toCustom.trim()); return p.join(', '); };
 
@@ -2607,11 +2684,11 @@ function FormNDS({ onBack }){
       // id placé APRÈS le spread : sinon l'id hérité de la note ouverte
       // écrase le nouvel identifiant et deux archives partagent la même clé.
       id: idx>=0?arch[idx].id:(cur.ref+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),
-      category: cat?cat.label:'',
+      category: mode==="nds" ? (cat?cat.label:'') : (NDS_MODES.find(m=>m.id===mode)||{}).label || '',
       savedAt: new Date().toISOString()
     };
     if(idx>=0){ arch[idx]=record; if(!ndsPersistArchive(arch))return; flash('Note mise à jour — '+record.ref); }
-    else { arch.unshift(record); if(!ndsPersistArchive(arch))return; ndsCommitRef(cat?cat.prefix:'OPS'); setRef(ndsNextRef(cat?cat.prefix:'OPS')); flash('Note enregistrée — '+record.ref); }
+    else { arch.unshift(record); if(!ndsPersistArchive(arch))return; ndsCommitRef(refBase()); setRef(ndsNextRef(refBase())); flash('Note enregistrée — '+record.ref); }
     setArchive(arch);
   };
 
@@ -2652,6 +2729,7 @@ function FormNDS({ onBack }){
             classification: rec.classification||'Diffusion interne',
             revision: rec.revision||'01',
             approbNom: rec.approbNom||'CDB Noureddine ERRAZI',
+            docType: rec.docType||'NOTE DE SERVICE',
             objet: rec.objet||'',
             intro: rec.intro||'',
             sections: ndsRenumber(rec.sections),
@@ -2677,46 +2755,162 @@ function FormNDS({ onBack }){
 
   const generate=async()=>{
     setErr("");
-    if(!subject.trim()){ setErr("Le sujet de la note est requis."); return; }
-    if(!cat){ setErr("Sélectionnez une catégorie."); return; }
+    // Contrôles propres à chaque mode
+    if(mode==="nds"){
+      if(!subject.trim()){ setErr("Le sujet de la note est requis."); return; }
+      if(!cat){ setErr("Sélectionnez une catégorie."); return; }
+    } else if(mode==="re"){
+      if(!reNarratif.trim()){ setErr("La description factuelle de l'événement est requise."); return; }
+    } else {
+      if(asEvents().length===0){ setErr("Aucun événement de sécurité sur la période choisie."); return; }
+    }
     setProgress(null);
     setLoading(true);
     const to=computeTo();
-    const touchesMaint=diffusion.includes('Maintenance / Technique');
-    const touchesCrew=diffusion.includes('Ensemble des Pilotes (PNT)')||diffusion.includes('Encadrement Opérations');
-    const shouldFuse=touchesMaint&&touchesCrew&&['technique','operationnel'].includes(cat.id);
-    const FUSION=['Contexte','Causes et mécanismes techniques','Risques opérationnels et techniques','Mesures d\u2019atténuation et modalités d\u2019application','Procédures équipage, maintenance et responsabilités'];
-    const skeleton=shouldFuse?FUSION:cat.sections;
-    const fusionInstr=shouldFuse?`\n\nCette note est diffusée à la fois au personnel navigant (${to}) et à la maintenance technique : chaque section pertinente doit combiner l'angle technique (causes, mécanismes physiques, paramètres moteur, seuils) ET l'angle opérationnel/procédural (actions équipage, seuils de déclenchement, procédures, responsabilités). Ne traite pas un seul angle en ignorant l'autre — les deux publics doivent trouver une information directement exploitable pour leur rôle respectif.`:'';
 
-    const systemPrompt=`Tu rédiges des notes de service internes pour une compagnie aérienne. ${NDS_STYLE_REF}
-
-Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant/après, sans balises markdown, au format exact :
+    // Règles de format communes aux trois documents
+    const FORMAT_RULES=`Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant/après, sans balises markdown, au format exact :
 {
-  "objet": "phrase d'objet complète, précise, en une ou deux lignes",
-  "intro": "paragraphe d'introduction (3-5 phrases) situant le contexte et le but de la note",
+  "objet": "phrase d'objet complète et précise, en une ou deux lignes",
+  "intro": "paragraphe d'introduction (3-5 phrases)",
   "sections": [
-    {"title": "Titre section 1", "content": "contenu détaillé, plusieurs phrases et/ou puces avec •"},
-    {"title": "Risques", "content": "phrase d'intro courte ou chaîne vide", "table": {"headers": ["Risque","Origine / Facteur déclenchant","Conséquence opérationnelle"], "rows": [["...","...","..."]], "note": "Nota : phrase de nuance/contexte replaçant les risques dans leur cadre normal d'exploitation, dans l'esprit d'un rappel réglementaire — ou omettre ce champ si non pertinent."}}
+    {"title": "Titre de section", "content": "contenu détaillé"},
+    {"title": "Section avec tableau", "content": "phrase d'intro courte ou chaîne vide", "table": {"headers": ["...","...","..."], "rows": [["...","...","..."]], "note": "Nota : ... (facultatif)"}}
   ]
 }
+
+Mise en forme du champ "content" (obligatoire, pour un rendu PDF correct) :
+- Sous-titre éventuel EN MAJUSCULES sur sa propre ligne (séparée par \\n), au format "1. TITRE".
+- Chaque puce commence par "• " et occupe sa propre ligne (séparée par \\n).
+- Les phrases de liaison restent en paragraphe normal, sur leur propre ligne.
+
+Format JSON strict : échappe tous les retours à la ligne en \\n et tous les guillemets internes en \\" à l'intérieur des chaînes. N'insère jamais un saut de ligne réel dans une valeur de chaîne. N'utilise pas de guillemets typographiques à l'intérieur du JSON.`;
+
+    let skeleton, systemPrompt, userPrompt;
+
+    // ══ MODE 1 — NOTE DE SERVICE ══ (inchangé)
+    if(mode==="nds"){
+      const touchesMaint=diffusion.includes('Maintenance / Technique');
+      const touchesCrew=diffusion.includes('Ensemble des Pilotes (PNT)')||diffusion.includes('Encadrement Opérations');
+      const shouldFuse=touchesMaint&&touchesCrew&&['technique','operationnel'].includes(cat.id);
+      const FUSION=['Contexte','Causes et mécanismes techniques','Risques opérationnels et techniques','Mesures d\u2019atténuation et modalités d\u2019application','Procédures équipage, maintenance et responsabilités'];
+      skeleton=shouldFuse?FUSION:cat.sections;
+      const fusionInstr=shouldFuse?`\n\nCette note est diffusée à la fois au personnel navigant (${to}) et à la maintenance technique : chaque section pertinente doit combiner l'angle technique (causes, mécanismes physiques, paramètres moteur, seuils) ET l'angle opérationnel/procédural (actions équipage, seuils de déclenchement, procédures, responsabilités). Ne traite pas un seul angle en ignorant l'autre — les deux publics doivent trouver une information directement exploitable pour leur rôle respectif.`:'';
+
+      systemPrompt=`Tu rédiges des notes de service internes pour une compagnie aérienne. ${NDS_STYLE_REF}
+
+${FORMAT_RULES}
 
 La note doit obligatoirement comporter ces sections, dans cet ordre, avec des titres identiques ou très proches : ${skeleton.join(' / ')}.
 Chaque section doit contenir un contenu substantiel (60 à 120 mots), concret et actionnable, pas de généralités vagues — reste dans cette fourchette, ne dépasse pas 120 mots par section.${fusionInstr}
 
-Tableau des risques (obligatoire dès qu'une section traite des risques ou de leurs conséquences — titre contenant "Risque(s)") : ajoute un champ "table" avec exactement les colonnes ["Risque","Origine / Facteur déclenchant","Conséquence opérationnelle"] et 4 à 7 lignes concrètes et spécifiques au sujet (jamais de généralités). Le "content" de cette section reste court (une phrase d'intro, ou une chaîne vide) — le détail va dans le tableau, pas dans le texte. Ajoute aussi un champ "note" dans "table" reprenant, sous forme d'une phrase de type "Nota : ...", une nuance replaçant ces risques dans le cadre normal d'exploitation ; omets ce champ si ça n'apporte rien. N'ajoute PAS de champ "table" pour les autres sections.
+Tableau des risques (obligatoire dès qu'une section traite des risques — titre contenant "Risque(s)") : ajoute un champ "table" avec exactement les colonnes ["Risque","Origine / Facteur déclenchant","Conséquence opérationnelle"] et 4 à 7 lignes concrètes et spécifiques au sujet. Le "content" de cette section reste court. N'ajoute PAS de champ "table" pour les autres sections.`;
 
-Mise en forme du champ "content" de chaque section (obligatoire, pour un rendu PDF correct) :
-- Si une section a besoin de sous-parties, écris chaque sous-titre EN MAJUSCULES sur sa PROPRE ligne (séparée par \\n), au format "1. TITRE DU SOUS-POINT".
-- Chaque puce commence par "• " et occupe sa propre ligne (séparée par \\n).
-- Les phrases de liaison qui ne sont ni un sous-titre ni une puce restent en paragraphe normal, sur leur propre ligne.
-
-Format JSON strict : échappe tous les retours à la ligne en \\n et tous les guillemets internes en \\" à l'intérieur des chaînes. N'insère jamais un saut de ligne réel dans une valeur de chaîne. N'utilise pas de guillemets typographiques à l'intérieur du JSON.`;
-
-    const userPrompt=`Sujet de la note : ${subject}
+      userPrompt=`Sujet de la note : ${subject}
 Catégorie : ${cat.label}
 Diffusion : ${to}
 ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
+    }
+
+    // ══ MODE 2 — RAPPORT D'ÉVÉNEMENT ══
+    else if(mode==="re"){
+      skeleton=RE_SECTIONS;
+      const ev=selectedEvent();
+      const vol=ev?linkedFlight(ev):null;
+      const faits=[];
+      if(ev){
+        faits.push(`Date de l'événement : ${ev.date}`);
+        faits.push(`Appareil : ${ev.num}`);
+        if(ev.from||ev.to) faits.push(`Route : ${ev.from||'?'} → ${ev.to||'?'}`);
+        const lab=safetyLabels(ev);
+        if(lab.length) faits.push(`Indicateurs enregistrés : ${lab.join(', ')}`);
+      }
+      if(vol){
+        if(vol.num)  faits.push(`N° de vol : ${vol.num}`);
+        if(vol.cm1)  faits.push(`CDB : ${vol.cm1}`);
+        if(vol.cm2)  faits.push(`OPL : ${vol.cm2}`);
+        if(vol.cc)   faits.push(`PNC : ${vol.cc}`);
+        if(vol.pax!==undefined&&vol.pax!=='') faits.push(`Passagers : ${vol.pax}`);
+        if(vol.dep)  faits.push(`Départ prévu (GMT) : ${vol.dep}`);
+        if(vol.delayMin) faits.push(`Retard constaté : ${vol.delayMin} min`);
+      }
+      if(rePhase)  faits.push(`Phase de vol : ${rePhase}`);
+      if(reMeteo)  faits.push(`Conditions météorologiques : ${reMeteo}`);
+      if(reConseq) faits.push(`Conséquences rapportées : ${reConseq}`);
+      if(reActions)faits.push(`Actions immédiates rapportées : ${reActions}`);
+
+      systemPrompt=`Tu rédiges un compte rendu d'événement pour une compagnie aérienne, dans l'esprit du règlement (UE) 376/2014 relatif aux comptes rendus d'événements dans l'aviation civile. ${NDS_STYLE_REF}
+
+${FORMAT_RULES}
+
+Le rapport doit comporter ces sections, dans cet ordre, avec des titres identiques ou très proches : ${skeleton.join(' / ')}.
+
+RÈGLE ABSOLUE — N'INVENTE AUCUN FAIT. Tu ne disposes que des éléments transmis par le rédacteur. Il t'est interdit d'ajouter une altitude, une vitesse, un cap, une heure, un nom, un relevé météo ou tout autre élément factuel qui ne t'a pas été fourni. Lorsqu'une information manque pour renseigner une rubrique, écris explicitement « Non renseigné » ou « À compléter par le rédacteur ». Un rapport incomplet est acceptable ; un rapport inventé ne l'est pas.
+
+Distingue nettement les faits établis, repris des éléments fournis, et l'analyse, qui relève de l'hypothèse. Dans la section d'analyse, introduis les hypothèses par des formulations explicites du type « il est possible que » ou « cette hypothèse reste à confirmer ».
+
+Section « Évaluation du risque » : ajoute un champ "table" avec les colonnes ["Critère","Appréciation proposée","Justification"] portant sur la gravité, la probabilité de récurrence et le niveau de risque qui en découle. Ajoute un champ "note" rappelant que cette appréciation est une proposition soumise à la validation du responsable SGS. N'ajoute PAS de tableau aux autres sections.
+
+Ton factuel, neutre, sans jugement sur les personnes. Ne désigne jamais un membre d'équipage comme responsable.`;
+
+      userPrompt=`ÉLÉMENTS FACTUELS ENREGISTRÉS PAR L'APPLICATION :
+${faits.length?faits.join('\n'):'(aucun élément structuré disponible)'}
+
+DESCRIPTION DES FAITS PAR LE RÉDACTEUR :
+${reNarratif}
+${subject.trim()?'\nPRÉCISIONS COMPLÉMENTAIRES :\n'+subject:''}
+${keyPoints.trim()?'\nPOINTS À INTÉGRER IMPÉRATIVEMENT :\n'+keyPoints:''}
+
+Diffusion prévue : ${to||'Non précisée'}`;
+    }
+
+    // ══ MODE 3 — ANALYSE DE SÉCURITÉ ══
+    else {
+      skeleton=AS_SECTIONS;
+      const evs=asEvents();
+      const jours=Number(asPeriode);
+      const compte={};
+      SAFETY_FLAGS.forEach(f=>{ compte[f.l]=evs.filter(e=>e[f.k]).length; });
+      const parAppareil={};
+      evs.forEach(e=>{ parAppareil[e.num]=(parAppareil[e.num]||0)+1; });
+      const parRoute={};
+      evs.forEach(e=>{ const r=(e.from||'?')+'→'+(e.to||'?'); parRoute[r]=(parRoute[r]||0)+1; });
+
+      const detail=evs.map(e=>`${e.date} · ${e.num} · ${e.from||'?'}→${e.to||'?'} · ${safetyLabels(e).join(', ')||'aucun indicateur'}`).join('\n');
+
+      systemPrompt=`Tu réalises l'analyse périodique des événements de sécurité d'une compagnie aérienne, dans l'esprit d'un système de gestion de la sécurité (SGS). ${NDS_STYLE_REF}
+
+${FORMAT_RULES}
+
+L'analyse doit comporter ces sections, dans cet ordre, avec des titres identiques ou très proches : ${skeleton.join(' / ')}.
+
+RÈGLE ABSOLUE — Tu ne disposes que des données chiffrées transmises. N'invente aucun événement, aucune circonstance, aucune cause que les données ne permettent pas d'établir. Les indicateurs enregistrés sont des cases à cocher : ils indiquent qu'un type d'événement est survenu, sans en décrire les circonstances. Tu peux donc constater des récurrences, mais pas en expliquer l'origine — présente toute explication comme une hypothèse à vérifier.
+
+Sois explicite sur les limites : signale que l'analyse porte sur des indicateurs déclaratifs, que l'absence d'enregistrement ne vaut pas absence d'événement, et qu'un effectif faible interdit toute conclusion statistique.
+
+Section « Données de la période » : ajoute un champ "table" avec les colonnes ["Indicateur","Occurrences","Observation"] reprenant exactement les comptes fournis, sans les modifier. N'ajoute PAS de tableau aux autres sections.
+
+Les recommandations doivent être concrètes et proportionnées au volume constaté. N'appelle pas à des mesures lourdes sur la foi d'une seule occurrence.`;
+
+      userPrompt=`PÉRIODE ANALYSÉE : ${jours} derniers jours
+NOMBRE TOTAL D'ÉVÉNEMENTS ENREGISTRÉS : ${evs.length}
+
+COMPTE PAR INDICATEUR :
+${SAFETY_FLAGS.map(f=>`${f.l} : ${compte[f.l]}`).join('\n')}
+
+RÉPARTITION PAR APPAREIL :
+${Object.entries(parAppareil).map(([k,v])=>`${k} : ${v}`).join('\n')||'—'}
+
+RÉPARTITION PAR ROUTE :
+${Object.entries(parRoute).map(([k,v])=>`${k} : ${v}`).join('\n')||'—'}
+
+DÉTAIL DES ÉVÉNEMENTS :
+${detail||'—'}
+${subject.trim()?'\nCONTEXTE FOURNI PAR LE RÉDACTEUR :\n'+subject:''}
+${keyPoints.trim()?'\nPOINTS À INTÉGRER :\n'+keyPoints:''}
+
+Diffusion prévue : ${to||'Non précisée'}`;
+    }
 
     const body={max_tokens:5000,system:systemPrompt,messages:[{role:"user",content:userPrompt}]};
 
@@ -2797,6 +2991,7 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
         ref, date:new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}),
         from, to, classification, revision,
         approbNom,
+        docType:(NDS_MODES.find(m=>m.id===mode)||NDS_MODES[0]).docType,
         objet:parsed.objet||'', intro:parsed.intro||'',
         sections:ndsRenumber(parsed.sections||[]),
         closing:'Cette note de service est applicable dès diffusion et doit être portée à la connaissance du personnel concerné. Toute question ou retour d\u2019expérience relatif à son application est à adresser à la Direction des Opérations Aériennes.'
@@ -2895,7 +3090,7 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
       </div>
       <div style={{fontSize:10.5,color:C.slate,marginBottom:8,fontStyle:"italic"}}>✏️ Touchez un texte pour le modifier directement.</div>
       <div style={{background:"white",border:"1px solid "+C.border,borderRadius:10,padding:"18px 16px",maxHeight:"58vh",overflowY:"auto"}}>
-        <div style={{fontSize:10,color:C.slate,letterSpacing:"0.08em",marginBottom:4}}>NOTE DE SERVICE</div>
+        <div style={{fontSize:10,color:C.slate,letterSpacing:"0.08em",marginBottom:4}}>{note.docType||"NOTE DE SERVICE"}</div>
         <NdsEditable html={note.ref} field="ref" live={live} onCommit={v=>upd({ref:v})}
           style={{fontWeight:800,fontSize:14,color:C.navy,fontFamily:"monospace"}}/>
         <div style={{display:"flex",gap:6,alignItems:"center",fontSize:11,color:C.slate,marginTop:2,marginBottom:12,flexWrap:"wrap"}}>
@@ -2969,9 +3164,83 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
   return (
     <Card accent="#0F1F3D">
       {Toast}
-      <FHeader icon="📋" title="Note de Service" subtitle="Génération assistée par IA" color="#0F1F3D"/>
+      <FHeader icon="📋" title={(NDS_MODES.find(m=>m.id===mode)||NDS_MODES[0]).label} subtitle="Génération assistée par IA" color="#0F1F3D"/>
       {TabBar}
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        {/* Type de document */}
+        <div>
+          <FLabel>Type de document</FLabel>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {NDS_MODES.map(m=>(
+              <button key={m.id} onClick={()=>selectMode(m.id)}
+                style={{padding:"10px 12px",borderRadius:10,cursor:"pointer",textAlign:"left",
+                  border:"1.5px solid "+(mode===m.id?C.navy:C.border),
+                  background:mode===m.id?"#EFF6FF":"white",
+                  WebkitTapHighlightColor:"transparent"}}>
+                <div style={{fontWeight:700,fontSize:12,color:mode===m.id?C.navy:C.text}}>{m.label}</div>
+                <div style={{fontSize:9.5,color:C.slate,marginTop:1}}>{m.hint}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Rapport d'événement ── */}
+        {mode==="re"&&(<>
+          <div>
+            <FLabel>Événement enregistré (optionnel)</FLabel>
+            <CustomSelect value={reEvent} onChange={setReEvent} searchable
+              placeholder="-- Aucun — saisie libre --"
+              options={sortedEvents().map(e=>({
+                value:eventKey(e),
+                label:e.date+" · "+e.num,
+                sub:(e.from||"?")+"→"+(e.to||"?")+" · "+(safetyLabels(e).join(", ")||"aucun indicateur")
+              }))}/>
+            <div style={{fontSize:9.5,color:C.slate,marginTop:4}}>
+              Les éléments du vol correspondant seront joints automatiquement au rapport.
+            </div>
+          </div>
+          <div>
+            <FLabel>Description factuelle *</FLabel>
+            <textarea value={reNarratif} onChange={e=>setReNarratif(e.target.value)}
+              placeholder="Que s'est-il passé ? Décrivez les faits observés, dans l'ordre chronologique, sans interprétation."
+              style={{width:"100%",minHeight:96,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",resize:"vertical"}}/>
+          </div>
+          <div>
+            <FLabel>Phase de vol</FLabel>
+            <CustomSelect value={rePhase} onChange={setRePhase} placeholder="-- Non renseignée --"
+              options={RE_PHASES.map(p=>({value:p,label:p}))}/>
+          </div>
+          <FField label="Conditions météorologiques" value={reMeteo} onChange={setReMeteo} raw/>
+          <FField label="Conséquences constatées" value={reConseq} onChange={setReConseq} raw/>
+          <FField label="Actions immédiates prises" value={reActions} onChange={setReActions} raw/>
+        </>)}
+
+        {/* ── Analyse de sécurité ── */}
+        {mode==="as"&&(
+          <div>
+            <FLabel>Période analysée</FLabel>
+            <div style={{display:"flex",gap:8}}>
+              {[{v:"30",l:"30 jours"},{v:"90",l:"90 jours"},{v:"365",l:"1 an"}].map(o=>(
+                <button key={o.v} onClick={()=>setAsPeriode(o.v)}
+                  style={{flex:1,height:40,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,
+                    border:"1.5px solid "+(asPeriode===o.v?C.navy:C.border),
+                    background:asPeriode===o.v?C.navy:"white",
+                    color:asPeriode===o.v?"white":C.slate,
+                    WebkitTapHighlightColor:"transparent"}}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+            <div style={{fontSize:10.5,color:asEvents().length?C.slate:"#DC2626",marginTop:6}}>
+              {asEvents().length
+                ? asEvents().length+" événement(s) enregistré(s) sur la période."
+                : "Aucun événement sur cette période — l'analyse ne peut pas être produite."}
+            </div>
+          </div>
+        )}
+
+        {/* ── Note de service ── */}
+        {mode==="nds"&&(
         <div>
           <FLabel>Catégorie</FLabel>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -2987,11 +3256,16 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
             ))}
           </div>
         </div>
+        )}
         <FField label="Référence" value={ref} onChange={setRef}/>
         <div>
-          <FLabel>Sujet de la note *</FLabel>
+          <FLabel>{mode==="nds"?"Sujet de la note *":mode==="re"?"Précisions complémentaires":"Contexte de l\u2019analyse"}</FLabel>
           <textarea value={subject} onChange={e=>setSubject(e.target.value)}
-            placeholder="Ex : Restriction des vols Dakhla–Nouakchott pour travaux de piste"
+            placeholder={mode==="nds"
+              ? "Ex : Restriction des vols Dakhla–Nouakchott pour travaux de piste"
+              : mode==="re"
+                ? "Éléments de contexte utiles au rapport (facultatif)"
+                : "Contexte particulier de la période (facultatif)"}
             style={{width:"100%",minHeight:64,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",resize:"vertical"}}/>
         </div>
         <div>
@@ -3666,7 +3940,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {effectiveActive==="regl"     && <FormReglementation/>}
       {effectiveActive==="docavion" && <FormDocAvion/>}
-      {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)}/>}
+      {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft}/>}
       {effectiveActive==="clients"  && <FormClients clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
