@@ -278,10 +278,11 @@ function FLabel({ children }) {
   );
 }
 
-function FField({ label, value, onChange, type="text", min, max, placeholder, step }) {
+function FField({ label, value, onChange, type="text", min, max, placeholder, step, raw }) {
   const [focused, setFocused] = useState(false);
   const handleChange = e => {
-    const v = type==="text" ? e.target.value.toUpperCase() : e.target.value;
+    // raw : conserve la casse saisie (noms propres). Sinon, majuscules comme avant.
+    const v = (type==="text" && !raw) ? e.target.value.toUpperCase() : e.target.value;
     onChange(v);
   };
   return (
@@ -2479,8 +2480,14 @@ function ndsExportPDF(state, opts={}){
   doc.setFont('helvetica','normal');
   doc.setFontSize(7.8);
   doc.setTextColor(100,116,139);
-  doc.text('Direction des Opérations Aériennes\nSahara Aviation SAS — Afrijet Sahara', marginX, y);
-  doc.text('Commandant de Bord / Directeur\ndes Opérations Aériennes', pageWidth - marginX - 70, y);
+  doc.text((state.from || 'Direction des Opérations Aériennes') + '\nSahara Aviation SAS — Afrijet Sahara', marginX, y);
+  // Signataire
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(30,41,59);
+  doc.text(state.approbNom || 'CDB Noureddine ERRAZI', pageWidth - marginX - 70, y);
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(100,116,139);
+  doc.text('Responsable Désigné Opérations Aériennes', pageWidth - marginX - 70, y + 4);
 
   // Footer — thin gray rule + gray ref/diffusion text + page number, drawn on every page once total is known
   const totalPages = doc.internal.getNumberOfPages();
@@ -2534,6 +2541,7 @@ function FormNDS({ onBack }){
   const [toCustom,setToCustom]=useState("");
   const [diffusion,setDiffusion]=useState(["Ensemble des Pilotes (PNT)","Encadrement Opérations"]);
   const [from,setFrom]=useState("Direction des Opérations Aériennes");
+  const [approbNom,setApprobNom]=useState("CDB Noureddine ERRAZI");
   const [classification,setClassification]=useState("Diffusion interne");
   const [revision,setRevision]=useState("01");
   const [loading,setLoading]=useState(false);
@@ -2596,6 +2604,8 @@ function FormNDS({ onBack }){
     live.current={};
     const c=NDS_CATEGORIES.find(x=>x.label===r.category)||null;
     if(c){ setCat(c); }
+    if(r.from) setFrom(r.from);
+    if(r.approbNom) setApprobNom(r.approbNom);
     setNote({...r, closing:r.closingText||r.closing||''});
     setRef(r.ref); setTab("editor");
   };
@@ -2620,6 +2630,7 @@ function FormNDS({ onBack }){
             to: rec.to||'',
             classification: rec.classification||'Diffusion interne',
             revision: rec.revision||'01',
+            approbNom: rec.approbNom||'CDB Noureddine ERRAZI',
             objet: rec.objet||'',
             intro: rec.intro||'',
             sections: ndsRenumber(rec.sections),
@@ -2764,6 +2775,7 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
       setNote({
         ref, date:new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}),
         from, to, classification, revision,
+        approbNom,
         objet:parsed.objet||'', intro:parsed.intro||'',
         sections:ndsRenumber(parsed.sections||[]),
         closing:'Cette note de service est applicable dès diffusion et doit être portée à la connaissance du personnel concerné. Toute question ou retour d\u2019expérience relatif à son application est à adresser à la Direction des Opérations Aériennes.'
@@ -2914,6 +2926,17 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
         ))}
         <NdsEditable html={note.closingText||note.closing} field="closing" live={live} onCommit={v=>upd({closing:v,closingText:v})}
           style={{fontSize:11,lineHeight:1.6,color:C.slate,fontStyle:"italic",paddingTop:10,borderTop:"1px solid "+C.border}}/>
+        <div style={{display:"flex",justifyContent:"space-between",gap:16,marginTop:18,paddingTop:12,borderTop:"1px solid "+C.border}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.text,marginBottom:3}}>Émis par :</div>
+            <div style={{fontSize:9.5,color:C.slate,lineHeight:1.5}}>{note.from}<br/>Sahara Aviation SAS — Afrijet Sahara</div>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.text,marginBottom:3}}>Approuvé par :</div>
+            <div style={{fontSize:9.5,fontWeight:700,color:C.text}}>{note.approbNom||"CDB Noureddine ERRAZI"}</div>
+            <div style={{fontSize:9.5,color:C.slate}}>Responsable Désigné Opérations Aériennes</div>
+          </div>
+        </div>
       </div>
     </Card>
     );
@@ -2971,6 +2994,7 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
         <FField label="Destinataire complémentaire" value={toCustom} onChange={setToCustom}/>
         <FSection title="En-tête du document" color="#0F1F3D"/>
         <FField label="Émetteur" value={from} onChange={setFrom}/>
+        <FField label="Approuvé par" value={approbNom} onChange={setApprobNom} raw/>
         <FGrid>
           <FField label="Classification" value={classification} onChange={setClassification}/>
           <FField label="Révision" value={revision} onChange={setRevision}/>
