@@ -990,8 +990,23 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
 
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
-function computeAlerts(kpis, flights, maintData, aircraft) {
+function computeAlerts(kpis, flights, maintData, aircraft, crew) {
   const a=[];
+  // Échéances équipage : titre échu, puis échéance sous 30 puis 90 jours.
+  (crew||[]).forEach(m=>{
+    const d=m.dates||{};
+    const qui=m.nom+" "+m.prenom;
+    crewItemsFor(m.role).forEach(it=>{
+      const j=joursAvant(d[it.k]);
+      if(j===null) return;
+      if(j<0)        a.push({id:"cr-"+m.id+"-"+it.k, sev:"danger", icon:"🧑‍✈️",
+                             msg:qui+" — "+it.label+" échu depuis "+(-j)+" j"+(it.bloquant?" (affectation interdite)":"")});
+      else if(j<=30) a.push({id:"cr-"+m.id+"-"+it.k, sev:"danger", icon:"🧑‍✈️",
+                             msg:qui+" — "+it.label+" expire dans "+j+" j"});
+      else if(j<=90) a.push({id:"cr-"+m.id+"-"+it.k, sev:"warn", icon:"🧑‍✈️",
+                             msg:qui+" — "+it.label+" expire dans "+j+" j"});
+    });
+  });
   // Calculate real OTP from flights
   const volsDone=flights.filter(f=>f.status==="Termine");
   const otpScore=f=>f.delayMin<=0?100:f.delayMin<=15?85:f.delayMin<=30?70:f.delayMin<=45?50:25;
@@ -1028,18 +1043,62 @@ function computeAlerts(kpis, flights, maintData, aircraft) {
   return a;
 }
 
+// ── Échéances équipage ──────────────────────────────────────────────────────
+// La date saisie est celle imprimée sur le document. Elle n'est jamais calculée :
+// les règles de validité varient selon l'âge, le niveau obtenu ou la date de
+// revalidation, et les coder reviendrait à présumer d'une réglementation qui
+// n'est pas nécessairement celle applicable ici.
+// bloquant : un titre échu interdit l'affectation du membre à un vol.
+const CREW_ITEMS = [
+  {k:'qt',   label:'Qualification de type EMB-145',   roles:['TRI','CM1','CM2'], bloquant:true},
+  {k:'med',  label:'Certificat médical',              roles:['TRI','CM1','CM2','CC'], bloquant:true},
+  {k:'opc',  label:'Contrôle hors ligne (OPC)',       roles:['TRI','CM1','CM2'], bloquant:true},
+  {k:'cc',   label:'Certificat membre équipage cabine', roles:['CC'], bloquant:true},
+  {k:'sep',  label:'Formation SEP',                   roles:['CC'], bloquant:true},
+  {k:'ir',   label:'Qualification vol aux instruments', roles:['TRI','CM1','CM2'], bloquant:false},
+  {k:'ln',   label:'Contrôle en ligne',               roles:['TRI','CM1','CM2'], bloquant:false},
+  {k:'lang', label:'Compétence linguistique anglais', roles:['TRI','CM1','CM2'], bloquant:false},
+  {k:'crm',  label:'CRM',                             roles:['TRI','CM1','CM2','CC'], bloquant:false},
+  {k:'dg',   label:'Marchandises dangereuses',        roles:['TRI','CM1','CM2','CC'], bloquant:false},
+];
+const crewItemsFor = (role) => CREW_ITEMS.filter(i=>i.roles.includes(role));
+
+// Jours restants avant échéance ; null si la date est absente ou illisible.
+function joursAvant(d){
+  if(!d) return null;
+  const t=new Date(d+'T00:00:00');
+  if(isNaN(t)) return null;
+  const n=new Date(); n.setHours(0,0,0,0);
+  return Math.round((t-n)/86400000);
+}
+// vert au-delà de 90 j · ambre de 90 à 31 j · orange de 30 à 0 j · rouge échu
+function statutEcheance(d){
+  const j=joursAvant(d);
+  if(j===null) return {code:'vide',  color:'#94A3B8', bg:'#F4F7FB', label:'Non renseigné'};
+  if(j<0)      return {code:'echu',  color:'#FFFFFF', bg:'#DC2626', label:'Échu depuis '+(-j)+' j'};
+  if(j<=30)    return {code:'proche',color:'#FFFFFF', bg:'#D97706', label:j+' j restants'};
+  if(j<=90)    return {code:'alerte',color:'#92400E', bg:'#FEF3C7', label:j+' j restants'};
+  return              {code:'ok',    color:'#065F46', bg:'#D1FAE5', label:j+' j restants'};
+}
+// Titres bloquants échus pour un membre donné
+function titresEchus(m){
+  if(!m) return [];
+  const d=m.dates||{};
+  return crewItemsFor(m.role).filter(i=>i.bloquant && joursAvant(d[i.k])!==null && joursAvant(d[i.k])<0);
+}
+
 const INIT_CREW = [
-  {id:10, nom:"MAIDANE",    prenom:"NOUR",   role:"TRI", licence:"TRI-A 00001"},
-  {id:11, nom:"CHERKAOUI",  prenom:"SAID",   role:"TRI", licence:"TRI-A 00002"},
-  {id:1, nom:"ALAMI",   prenom:"KARIM",  role:"CM1", licence:"ATPL-A 12345"},
-  {id:2, nom:"RAHIMI",  prenom:"HASSAN", role:"CM1", licence:"ATPL-A 23456"},
-  {id:3, nom:"BENALI",  prenom:"OMAR",   role:"CM1", licence:"ATPL-A 34567"},
-  {id:4, nom:"FASSI",   prenom:"AMINE",  role:"CM2", licence:"CPL-A 45678"},
-  {id:5, nom:"TAZI",    prenom:"YOUSSEF",role:"CM2", licence:"CPL-A 56789"},
-  {id:6, nom:"IDRISSI", prenom:"OMAR",   role:"CM2", licence:"CPL-A 67890"},
-  {id:7, nom:"SEBTI",   prenom:"LEILA",  role:"CC",  licence:"CC-001"},
-  {id:8, nom:"BENNANI", prenom:"SARA",   role:"CC",  licence:"CC-002"},
-  {id:9, nom:"CHRAIBI", prenom:"NADIA",  role:"CC",  licence:"CC-003"}
+  {id:10, nom:"MAIDANE",    prenom:"NOUR",   role:"TRI", licence:"TRI-A 00001", dates:{qt:"2027-07-17", med:"2027-04-18", opc:"2027-01-18", ir:"2027-07-17", ln:"2027-03-19", lang:"2029-03-08", crm:"2027-10-25", dg:"2027-10-25"}},
+  {id:11, nom:"CHERKAOUI",  prenom:"SAID",   role:"TRI", licence:"TRI-A 00002", dates:{qt:"2026-12-04", med:"2026-11-04", opc:"2026-10-10", ir:"2026-12-04", ln:"2026-11-19", lang:"2028-02-02", crm:"2027-04-08", dg:"2027-04-08"}},
+  {id:1, nom:"ALAMI",   prenom:"KARIM",  role:"CM1", licence:"ATPL-A 12345", dates:{qt:"2027-05-28", med:"2026-09-08", opc:"2026-12-19", ir:"2027-05-28", ln:"2027-02-17", lang:"2028-08-20", crm:"2027-07-17", dg:"2027-07-17"}},
+  {id:2, nom:"RAHIMI",  prenom:"HASSAN", role:"CM1", licence:"ATPL-A 23456", dates:{qt:"2027-03-19", med:"2027-02-27", opc:"2026-09-15", ir:"2027-03-19", ln:"2027-04-08", lang:"2028-05-12", crm:"2027-05-28", dg:"2027-05-28"}},
+  {id:3, nom:"BENALI",  prenom:"OMAR",   role:"CM1", licence:"ATPL-A 34567", dates:{qt:"2027-08-16", med:"2027-06-27", opc:"2027-02-17", ir:"2027-08-16", ln:"2027-04-28", lang:"2029-09-24", crm:"2027-09-05", dg:"2027-09-05"}},
+  {id:4, nom:"FASSI",   prenom:"AMINE",  role:"CM2", licence:"CPL-A 45678", dates:{qt:"2027-04-28", med:"2027-03-09", opc:"2026-12-29", ir:"2027-04-28", ln:"2027-02-27", lang:"2028-11-28", crm:"2027-06-27", dg:"2027-06-27"}},
+  {id:5, nom:"TAZI",    prenom:"YOUSSEF",role:"CM2", licence:"CPL-A 56789", dates:{qt:"2027-04-28", med:"2027-03-09", opc:"2026-12-29", ir:"2027-04-28", ln:"2027-02-27", lang:"2028-11-28", crm:"2027-06-27", dg:"2027-06-27"}},
+  {id:6, nom:"IDRISSI", prenom:"OMAR",   role:"CM2", licence:"CPL-A 67890", dates:{qt:"2027-04-28", med:"2027-03-09", opc:"2026-12-29", ir:"2027-04-28", ln:"2027-02-27", lang:"2028-11-28", crm:"2027-06-27", dg:"2027-06-27"}},
+  {id:7, nom:"SEBTI",   prenom:"LEILA",  role:"CC",  licence:"CC-001", dates:{cc:"2027-06-07", med:"2027-03-29", sep:"2027-02-07", crm:"2027-07-17", dg:"2027-07-17"}},
+  {id:8, nom:"BENNANI", prenom:"SARA",   role:"CC",  licence:"CC-002", dates:{cc:"2027-06-07", med:"2027-03-29", sep:"2027-02-07", crm:"2027-07-17", dg:"2027-07-17"}},
+  {id:9, nom:"CHRAIBI", prenom:"NADIA",  role:"CC",  licence:"CC-003", dates:{cc:"2027-06-07", med:"2027-03-29", sep:"2027-02-07", crm:"2027-07-17", dg:"2027-07-17"}}
 ];
 
 const INIT_FLIGHTS = [
@@ -1296,6 +1355,21 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
 
   const submit=()=>{
     if(!num.trim()||!dep){alert("N° vol et départ requis");return;}
+    // Équipage : un titre bloquant échu interdit l'affectation.
+    const nomComplet=(m)=>m.nom+" "+m.prenom;
+    const assignes=[cm1,cm2,cc].filter(Boolean);
+    const inaptes=[];
+    assignes.forEach(n=>{
+      const m=(crew||[]).find(x=>nomComplet(x)===n);
+      if(!m) return;
+      const echus=titresEchus(m);
+      if(echus.length) inaptes.push(n+" : "+echus.map(e=>e.label).join(", "));
+    });
+    if(inaptes.length){
+      alert("⛔ Planification impossible — titre échu\n\n"+inaptes.join("\n")
+        +"\n\nMettez à jour les échéances dans Formulaires → Équipage, ou désignez un autre membre.");
+      return;
+    }
     // Le client est obligatoire pour un vol commercial ; ferry et positionnement en sont dispensés.
     if(flightType==="Commercial" && !clientId){
       alert("⚠️ Un client est requis pour un vol commercial.\n\nSélectionnez un client, ou choisissez le type FRY (ferry) ou POS (positionnement).");
@@ -1386,18 +1460,18 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
           <div style={{flex:1,minWidth:0}}>
             <FLabel>CM1</FLabel>
             <CustomSelect value={cm1} onChange={setCm1} placeholder='-- --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm2).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:m.role==='TRI'?'TRI':'CDB'}))}/>
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm2).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':(m.role==='TRI'?'TRI':'CDB'))}))}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
             <FLabel>CM2</FLabel>
             <CustomSelect value={cm2} onChange={setCm2} placeholder='-- --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm1).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:m.role==='TRI'?'TRI':'OPL'}))}/>
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm1).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':(m.role==='TRI'?'TRI':'OPL'))}))}/>
           </div>
         </div>
         <div>
           <FLabel>CC — Hotesse / Steward</FLabel>
           <CustomSelect value={cc} onChange={setCc} placeholder='-- Choisir --' icon='🧑‍✈️'
-            options={(crew||[]).filter(m=>m.role==='CC').map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:'CC'}))}/>
+            options={(crew||[]).filter(m=>m.role==='CC').map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':'CC')}))}/>
         </div>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onBack}
@@ -1422,30 +1496,31 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   const [prenom,setPrenom] = useState("");
   const [role,setRole]     = useState("");
   const [licence,setLic]   = useState("");
+  const [dates,setDates]   = useState({});     // échéances saisies
   const [editing,setEditing] = useState(null); // id en cours d edition
 
   const addOrUpdate = () => {
     if (!nom.trim()||!prenom.trim()) { alert("Nom et prenom requis"); return; }
     if (editing !== null) {
       setCrew(c => c.map(m => m.id===editing
-        ? {...m,nom:nom.trim(),prenom:prenom.trim(),role,licence:licence.trim()}
+        ? {...m,nom:nom.trim(),prenom:prenom.trim(),role,licence:licence.trim(),dates:{...dates}}
         : m));
       setEditing(null);
     } else {
       const newId = Math.max(0,...(crew||[]).map(m=>m.id))+1;
-      setCrew(c => [...c, {id:newId,nom:nom.trim(),prenom:prenom.trim(),role,licence:licence.trim()}]);
+      setCrew(c => [...c, {id:newId,nom:nom.trim(),prenom:prenom.trim(),role,licence:licence.trim(),dates:{...dates}}]);
     }
-    setNom("");setPrenom("");setRole("");setLic("");
+    setNom("");setPrenom("");setRole("");setLic("");setDates({});
     triggerSaved();
   };
 
   const startEdit = m => {
     setEditing(m.id); setNom(m.nom); setPrenom(m.prenom);
-    setRole(m.role); setLic(m.licence||"");
+    setRole(m.role); setLic(m.licence||""); setDates({...(m.dates||{})});
   };
 
   const remove = id => setCrew(c => c.filter(m => m.id!==id));
-  const cancel = () => { setEditing(null);setNom("");setPrenom("");setRole("");setLic(""); };
+  const cancel = () => { setEditing(null);setNom("");setPrenom("");setRole("");setLic("");setDates({}); };
 
   const roleColor = r => r==="TRI"?"#7C3AED":r==="CM1"?"#0F1F3D":r==="CM2"?"#0369A1":"#00936A";
   const roleBg    = r => r==="TRI"?"#EDE9FE":r==="CM1"?"#E0E7FF":r==="CM2"?"#E0F2FE":"#D1FAE5";
@@ -1466,10 +1541,47 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
                 options={ROLES.map(r=>({value:r,label:r==="TRI"?"TRI — Instructeur":r==="CM1"?"CDB — Commandant":r==="CM2"?"OPL — Co-pilote":"CC — Hôtesse / Steward"}))}/>
             </div>
             <div style={{flex:1}}>
-              <FLabel>Licence / Matricule</FLabel>
-              <FField label='' value={licence} onChange={setLic}/>
+              <FLabel>N° de licence</FLabel>
+              <FField label='' value={licence} onChange={setLic} raw/>
             </div>
           </div>
+
+          {/* Échéances — dates telles qu'imprimées sur les documents */}
+          {role&&(
+            <div>
+              <FSection title="Échéances" color="#0F1F3D"/>
+              <div style={{fontSize:10,color:C.slate,marginBottom:8,lineHeight:1.5}}>
+                Saisissez la date de fin de validité figurant sur chaque document.
+                La licence marocaine n'ayant pas de terme, elle n'apparaît pas ici.
+              </div>
+              {crewItemsFor(role).map(it=>{
+                const st=statutEcheance(dates[it.k]);
+                return (
+                  <div key={it.k} style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:10.5,color:C.slate,marginBottom:2}}>
+                        {it.label}{it.bloquant&&<span style={{color:"#DC2626"}}> *</span>}
+                      </div>
+                      <input type="date" value={dates[it.k]||""}
+                        onChange={e=>setDates(d=>({...d,[it.k]:e.target.value}))}
+                        style={{width:"100%",height:38,boxSizing:"border-box",background:C.bg,
+                          border:"1.5px solid "+C.border,borderRadius:9,padding:"0 10px",
+                          fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                    </div>
+                    <div style={{width:92,flexShrink:0,textAlign:"center",alignSelf:"flex-end",
+                      background:st.bg,color:st.color,borderRadius:8,padding:"9px 4px",
+                      fontSize:9.5,fontWeight:700,lineHeight:1.2}}>
+                      {st.label}
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{fontSize:9.5,color:C.slate,marginTop:6}}>
+                <span style={{color:"#DC2626",fontWeight:700}}>*</span> Un titre échu interdit l'affectation à un vol.
+              </div>
+            </div>
+          )}
+
           <div style={{display:"flex",gap:10}}>
             {editing!==null && (
               <button onClick={cancel}
@@ -1505,8 +1617,32 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
                   <div style={{width:34,height:34,borderRadius:"50%",background:roleBg(r),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:13,color:roleColor(r)}}>
                     {m.prenom[0]}{m.nom[0]}
                   </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:13,color:C.text}}>{m.prenom} {m.nom}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      <span style={{fontWeight:700,fontSize:13,color:C.text}}>{m.prenom} {m.nom}</span>
+                      {(()=>{
+                        const echus=titresEchus(m);
+                        if(echus.length) return (
+                          <span style={{background:"#DC2626",color:"white",borderRadius:6,padding:"1px 6px",
+                            fontSize:8.5,fontWeight:800,whiteSpace:"nowrap"}}>
+                            INAPTE — {echus.length} titre{echus.length>1?"s":""} échu{echus.length>1?"s":""}
+                          </span>
+                        );
+                        // Titre le plus proche de l'échéance, tous types confondus
+                        const d=m.dates||{};
+                        const js=crewItemsFor(m.role).map(i=>joursAvant(d[i.k])).filter(v=>v!==null);
+                        if(!js.length) return null;
+                        const mn=Math.min(...js);
+                        if(mn>90) return null;
+                        const st=statutEcheance(new Date(Date.now()+mn*86400000).toISOString().slice(0,10));
+                        return (
+                          <span style={{background:st.bg,color:st.color,borderRadius:6,padding:"1px 6px",
+                            fontSize:8.5,fontWeight:800,whiteSpace:"nowrap"}}>
+                            échéance dans {mn} j
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <div style={{fontSize:10,color:roleColor(r),fontWeight:600}}>{r==="TRI"?"Type Rating Instructor":r==="CM1"?"Commandant de Bord":r==="CM2"?"Officier Pilote de Ligne":"Hôtesse / Steward"}</div>
                     <div style={{fontSize:10,color:C.slate}}>{m.licence||"—"}</div>
                   </div>
@@ -4450,8 +4586,8 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
 }
 
 
-function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist }) {
-  const all=computeAlerts(kpis,flights,maintData,aircraft);
+function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist, crew }) {
+  const all=computeAlerts(kpis,flights,maintData,aircraft,crew);
   const active=all.filter(a=>!dismissed.includes(a.id));
   const colors={danger:{bg:"#FEE2E2",border:"#DC2626",text:"#DC2626"},warn:{bg:"#FEF3C7",border:"#D97706",text:"#D97706"}};
   const [melFilter,setMelFilter]=React.useState("Tout");
@@ -5814,7 +5950,7 @@ function AppMain({ onLogout, profileId }) {
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);setReport(null);setReset(false);setTab("forms");
   };
 
-  const allAlerts  = computeAlerts(kpis,flights,maintData,aircraft);
+  const allAlerts  = computeAlerts(kpis,flights,maintData,aircraft,crew);
   const critCount  = allAlerts.filter(a=>!dismissed.includes(a.id)).length;
 
   // Record new alerts in history
@@ -5912,7 +6048,7 @@ function AppMain({ onLogout, profileId }) {
           }}
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
-        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist}/>}
+        {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew}/>}
         {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
