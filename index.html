@@ -2095,9 +2095,10 @@ const NDS_CATEGORIES = [
 // Toutes aboutissent au même objet note (ref, date, objet, intro, sections…),
 // ce qui permet de réutiliser tel quel l'archivage, l'édition et l'export PDF.
 const NDS_MODES = [
-  {id:'nds', label:'Note de service',      hint:'Consigne, décision',     docType:'NOTE DE SERVICE'},
-  {id:'re',  label:"Rapport d'événement",  hint:'Occurrence — EASA',      docType:"RAPPORT D'ÉVÉNEMENT"},
-  {id:'as',  label:'Analyse de sécurité',  hint:'Tendances sur période',  docType:'ANALYSE DE SÉCURITÉ'},
+  {id:'nds',  label:'Note de service',        hint:'Consigne, décision',            docType:'NOTE DE SERVICE'},
+  {id:'re',   label:"Rapport d'événement",    hint:'Analyse interne SGS',           docType:"RAPPORT D'ÉVÉNEMENT"},
+  {id:'dgac', label:'Notification DGAC',      hint:'Compte rendu factuel — autorité', docType:"COMPTE RENDU D'ÉVÉNEMENT"},
+  {id:'as',   label:'Analyse de sécurité',    hint:'Tendances sur période',         docType:'ANALYSE DE SÉCURITÉ'},
 ];
 
 // Trame alignée sur le règlement (UE) 376/2014 relatif aux comptes rendus
@@ -2111,6 +2112,19 @@ const RE_SECTIONS = [
   'Analyse et facteurs contributifs',
   'Évaluation du risque',
   'Mesures correctives et préventives',
+];
+
+// Trame factuelle destinée à l'autorité : aucune analyse, aucune cause.
+const DGAC_SECTIONS = [
+  'Identification',
+  'Aéronef',
+  'Vol',
+  'Événement',
+  'Description factuelle',
+  'Conditions météorologiques',
+  'Conséquences',
+  'Actions immédiates',
+  'Suites',
 ];
 
 const AS_SECTIONS = [
@@ -2206,7 +2220,7 @@ const NDS_ARCHIVE_KEY = 'ns:archive';
 const NDS_MOIS = {janvier:1,'février':2,fevrier:2,mars:3,avril:4,mai:5,juin:6,
   juillet:7,'août':8,aout:8,septembre:9,octobre:10,novembre:11,'décembre':12,decembre:12};
 function ndsDateKey(r){
-  const m = /^(?:NS-[A-Z]+|RE|AS)-(\d{4})(\d{2})(\d{2})-/.exec(String(r.ref||'').trim());
+  const m = /^(?:NS-[A-Z]+|RE|ND|AS)-(\d{4})(\d{2})(\d{2})-/.exec(String(r.ref||'').trim());
   if(m) return Number(m[1]+m[2]+m[3]);
   const d = String(r.date||'').trim().toLowerCase();
   const dm = /^(\d{1,2})\s+([a-zéûôA-ZÉÛÔ]+)\s+(\d{4})$/.exec(d);
@@ -2649,10 +2663,10 @@ function FormNDS({ onBack, safetyData, flights, aircraft }){
     }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
   };
 
-  const refBase=()=> mode==="re" ? "RE" : mode==="as" ? "AS" : "NS-"+((cat&&cat.prefix)||"OPS");
+  const refBase=()=> mode==="re" ? "RE" : mode==="dgac" ? "ND" : mode==="as" ? "AS" : "NS-"+((cat&&cat.prefix)||"OPS");
   const selectCat=(c)=>{ setCat(c); if(mode==="nds") setRef(ndsNextRef("NS-"+c.prefix)); };
-  const selectMode=(m)=>{ setMode(m); setErr(""); setRef(ndsNextRef(
-    m==="re"?"RE":m==="as"?"AS":"NS-"+((cat&&cat.prefix)||"OPS"))); };
+  const selectMode=(m)=>{ if(!m) return; setMode(m); setErr(""); setRef(ndsNextRef(
+    m==="re"?"RE":m==="dgac"?"ND":m==="as"?"AS":"NS-"+((cat&&cat.prefix)||"OPS"))); };
   const toggleDiff=(opt)=>setDiffusion(d=>d.includes(opt)?d.filter(x=>x!==opt):[...d,opt]);
   const computeTo=()=>{ const p=[...diffusion]; if(toCustom.trim()) p.push(toCustom.trim()); return p.join(', '); };
 
@@ -2759,7 +2773,7 @@ function FormNDS({ onBack, safetyData, flights, aircraft }){
     if(mode==="nds"){
       if(!subject.trim()){ setErr("Le sujet de la note est requis."); return; }
       if(!cat){ setErr("Sélectionnez une catégorie."); return; }
-    } else if(mode==="re"){
+    } else if(mode==="re"||mode==="dgac"){
       if(!reNarratif.trim()){ setErr("La description factuelle de l'événement est requise."); return; }
     } else {
       if(asEvents().length===0){ setErr("Aucun événement de sécurité sur la période choisie."); return; }
@@ -2813,8 +2827,8 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
     }
 
     // ══ MODE 2 — RAPPORT D'ÉVÉNEMENT ══
-    else if(mode==="re"){
-      skeleton=RE_SECTIONS;
+    else if(mode==="re"||mode==="dgac"){
+      skeleton = mode==="dgac" ? DGAC_SECTIONS : RE_SECTIONS;
       const ev=selectedEvent();
       const vol=ev?linkedFlight(ev):null;
       const faits=[];
@@ -2839,19 +2853,43 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
       if(reConseq) faits.push(`Conséquences rapportées : ${reConseq}`);
       if(reActions)faits.push(`Actions immédiates rapportées : ${reActions}`);
 
-      systemPrompt=`Tu rédiges un compte rendu d'événement pour une compagnie aérienne, dans l'esprit du règlement (UE) 376/2014 relatif aux comptes rendus d'événements dans l'aviation civile. ${NDS_STYLE_REF}
+      const ANTI_INVENTION = `RÈGLE ABSOLUE — N'INVENTE AUCUN FAIT. Tu ne disposes que des éléments transmis par le rédacteur. Il t'est interdit d'ajouter une altitude, une vitesse, un cap, une heure, un nom, un relevé météo ou tout autre élément factuel qui ne t'a pas été fourni. Lorsqu'une information manque pour renseigner une rubrique, écris explicitement « Non renseigné » ou « À compléter par le rédacteur ». Un document incomplet est acceptable ; un document inventé ne l'est pas.`;
+
+      if(mode==="dgac"){
+        // ── Notification à l'autorité : strictement factuelle ──
+        systemPrompt=`Tu rédiges un compte rendu d'événement destiné à l'autorité de l'aviation civile, au titre de l'obligation de notification. ${NDS_STYLE_REF}
+
+${FORMAT_RULES}
+
+Le compte rendu doit comporter ces sections, dans cet ordre, avec des titres identiques ou très proches : ${skeleton.join(' / ')}.
+
+${ANTI_INVENTION}
+
+CARACTÈRE STRICTEMENT FACTUEL — Ce document présente les faits constatés, rien d'autre. Il t'est formellement interdit d'y faire figurer une analyse des causes, des facteurs contributifs, des hypothèses explicatives, une évaluation du risque ou une quelconque appréciation sur la conduite des personnes concernées. N'écris jamais qu'un équipage a commis une erreur, a tardé, a omis ou a mal interprété : décris uniquement ce qui a été fait et observé, dans l'ordre chronologique. Ces éléments d'analyse relèvent du compte rendu interne, qui fait l'objet d'un document distinct.
+
+Les sections « Identification », « Aéronef », « Vol », « Événement », « Conditions météorologiques », « Conséquences » et « Suites » doivent être présentées sous forme de champs courts, une information par ligne, au format « Libellé : valeur ». N'y rédige pas de paragraphes. Lorsqu'une donnée est absente, porte « Non renseigné ».
+
+Les sections « Description factuelle » et « Actions immédiates » sont rédigées en paragraphes courts, au passé, à la voix active, dans l'ordre chronologique.
+
+N'ajoute AUCUN tableau à ce document.
+
+Termine la dernière section en rappelant que le présent compte rendu présente les faits constatés, à l'exclusion de toute appréciation sur leurs causes, et que l'analyse des facteurs contributifs fait l'objet d'un document interne distinct.`;
+      } else {
+        // ── Rapport interne SGS : analyse et facteurs contributifs ──
+        systemPrompt=`Tu rédiges un compte rendu d'événement interne pour le système de gestion de la sécurité d'une compagnie aérienne, dans l'esprit du règlement (UE) 376/2014 relatif aux comptes rendus d'événements dans l'aviation civile. ${NDS_STYLE_REF}
 
 ${FORMAT_RULES}
 
 Le rapport doit comporter ces sections, dans cet ordre, avec des titres identiques ou très proches : ${skeleton.join(' / ')}.
 
-RÈGLE ABSOLUE — N'INVENTE AUCUN FAIT. Tu ne disposes que des éléments transmis par le rédacteur. Il t'est interdit d'ajouter une altitude, une vitesse, un cap, une heure, un nom, un relevé météo ou tout autre élément factuel qui ne t'a pas été fourni. Lorsqu'une information manque pour renseigner une rubrique, écris explicitement « Non renseigné » ou « À compléter par le rédacteur ». Un rapport incomplet est acceptable ; un rapport inventé ne l'est pas.
+${ANTI_INVENTION}
 
 Distingue nettement les faits établis, repris des éléments fournis, et l'analyse, qui relève de l'hypothèse. Dans la section d'analyse, introduis les hypothèses par des formulations explicites du type « il est possible que » ou « cette hypothèse reste à confirmer ».
 
 Section « Évaluation du risque » : ajoute un champ "table" avec les colonnes ["Critère","Appréciation proposée","Justification"] portant sur la gravité, la probabilité de récurrence et le niveau de risque qui en découle. Ajoute un champ "note" rappelant que cette appréciation est une proposition soumise à la validation du responsable SGS. N'ajoute PAS de tableau aux autres sections.
 
 Ton factuel, neutre, sans jugement sur les personnes. Ne désigne jamais un membre d'équipage comme responsable.`;
+      }
 
       userPrompt=`ÉLÉMENTS FACTUELS ENREGISTRÉS PAR L'APPLICATION :
 ${faits.length?faits.join('\n'):'(aucun élément structuré disponible)'}
@@ -2861,6 +2899,8 @@ ${reNarratif}
 ${subject.trim()?'\nPRÉCISIONS COMPLÉMENTAIRES :\n'+subject:''}
 ${keyPoints.trim()?'\nPOINTS À INTÉGRER IMPÉRATIVEMENT :\n'+keyPoints:''}
 
+Exploitant : Sahara Aviation S.A.S. — Afrijet Sahara, base de Dakhla (GMMH).
+Déclarant : ${approbNom}, Responsable Désigné Opérations Aériennes.
 Diffusion prévue : ${to||'Non précisée'}`;
     }
 
@@ -3170,22 +3210,12 @@ Diffusion prévue : ${to||'Non précisée'}`;
         {/* Type de document */}
         <div>
           <FLabel>Type de document</FLabel>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {NDS_MODES.map(m=>(
-              <button key={m.id} onClick={()=>selectMode(m.id)}
-                style={{padding:"10px 12px",borderRadius:10,cursor:"pointer",textAlign:"left",
-                  border:"1.5px solid "+(mode===m.id?C.navy:C.border),
-                  background:mode===m.id?"#EFF6FF":"white",
-                  WebkitTapHighlightColor:"transparent"}}>
-                <div style={{fontWeight:700,fontSize:12,color:mode===m.id?C.navy:C.text}}>{m.label}</div>
-                <div style={{fontSize:9.5,color:C.slate,marginTop:1}}>{m.hint}</div>
-              </button>
-            ))}
-          </div>
+          <CustomSelect value={mode} onChange={selectMode} icon="📋" required
+            options={NDS_MODES.map(m=>({value:m.id,label:m.label,sub:m.hint}))}/>
         </div>
 
-        {/* ── Rapport d'événement ── */}
-        {mode==="re"&&(<>
+        {/* ── Événement : rapport interne et notification DGAC ── */}
+        {(mode==="re"||mode==="dgac")&&(<>
           <div>
             <FLabel>Événement enregistré (optionnel)</FLabel>
             <CustomSelect value={reEvent} onChange={setReEvent} searchable
@@ -3259,13 +3289,13 @@ Diffusion prévue : ${to||'Non précisée'}`;
         )}
         <FField label="Référence" value={ref} onChange={setRef}/>
         <div>
-          <FLabel>{mode==="nds"?"Sujet de la note *":mode==="re"?"Précisions complémentaires":"Contexte de l\u2019analyse"}</FLabel>
+          <FLabel>{mode==="nds"?"Sujet de la note *":mode==="as"?"Contexte de l\u2019analyse":"Précisions complémentaires"}</FLabel>
           <textarea value={subject} onChange={e=>setSubject(e.target.value)}
             placeholder={mode==="nds"
               ? "Ex : Restriction des vols Dakhla–Nouakchott pour travaux de piste"
-              : mode==="re"
-                ? "Éléments de contexte utiles au rapport (facultatif)"
-                : "Contexte particulier de la période (facultatif)"}
+              : mode==="as"
+                ? "Contexte particulier de la période (facultatif)"
+                : "Éléments de contexte utiles au document (facultatif)"}
             style={{width:"100%",minHeight:64,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",resize:"vertical"}}/>
         </div>
         <div>
@@ -3603,7 +3633,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     {id:"regl",     icon:"📋",  label:"Réglementation", color:"#B45309"},
     {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"},
     {id:"clients",  icon:"🏢",  label:"Clients",         color:"#0891B2"},
-    {id:"nds",      icon:"📋",  label:"Note Service",    color:"#0F1F3D"},
+    {id:"nds",      icon:"📋",  label:"Générateur IA",   color:"#0F1F3D"},
     {id:"rapport",  icon:"📊",  label:"Rapport",         color:"#00936A"},
   ];
   const FORMS = ALL_FORMS; // Toujours afficher toutes les tuiles
@@ -3623,34 +3653,32 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
             <div style={{fontSize:11,color:C.slate}}>Saisie par departement</div>
           </div>
         </div>
-        <div style={{display:"flex",gap:12,marginTop:10}}>
-          {isAdmin&&(
-            <button onClick={doExport}
-              style={{flex:1,height:36,background:"#D1FAE5",border:"1.5px solid #059669",borderRadius:8,color:"#065F46",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-              📥 Export
-            </button>
-          )}
-          {isAdmin&&(
-            <button onClick={onRestore}
-              style={{flex:1,height:36,background:"#DBEAFE",border:"1.5px solid #0369A1",borderRadius:8,color:"#0369A1",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-              ☁️ Restore
-            </button>
-          )}
-          {isAdmin&&(
-            <button onClick={onReset}
-              style={{flex:1,height:36,background:"#FEE2E2",border:"1.5px solid #DC2626",borderRadius:8,color:"#DC2626",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-              🗑 Reset
-            </button>
-          )}
-          <a href="Manuel_Utilisateur_Afrijet_v2.pdf" target="_blank" rel="noopener"
-            style={{flex:1,height:36,background:"#EFF6FF",border:"1.5px solid #0369A1",borderRadius:8,color:"#0369A1",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",boxSizing:"border-box"}}>
-            📖 Manuel
-          </a>
-          <button onClick={onLogout}
-            style={{flex:1,height:36,background:"#F1F5F9",border:"1.5px solid #64748B",borderRadius:8,color:"#64748B",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-            🔒 Exit
-          </button>
-        </div>
+        {(()=>{
+          // Cinq boutons de même gabarit : icône centrée au-dessus, libellé centré dessous.
+          const base={flex:1,minWidth:0,height:54,borderRadius:10,cursor:"pointer",
+            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,
+            fontSize:9.5,fontWeight:700,textDecoration:"none",boxSizing:"border-box",
+            WebkitTapHighlightColor:"transparent",padding:0};
+          const ico={fontSize:17,lineHeight:1};
+          const actions=[
+            isAdmin&&{k:"exp", icon:"📥", label:"Export",  bg:"#D1FAE5", bd:"#059669", fg:"#065F46", on:doExport},
+            isAdmin&&{k:"res", icon:"☁️", label:"Restore", bg:"#DBEAFE", bd:"#0369A1", fg:"#0369A1", on:onRestore},
+            isAdmin&&{k:"rst", icon:"🗑", label:"Effacer", bg:"#FEE2E2", bd:"#DC2626", fg:"#DC2626", on:onReset},
+            {k:"man", icon:"📖", label:"Manuel", bg:"#EFF6FF", bd:"#0369A1", fg:"#0369A1", href:"Manuel_Utilisateur_Afrijet_v2.pdf"},
+            {k:"out", icon:"🔒", label:"Exit",   bg:"#F1F5F9", bd:"#64748B", fg:"#64748B", on:onLogout},
+          ].filter(Boolean);
+          return (
+            <div style={{display:"flex",gap:8,marginTop:10}}>
+              {actions.map(a=>{
+                const style={...base,background:a.bg,border:"1.5px solid "+a.bd,color:a.fg};
+                const inner=<><span style={ico}>{a.icon}</span><span>{a.label}</span></>;
+                return a.href
+                  ? <a key={a.k} href={a.href} target="_blank" rel="noopener" style={style}>{inner}</a>
+                  : <button key={a.k} onClick={a.on} style={style}>{inner}</button>;
+              })}
+            </div>
+          );
+        })()}
       </Card>
       {saved&&(
         <div style={{padding:"12px 16px",borderRadius:10,fontSize:13,fontWeight:700,textAlign:"center",background:"#D1FAE5",color:"#00936A",border:"1px solid #00936A"}}>
@@ -5434,7 +5462,7 @@ function TotpVerify({ profileId, onVerified }) {
   );
 }
 
-function CustomSelect({ value, onChange, options, placeholder, icon, searchable }) {
+function CustomSelect({ value, onChange, options, placeholder, icon, searchable, required }) {
   const [open,setOpen]=useState(false);
   const [search,setSearch]=useState("");
   const sel=options.find(o=>o.value===value);
@@ -5465,10 +5493,12 @@ function CustomSelect({ value, onChange, options, placeholder, icon, searchable 
             </div>
           )}
           <div style={{maxHeight:240,overflowY:"auto"}}>
-            <div onClick={()=>{onChange("");setOpen(false);setSearch("");}}
-              style={{padding:"10px 14px",borderBottom:"1px solid "+C.border,cursor:"pointer",fontSize:12,color:C.slateL}}>
-              {placeholder||"-- Aucun --"}
-            </div>
+            {!required&&(
+              <div onClick={()=>{onChange("");setOpen(false);setSearch("");}}
+                style={{padding:"10px 14px",borderBottom:"1px solid "+C.border,cursor:"pointer",fontSize:12,color:C.slateL}}>
+                {placeholder||"-- Aucun --"}
+              </div>
+            )}
             {filtered.map((o,i)=>(
               <div key={o.value} onClick={()=>{onChange(o.value);setOpen(false);setSearch("");}}
                 style={{padding:"10px 14px",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none",cursor:"pointer",
