@@ -2678,7 +2678,7 @@ function sgsExportEvenements(events, { periode, svc, inclureConf, nom, evStatus,
    ['Dont confidentiels', conf+(conf?(inclureConf?'  (descriptions incluses sur décision du responsable SGS)':'  (descriptions masquées)'):'')],
    ['Établi par', nom+', Responsable Qualité / SGS']].forEach(([a,b])=>{ doc.setFont('helvetica','bold'); txt(a+' :',MX+2,y); doc.setFont('helvetica','normal'); txt(b,MX+45,y); y+=5; });
   y+=5;
-  const cols=[{l:'Date',w:20},{l:'Rattachement',w:34},{l:'Événement(s)',w:58},{l:'Description des faits',w:98},{l:'Statut SGS',w:22},{l:'Danger lié',w:41}];
+  const cols=[{l:'Date',w:19},{l:'Rattachement',w:29},{l:'Événement(s)',w:46},{l:'Description des faits',w:72},{l:'Analyse',w:58},{l:'Statut SGS',w:19},{l:'Danger lié',w:30}];
   const pad=1.6, lh=3.3;
   const head=()=>{ doc.setFillColor(241,245,249); doc.rect(MX,y,CW,7,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(7.4); doc.setTextColor(26,26,46);
     let x=MX; cols.forEach(c=>{ txt(c.l,x+pad,y+4.6); x+=c.w; }); y+=7; };
@@ -2693,13 +2693,16 @@ function sgsExportEvenements(events, { periode, svc, inclureConf, nom, evStatus,
       const marques=[e.confidentiel?'CONFIDENTIEL':'',e.anonyme?'ANONYME':''].filter(Boolean).join(' · ');
       if(marques) desc='['+marques+']\n'+desc;
       const hz=(hazards||[]).filter(h=>h.eventKey===key).map(h=>h.ref+' '+h.titre).join('\n')||'-';
-      const v=[sgsFr(e.date),rat,evs,desc,(SGS_EV_STATUTS.find(s=>s.k===st)||{}).l,hz];
+      const an=((evStatus||{})[key]||{}).analyse;
+      const ana=!an?'-':'Réunion du '+sgsFr(an.date)+(e.confidentiel&&!inclureConf?'\nDétail consultable auprès du responsable SGS.'
+        :(an.participants?'\nParticipants : '+an.participants:'')+(an.causes?'\nCauses : '+an.causes:'')+(an.conclusion?'\nConclusion : '+an.conclusion:''));
+      const v=[sgsFr(e.date),rat,evs,desc,ana,(SGS_EV_STATUTS.find(s=>s.k===st)||{}).l,hz];
       doc.setFont('helvetica','normal'); doc.setFontSize(7.6);
       const cells=cols.map((c,i)=>doc.splitTextToSize(clean(v[i]),c.w-2*pad));
       const h=Math.max(...cells.map(l=>l.length))*lh+2*pad;
       if(y+h>HP-12){ doc.addPage(); header(); head(); doc.setFont('helvetica','normal'); doc.setFontSize(7.6); }
       if(ri%2){ doc.setFillColor(250,250,249); doc.rect(MX,y,CW,h,'F'); }
-      let x=MX; cols.forEach((c,i)=>{ doc.setTextColor(...(i===3&&e.confidentiel&&!inclureConf?[100,116,139]:[30,41,59])); cells[i].forEach((ln,k)=>doc.text(ln,x+pad,y+pad+2.6+k*lh)); x+=c.w; });
+      let x=MX; cols.forEach((c,i)=>{ doc.setTextColor(...((i===3||i===4)&&e.confidentiel&&!inclureConf?[100,116,139]:[30,41,59])); cells[i].forEach((ln,k)=>doc.text(ln,x+pad,y+pad+2.6+k*lh)); x+=c.w; });
       doc.setDrawColor(226,232,240); doc.setLineWidth(.2); doc.line(MX,y+h,MX+CW,y+h); y+=h;
     }); y+=6; }
   if(y>HP-40){ doc.addPage(); header(); }
@@ -2760,7 +2763,7 @@ function SgsToastHost(){
   useEffect(()=>{ if(!t) return; const id=setTimeout(()=>setT(null),6000); return ()=>clearTimeout(id); },[t]);
   if(!t) return null;
   return <div role="status" style={{position:"fixed",left:"50%",bottom:"calc(18px + env(safe-area-inset-bottom,0px))",transform:"translateX(-50%)",zIndex:450,
-    background:"#1a1a2e",color:"white",borderRadius:10,padding:"11px 14px",display:"flex",alignItems:"center",gap:14,fontSize:13,boxShadow:"0 6px 20px rgba(0,0,0,.25)",maxWidth:"92vw"}}>
+    background:"#1a1a2e",color:"white",borderRadius:10,padding:"11px 14px",display:"flex",alignItems:"center",gap:14,fontSize:13,boxShadow:"0 6px 20px rgba(0,0,0,.25)",maxWidth:"92vw",minWidth:"min(320px,92vw)",boxSizing:"border-box"}}>
     <span style={{color:"#9FE1CB",fontWeight:800}}>✓</span><span style={{flex:1}}>{t.msg}</span>
     {t.undo&&<button onClick={()=>{ t.undo(); setT(null); }} style={{border:"none",background:"none",color:"#9FE1CB",fontWeight:800,fontSize:13,padding:0,...TAP}}>Annuler</button>}
   </div>;
@@ -2802,7 +2805,8 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const [view,setView]=useState(null);   // fiche en lecture : {kind:'hazard'|'action', id}
   const [edit,setEdit]=useState(null);        // { kind:'hazard'|'action', data }
   const [evFilter,setEvFilter]=useState('todo');
-  const [qE,setQE]=useState('');                          // recherche événements
+  const [qE,setQE]=useState('');
+  const [anaK,setAnaK]=useState(null), [anaD,setAnaD]=useState({});   // fiche d'analyse en cours de saisie                          // recherche événements
   const [expEv,setExpEv]=useState(null);                  // panneau d'export : {periode,svc,conf}
   const [qD,setQD]=useState(''), [fDst,setFDst]=useState('actifs'), [fDniv,setFDniv]=useState('all');   // dangers
   const [qA,setQA]=useState(''), [fAst,setFAst]=useState('ouvertes'), [fAty,setFAty]=useState('all');  // actions
@@ -3107,8 +3111,14 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
                   style={{flex:2,height:42,borderRadius:10,border:"none",background:"#0F766E",color:"white",fontWeight:700,...TAP}}>4. Générer le PDF</button>
               </div>
             </div>); })()}
-        <SgsPills value={evFilter} onChange={setEvFilter} options={[{k:'todo',l:'À analyser ('+events.filter(e=>statutEv(e)==='recu').length+')'},{k:'analyse',l:'En analyse'},{k:'clos',l:'Clos'},{k:'all',l:'Tous'}]} color="#0F766E"/>
-        <input value={qE} onChange={e=>setQE(e.target.value)} placeholder="🔍 Rechercher : description, vol, immatriculation" style={{...sgsInput,marginTop:10}}/>
+        <div style={{fontSize:11,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:".04em",marginBottom:6}}>Afficher</div>
+        <SgsPills value={evFilter} onChange={setEvFilter} options={[{k:'todo',l:'À analyser · '+events.filter(e=>statutEv(e)==='recu').length},{k:'analyse',l:'En analyse · '+events.filter(e=>statutEv(e)==='analyse').length},{k:'clos',l:'Clos · '+events.filter(e=>statutEv(e)==='clos').length},{k:'all',l:'Tous · '+events.length}]} color="#0F766E"/>
+        <div style={{position:"relative",marginTop:10}}>
+          <input value={qE} onChange={e=>setQE(e.target.value)} placeholder="🔍 Rechercher : description, vol, immatriculation" style={{...sgsInput,paddingRight:40}}/>
+          {qE&&<button onClick={()=>setQE('')} aria-label="Effacer la recherche" style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",width:28,height:28,borderRadius:14,border:"none",background:"#E2E8F0",color:C.slate,fontWeight:800,fontSize:13,...TAP}}>✕</button>}
+        </div>
+        {qE.trim()&&(()=>{ const n=events.filter(e=>evFilter==='all'||(evFilter==='todo'?statutEv(e)==='recu':statutEv(e)===evFilter)).filter(e=>sgsMatch(qE,e.description,e.num,e.from,e.to,safetyLabels(e).join(' '))).length;
+          return <div style={{fontSize:12,color:C.slate,marginTop:6}}>{n} résultat{n>1?'s':''} pour « {qE.trim().slice(0,30)}{qE.trim().length>30?'…':''} » · <span role="button" onClick={()=>setQE('')} style={{color:"#0F766E",fontWeight:700,...TAP}}>tout afficher</span></div>; })()}
         <div style={{marginTop:10}}>
         {events.filter(e=>evFilter==='all'||(evFilter==='todo'?statutEv(e)==='recu':statutEv(e)===evFilter)).filter(e=>sgsMatch(qE,e.description,e.num,e.from,e.to,safetyLabels(e).join(' '))).slice(0,80).map((e,i)=>{
           const st=statutEv(e), late=st==='recu'&&sgsJours(e.date)>20;
@@ -3123,10 +3133,36 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
             <SafetyChips e={e}/>
             {e.description&&<div style={{fontSize:12,color:C.text,marginTop:6,lineHeight:1.45,background:C.bg,borderRadius:8,padding:"7px 9px"}}>{e.description}</div>}
             <div style={{display:"flex",gap:10,marginTop:10,flexWrap:"wrap",alignItems:"flex-start"}}>
-              <div style={{flex:1,minWidth:170}}><SgsStepper steps={SGS_EV_STATUTS} value={st} onPick={k=>{ if(k===st) return; setEvSt(e,k); sgsToast('Compte rendu : '+(SGS_EV_STATUTS.find(x=>x.k===k)||{}).l.toLowerCase(),()=>setEvSt(e,st)); }}/></div>
+              <div style={{flex:1,minWidth:170}}><div style={{fontSize:10.5,fontWeight:700,color:C.slate,marginBottom:4}}>Statut de ce compte rendu</div><SgsStepper steps={SGS_EV_STATUTS} value={st} onPick={k=>{ if(k===st) return; setEvSt(e,k); sgsToast('Compte rendu : '+(SGS_EV_STATUTS.find(x=>x.k===k)||{}).l.toLowerCase(),()=>setEvSt(e,st)); }}/></div>
               <button onClick={()=>{ setEvSt(e,'analyse'); setEdit({kind:'hazard',data:{titre:safetyLabels(e).join(', '),origine:'reactif',eventKey:sgsEventKey(e),statut:'ouvert'},step:1}); }}
                 style={{padding:"5px 9px",borderRadius:8,fontSize:10.5,fontWeight:700,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",...TAP}}>+ Danger</button>
             </div>
+            {(()=>{ const k=sgsEventKey(e), an=(ES[k]||{}).analyse||null;
+              if(anaK===k){ const upd=p=>setAnaD({...anaD,...p});
+                const saveAna=()=>{ if(!anaD.date){ uiAlert("⚠️ Indiquez la date de la réunion d'analyse."); return; }
+                  if(!(anaD.causes||'').trim()&&!(anaD.conclusion||'').trim()){ uiAlert("⚠️ Indiquez au moins les causes identifiées ou la conclusion."); return; }
+                  const avant=ES[k];
+                  setEvStatus(s=>({...(s||{}),[k]:{...((s||{})[k]||{}),statut:(((s||{})[k]||{}).statut&&((s||{})[k]||{}).statut!=='recu')?(s||{})[k].statut:'analyse',analyse:{...anaD,savedAt:new Date().toISOString()},updatedAt:new Date().toISOString()}}));
+                  setAnaK(null); sgsToast("Fiche d'analyse enregistrée",()=>setEvStatus(s=>{ const x={...(s||{})}; if(avant) x[k]=avant; else delete x[k]; return x; })); };
+                return <div style={{marginTop:10,background:"#F0FDFA",border:"1.5px solid #0F766E",borderRadius:10,padding:12,display:"flex",flexDirection:"column",gap:9}}>
+                  <div style={{fontSize:13,fontWeight:800,color:"#0F766E"}}>Fiche d'analyse</div>
+                  <div style={{fontSize:11,color:C.slate,marginTop:-5}}>Manuel SGS 03-03 § 3 : groupe d'analyse réuni dans les 20 jours.</div>
+                  <SgsField label="Date de la réunion d'analyse"><input type="date" value={anaD.date||''} onChange={x=>upd({date:x.target.value})} style={sgsInput}/></SgsField>
+                  <SgsField label="Participants"><input value={anaD.participants||''} onChange={x=>upd({participants:x.target.value})} placeholder="Responsable SGS, chef pilote, commandant de bord concerné" style={sgsInput}/></SgsField>
+                  <SgsField label="Causes identifiées"><textarea rows={3} value={anaD.causes||''} onChange={x=>upd({causes:x.target.value})} style={sgsInput}/></SgsField>
+                  <SgsField label="Conclusion"><textarea rows={2} value={anaD.conclusion||''} onChange={x=>upd({conclusion:x.target.value})} placeholder="Danger ouvert (DG-…), ou événement isolé sans suite" style={sgsInput}/></SgsField>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>setAnaK(null)} style={{flex:1,height:40,borderRadius:10,border:"1.5px solid "+C.border,background:"white",color:C.slate,fontWeight:700,...TAP}}>Annuler</button>
+                    <button onClick={saveAna} style={{flex:2,height:40,borderRadius:10,border:"none",background:"#0F766E",color:"white",fontWeight:700,...TAP}}>Enregistrer la fiche</button></div>
+                </div>; }
+              return an
+                ? <div role="button" onClick={()=>{ setAnaK(k); setAnaD(an); }} style={{marginTop:10,borderLeft:"3px solid #0F766E",background:"#F0FDFA",padding:"8px 10px",fontSize:12,color:C.text,lineHeight:1.45,...TAP}}>
+                    <div style={{display:"flex",gap:6}}><b style={{color:"#0F766E",flex:1}}>Analyse du {sgsFr(an.date)}</b><span style={{color:"#0F766E",fontWeight:700,fontSize:11.5}}>✎ Modifier</span></div>
+                    {an.participants&&<div style={{color:C.slate,fontSize:11.5}}>{an.participants}</div>}
+                    {an.causes&&<div><b>Causes :</b> {an.causes}</div>}
+                    {an.conclusion&&<div><b>Conclusion :</b> {an.conclusion}</div>}</div>
+                : <button onClick={()=>{ setAnaK(k); setAnaD({date:today,participants:'',causes:'',conclusion:''}); }} style={{marginTop:10,border:"1px solid "+C.border,background:"white",borderRadius:8,padding:"6px 11px",fontSize:12,fontWeight:700,color:C.navy,...TAP}}>📝 Fiche d'analyse</button>;
+            })()}
           </div>);})}
         </div>
       </div>)}
