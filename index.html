@@ -120,7 +120,7 @@ const PROFILES = [
    forms:["clients"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"], blocked:[] },
   {id:"sgs",   label:"Qualité / SGS",  icon:"🛡", color:"#0F766E",
    pwdHash:"e6a585f2870b2afbc4e0900a53d6b6b050781460d2d1eb575c347693b29b0d4e",
-   forms:["sgs","secu"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
+   forms:["sgs","secu","docavion","regl"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
    forms:null, tabs:null, readOnly:[] },
@@ -4631,7 +4631,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
 }
 
 
-function FormDocStore({ storeKey, label }) {
+function FormDocStore({ storeKey, label, readOnly }) {  // readOnly : consultation seule
   const PFX_DOCS = PFX + storeKey + "_";
   const [docs, setDocs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -4647,6 +4647,7 @@ function FormDocStore({ storeKey, label }) {
   const saveIndex = async (newDocs) => { setDocs(newDocs); await sbSet(PFX + storeKey + "_index", newDocs); };
 
   const handleAdd = async (e) => {
+    if (readOnly) { if(e&&e.target) e.target.value=""; return; }   // consultation seule
     const file = e.target.files?.[0]; if (!file) return;
     if (!file.name.toLowerCase().endsWith(".pdf")) { uiAlert("Seuls les fichiers PDF sont acceptés."); return; }
     const name = (await uiPrompt("Nom du document :", file.name.replace(".pdf",""))) || file.name;
@@ -4666,6 +4667,7 @@ function FormDocStore({ storeKey, label }) {
   };
 
   const handleUpdate = async (doc, e) => {
+    if (readOnly) { if(e&&e.target) e.target.value=""; return; }
     const file = e.target.files?.[0]; if (!file) return;
     if (!file.name.toLowerCase().endsWith(".pdf")) { uiAlert("Seuls les fichiers PDF sont acceptés."); return; }
     if (!(await uiConfirm("⚠️ Ceci remplacera la version du " + doc.date + " de « " + doc.name + " ». Confirmer ?"))) { e.target.value=""; return; }
@@ -4683,6 +4685,7 @@ function FormDocStore({ storeKey, label }) {
   };
 
   const handleDelete = async (doc) => {
+    if (readOnly) return;
     if (!(await uiConfirm("⚠️ Supprimer « " + doc.name + " » ? Cette action est irréversible."))) return;
     setMsg("🗑 Suppression...");
     await sbSet(PFX_DOCS + doc.id, null);
@@ -4708,16 +4711,18 @@ function FormDocStore({ storeKey, label }) {
       {msg && <div style={{background:"#F0FDF4",border:"1px solid #86EFAC",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#166534"}}>{msg}</div>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
         <div style={{fontSize:13,fontWeight:700,color:C.navy}}>{docs.length} document(s) {label}</div>
-        <label style={{background:C.navy,color:"white",borderRadius:8,padding:"9px 16px",fontSize:12,fontWeight:600,cursor:"pointer",letterSpacing:"0.05em"}}>
-          + Ajouter un PDF
-          <input type="file" accept=".pdf" style={{display:"none"}} onChange={handleAdd}/>
-        </label>
+        {readOnly
+          ? <span style={{background:C.bg2,color:C.slate,border:"1px solid "+C.border,borderRadius:8,padding:"7px 12px",fontSize:11.5,fontWeight:700}}>👁 Consultation seule</span>
+          : <label style={{background:C.navy,color:"white",borderRadius:8,padding:"9px 16px",fontSize:12,fontWeight:600,cursor:"pointer",letterSpacing:"0.05em"}}>
+              + Ajouter un PDF
+              <input type="file" accept=".pdf" style={{display:"none"}} onChange={handleAdd}/>
+            </label>}
       </div>
       {loading && <div style={{color:C.slate,fontSize:13,textAlign:"center",padding:24}}>Chargement...</div>}
       {!loading && docs.length===0 && (
         <div style={{background:C.bg2,borderRadius:12,padding:32,textAlign:"center",color:C.slate,fontSize:13}}>
           <div style={{fontSize:28,marginBottom:8}}>📄</div>
-          Aucun document importé.<br/>Appuyez sur « + Ajouter un PDF » pour commencer.
+          {readOnly ? "Aucun document disponible." : <>Aucun document importé.<br/>Appuyez sur « + Ajouter un PDF » pour commencer.</>}
         </div>
       )}
       {docs.map(doc => (
@@ -4734,6 +4739,7 @@ function FormDocStore({ storeKey, label }) {
               style={{background:C.navy,color:"white",border:"none",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
               📥 Ouvrir
             </button>
+            {!readOnly && <>
             <label style={{background:"#EFF6FF",color:"#1D4ED8",border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
               🔄 Mettre à jour
               <input type="file" accept=".pdf" style={{display:"none"}} onChange={e=>handleUpdate(doc,e)}/>
@@ -4742,6 +4748,7 @@ function FormDocStore({ storeKey, label }) {
               style={{background:"#FEF2F2",color:"#DC2626",border:"1px solid #FCA5A5",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
               🗑
             </button>
+            </>}
           </div>
         </div>
       ))}
@@ -4749,8 +4756,8 @@ function FormDocStore({ storeKey, label }) {
   );
 }
 
-function FormReglementation() { return <FormDocStore storeKey="regl" label="réglementaire(s)"/>; }
-function FormDocAvion() { return <FormDocStore storeKey="docavion" label="avion"/>; }
+function FormReglementation({ readOnly }) { return <FormDocStore storeKey="regl" label="réglementaire(s)" readOnly={readOnly}/>; }
+function FormDocAvion({ readOnly }) { return <FormDocStore storeKey="docavion" label="avion" readOnly={readOnly}/>; }
 
 
 function FormAircraft({ aircraft, onUpdate, saved }) {
@@ -5259,8 +5266,9 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="sgs" && sgs && <SgsTile safety={safetyData} flights={flights} aircraft={aircraft} {...sgs} onBack={()=>setActive(null)}/>}
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
-      {effectiveActive==="regl"     && <FormReglementation/>}
-      {effectiveActive==="docavion" && <FormDocAvion/>}
+      {/* Opérations : consultation seule des documents */}
+      {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"}/>}
+      {effectiveActive==="docavion" && <FormDocAvion readOnly={profileId==="ops"}/>}
       {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}/>}
       {effectiveActive==="clients"  && <FormClients clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
