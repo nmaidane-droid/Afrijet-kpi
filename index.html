@@ -438,6 +438,56 @@ function TimeField({ value, onChange, style, placeholder }) {
   );
 }
 
+// Champ date « JJ/MM/AAAA » sans sélecteur natif, même principe que TimeField.
+// Saisie au clavier numérique, barres insérées automatiquement, date impossible refusée,
+// bornes min / max (AAAA-MM-JJ) ; valeur stockée inchangée : « AAAA-MM-JJ ».
+function DateField({ value, onChange, min, max, style, placeholder }) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [err, setErr] = useState("");
+  const iso2fr = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v||"")) ? v.slice(8,10)+"/"+v.slice(5,7)+"/"+v.slice(0,4) : "";
+  const shown = draft!==null ? draft : iso2fr(value);
+  const format = raw => { const d=String(raw).replace(/\D/g,"").slice(0,8);
+    return d.length<=2?d:d.length<=4?d.slice(0,2)+"/"+d.slice(2):d.slice(0,2)+"/"+d.slice(2,4)+"/"+d.slice(4); };
+  const commit = txt => {
+    const d=String(txt).replace(/\D/g,"");
+    if(!d){ setErr(""); onChange(""); return; }
+    let j=Number(d.slice(0,2)), m=Number(d.slice(2,4)), y=d.slice(4);
+    if(y.length===2) y="20"+y;
+    const Y=Number(y), dt=new Date(Y, m-1, j);
+    if(d.length<6||y.length!==4||!(dt.getFullYear()===Y&&dt.getMonth()===m-1&&dt.getDate()===j)){ setErr("Date invalide (JJ/MM/AAAA)"); onChange(""); return; }
+    const iso=y+"-"+String(m).padStart(2,"0")+"-"+String(j).padStart(2,"0");
+    if(max&&iso>max){ setErr(max===new Date().toISOString().slice(0,10)?"La date ne peut pas être dans le futur":"Date postérieure au "+iso2fr(max)); onChange(""); return; }
+    if(min&&iso<min){ setErr("Date antérieure au "+iso2fr(min)); onChange(""); return; }
+    setErr(""); onChange(iso);
+  };
+  return (<div style={{flex:(style||{}).flex,minWidth:0}}>
+    <input type="text" inputMode="numeric" autoComplete="off" aria-invalid={!!err}
+      value={shown} placeholder={placeholder||"JJ/MM/AAAA"}
+      onFocus={()=>{ setFocused(true); setDraft(iso2fr(value)); }}
+      onChange={e=>{ setErr(""); setDraft(format(e.target.value)); }}
+      onBlur={()=>{ setFocused(false); commit(draft===null?iso2fr(value):draft); setDraft(null); }}
+      onKeyDown={e=>{ if(e.key==="Enter") e.currentTarget.blur(); }}
+      style={{ width:"100%", height:48, boxSizing:"border-box", background:focused?"#FFF":C.bg,
+               border:"1.5px solid "+(err?"#DC2626":focused?C.gold:C.border), borderRadius:10, padding:"0 14px",
+               color:C.text, fontSize:14, fontFamily:"inherit", outline:"none", letterSpacing:"0.04em", ...(style?{height:"auto"}:{}), ...(style||{}), flex:undefined,
+               ...(err?{borderColor:"#DC2626"}:{}) }}/>
+    {err&&<div role="alert" style={{fontSize:11,color:"#B91C1C",marginTop:3,fontWeight:600}}>{err}</div>}
+  </div>);
+}
+
+// Choix de l'appareil dans le registre Avion ; le type d'aéronef se remplit tout seul
+function sgsAcOpts(aircraft, cur){
+  const L=(aircraft||[]).map(a=>({value:a.immat,label:a.immat,sub:a.type||''}));
+  if(cur&&!L.some(o=>o.value===cur)) L.unshift({value:cur,label:cur,sub:'Immatriculation enregistrée, absente du registre Avion'});
+  return L;
+}
+const sgsAcType=(aircraft,immat)=>((aircraft||[]).find(a=>a.immat===immat)||{}).type||'';
+function AircraftSelect({ aircraft, value, onChange }){
+  return <CustomSelect value={value||''} onChange={v=>onChange(v,sgsAcType(aircraft,v))} searchable icon="🛩" placeholder="-- Choisir l'appareil --" options={sgsAcOpts(aircraft,value)}/>;
+}
+const SgsRoField=({v,ph})=><div style={{...sgsInput,background:"#EEF2F6",color:v?C.text:C.slateL}}>{v||ph||'Rempli automatiquement'}</div>;
+
 function FField({ label, value, onChange, type="text", min, max, placeholder, step, raw, small }) {
   const [focused, setFocused] = useState(false);
   const handleChange = e => {
@@ -449,6 +499,12 @@ function FField({ label, value, onChange, type="text", min, max, placeholder, st
     <div>
       <FLabel>{label}</FLabel>
       <TimeField value={value} onChange={onChange} placeholder={placeholder}/>
+    </div>
+  );
+  if(type==="date") return (
+    <div>
+      <FLabel>{label}</FLabel>
+      <DateField value={value} onChange={onChange} min={min} max={max}/>
     </div>
   );
   return (
@@ -1809,11 +1865,8 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
                       <div style={{fontSize:10.5,color:C.slate,marginBottom:2}}>
                         {it.label}{it.bloquant&&<span style={{color:"#DC2626"}}> *</span>}
                       </div>
-                      <input type="date" value={dates[it.k]||""}
-                        onChange={e=>setDates(d=>({...d,[it.k]:e.target.value}))}
-                        style={{width:"100%",height:38,boxSizing:"border-box",background:C.bg,
-                          border:"1.5px solid "+C.border,borderRadius:9,padding:"0 10px",
-                          fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                      <DateField value={dates[it.k]||""} onChange={v=>setDates(d=>({...d,[it.k]:v}))}
+                        style={{height:38,borderRadius:9,padding:"0 10px",fontSize:12.5}}/>
                     </div>
                     <div style={{width:100,height:38,flexShrink:0,alignSelf:"flex-end",
                       background:st.bg,color:st.color,borderRadius:9,
@@ -2190,22 +2243,35 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   );
 }
 
+// ── Choix des membres d'équipage depuis le registre Équipage (évite les erreurs de saisie) ──
+const SGS_ROLE_L={TRI:'TRI — instructeur',CM1:'CDB',CM2:'OPL',CC:'CC'};
+const sgsCrewNom=m=>(m.nom+' '+m.prenom).trim();
+const SGS_CREW_ROLES={cdb:['CM1','TRI'],opl:['CM1','CM2','TRI'],pnc:['CC'],tous:['TRI','CM1','CM2','CC']};
+function sgsCrewOpts(crew, kind, cur){
+  const L=(crew||[]).filter(m=>SGS_CREW_ROLES[kind].includes(m.role)).map(m=>({value:sgsCrewNom(m),label:sgsCrewNom(m),
+    sub:SGS_ROLE_L[m.role]+(typeof titresEchus==='function'&&titresEchus(m).length?' · ⛔ INAPTE — titre échu':'')}));
+  // Nom déjà enregistré sur un ancien compte rendu mais absent du registre : conservé, non modifiable à la main
+  if(cur&&!L.some(o=>o.value===cur)) L.unshift({value:cur,label:cur,sub:'Nom enregistré, absent du registre Équipage'});
+  return L;
+}
+const sgsCrewRole=(crew,nom)=>{ const m=(crew||[]).find(x=>sgsCrewNom(x)===nom); return m?SGS_ROLE_L[m.role]:''; };
+
 // ── Formulaires officiels de compte rendu (Manuel SGS 05-01, ENR/SGS-FOR/SMS-xx) ──
 // Chaque formulaire a ses informations générales ; tous partagent description, enquête requise et Assessment.
 // t : text · area · place (pays + code OACI) · yn (oui/non) · sel (liste)
 const SGS_CR_FORMS=[
   {k:'SMS-19',l:'Rapport de danger — équipage',court:'Équipage',motif:true,redac:true,f:[
-    {k:'typeAv',l:"Type d'aéronef"},{k:'immat',l:'Immatriculation'},{k:'roleCdb',l:'Rôle du CDB'},{k:'roleOpl',l:"Rôle de l'OPL"},
-    {k:'nomCdb',l:'Nom du CDB'},{k:'nomOpl',l:"Nom de l'OPL"},{k:'nomCc',l:'Nom du CC'},{k:'nomPnc',l:'Nom du PCB / PNC'},
+    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'nomCdb',l:'Nom du CDB',t:'crew',kind:'cdb'},{k:'roleCdb',l:'Rôle du CDB',t:'ro'},{k:'nomOpl',l:"Nom de l'OPL",t:'crew',kind:'opl'},{k:'roleOpl',l:"Rôle de l'OPL",t:'ro'},
+    {k:'nomCc',l:'Nom du CC',t:'crew',kind:'pnc'},{k:'nomPnc',l:'Nom du PCB / PNC',t:'crew',kind:'pnc'},
     {k:'heure',l:'Heure locale',t:'time'},{k:'depart',l:'Départ',t:'place'},{k:'arrivee',l:'Arrivée',t:'place'},{k:'lieu',l:"Lieu de l'événement",t:'place'},
     {k:'infos',l:'Informations / précisions (waypoint, coordonnées, pistes, routes…)',t:'area'},{k:'precisions',l:"Précisions sur la nature de l'événement"}]},
   {k:'SMS-20',l:'Rapport de danger — maintenance',court:'Maintenance',motif:true,redac:true,f:[
-    {k:'typeAv',l:"Type d'aéronef"},{k:'immat',l:'Immatriculation'},{k:'heure',l:'Heure locale',t:'time'},{k:'lieu',l:'Lieu',t:'place'},
+    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'heure',l:'Heure locale',t:'time'},{k:'lieu',l:'Lieu',t:'place'},
     {k:'infos',l:'Informations / précisions (waypoint, coordonnées, pistes, routes…)',t:'area'},{k:'precisions',l:"Précisions sur la nature de l'événement"},
     {k:'rapportTech',l:'Informations techniques — rapport',t:'area'}]},
   {k:'SMS-21',l:'Rapport de danger — opérations sol',court:'Opérations sol',motif:true,redac:true,f:[
     {k:'notif',l:'Notification initiale',t:'area'},{k:'blessures',l:'Présence de blessures ?',t:'yn'},{k:'niveauBlessures',l:'Si oui, niveau des blessures'},
-    {k:'typeAv',l:"Type d'aéronef"},{k:'immat',l:'Immatriculation'},{k:'heure',l:'Heure locale',t:'time'},{k:'lieu',l:"Lieu de l'événement",t:'place'},
+    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'heure',l:'Heure locale',t:'time'},{k:'lieu',l:"Lieu de l'événement",t:'place'},
     {k:'infos',l:'Informations / précisions (waypoint, coordonnées, pistes, routes…)',t:'area'},{k:'precisions',l:"Précisions sur la nature de l'événement"}]},
   {k:'SMS-09',l:"Retour d'expérience libre",court:"Retour d'expérience",redac:true,danger:true,f:[
     {k:'heure',l:'Heure locale',t:'time'},{k:'lieu',l:"Lieu de l'événement",t:'place'},{k:'infos',l:'Informations / précisions',t:'area'},
@@ -2213,12 +2279,12 @@ const SGS_CR_FORMS=[
   {k:'SMS-13',l:'CRIMD — incident marchandises dangereuses',court:'CRIMD',auto:['dg'],descL:"Description de l'incident, avec les détails sur les blessures ou dommages éventuels",f:[
     {k:'heure',l:'Heure locale',t:'time'},{k:'depart',l:'Départ',t:'place'},{k:'arrivee',l:'Arrivée',t:'place'},{k:'lieu',l:"Lieu de l'événement",t:'place'},
     {k:'infos',l:'Informations / précisions (waypoint, coordonnées, piste, routes…)',t:'area'},{k:'origine',l:'Origine des marchandises'},
-    {k:'typeAv',l:"Type d'aéronef"},{k:'numVol',l:'Numéro de vol'},{k:'immat',l:'Immatriculation'}]},
+    {k:'numVol',l:'Numéro de vol'},{k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'}]},
   {k:'SMS-16',l:'Compte rendu sûreté',court:'Sûreté',redac:true,descL:"Circonstances, constatations concernant l'événement",f:[
     {k:'heure',l:'Heure locale',t:'time'},{k:'lieu',l:"Lieu de l'événement",t:'place'},{k:'infos',l:'Informations / précisions (waypoint, coordonnées, piste, routes…)',t:'area'}]},
   {k:'SMS-17',l:'CRTSV — prolongation de TSV ou réduction du repos',court:'CRTSV',auto:['tsv'],descL:"Compte rendu du CDB expliquant les conditions de l'événement",f:[
     {k:'nature',l:'Nature',t:'sel',opts:['Prolongation du TSV','Réduction du temps de repos']},{k:'duree',l:'Durée de la prolongation ou de la réduction (h:mm)',ph:'1:30'},
-    {k:'typeAv',l:"Type d'aéronef"},{k:'immat',l:'Immatriculation'},{k:'nomCdb',l:'Nom du CDB'},{k:'nomOpl',l:"Nom de l'OPL"},
+    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'nomCdb',l:'Nom du CDB',t:'crew',kind:'cdb'},{k:'nomOpl',l:"Nom de l'OPL",t:'crew',kind:'opl'},
     {k:'depart',l:'Départ',t:'place'},{k:'arrivee',l:'Arrivée',t:'place'},{k:'lieu',l:"Lieu de l'événement",t:'place'},
     {k:'infos',l:'Informations / précisions (waypoint, coordonnées, piste, routes…)',t:'area'}]},
 ];
@@ -2248,7 +2314,7 @@ function SgsAssessment({ rows, setRows, risk, setRisk }){
   </div>;
 }
 
-function FormSafety({ onSubmit, flights, aircraft, saved }) {
+function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
   const now=new Date();
   const today=now.toISOString().slice(0,10);
 
@@ -2273,6 +2339,12 @@ function FormSafety({ onSubmit, flights, aircraft, saved }) {
   const [titre,setTitre]=useState(""), [redac,setRedac]=useState(""), [motif,setMotif]=useState("evenement"), [enquete,setEnquete]=useState(false);
   const [assess,setAssess]=useState([]), [risk,setRisk]=useState({});
   const FD=SGS_CR_BY[form];
+  // Compte rendu rattaché à un vol : équipage du vol proposé d'office (reste modifiable)
+  useEffect(()=>{ if(mode!=="vol"||!volNum) return; const [n,d]=volNum.split("|"); const fl=(flights||[]).find(x=>x.num===n&&x.date===d); if(!fl) return;
+    const ac=(aircraft||[]).find(a=>a.id===fl.acId||a.immat===fl.num);
+    setFx(o=>({...o,nomCdb:o.nomCdb||fl.cm1||"",nomOpl:o.nomOpl||fl.cm2||"",nomCc:o.nomCc||fl.cc||"",
+      immat:o.immat||(ac?ac.immat:fl.num)||"",typeAv:o.typeAv||(ac?ac.type:"")||"",
+      roleCdb:o.roleCdb||sgsCrewRole(crew,fl.cm1),roleOpl:o.roleOpl||sgsCrewRole(crew,fl.cm2)})); },[volNum,mode]);
   const pickForm=k=>{ setForm(k); const d=SGS_CR_BY[k]; if(d.auto) setSel(s=>{ const n={...s}; d.auto.forEach(a=>n[a]=true); return n; }); };
 
   const reset=()=>{ setVolNum(""); setAcId(""); setDateEv(today); setSel({}); setUnrulyType(""); setDesc(""); setConf(false); setAnon(false);
@@ -2378,8 +2450,8 @@ function FormSafety({ onSubmit, flights, aircraft, saved }) {
         {mode!=="vol"&&(
           <div>
             <FLabel>Date de l'événement</FLabel>
-            <input type="date" value={dateEv} max={today} onChange={e=>setDateEv(e.target.value)}
-              style={{width:"100%",height:44,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:14,outline:"none"}}/>
+            <DateField value={dateEv} onChange={v=>setDateEv(v)}
+              style={{width:"100%",height:44,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:14,outline:"none"}} max={today} style={{width:"100%",height:44,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:14,outline:"none"}}/>
           </div>
         )}
 
@@ -2397,10 +2469,15 @@ function FormSafety({ onSubmit, flights, aircraft, saved }) {
             if(f.t==='place') return <div key={f.k}><FLabel>{f.l}</FLabel><div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:6}}>
               <input aria-label={f.l+' — pays'} value={(v||{}).pays||''} onChange={e=>setF(f.k,{...(v||{}),pays:e.target.value})} placeholder="Pays" style={inp}/>
               <input aria-label={f.l+' — code OACI'} value={(v||{}).oaci||''} onChange={e=>setF(f.k,{...(v||{}),oaci:e.target.value.toUpperCase().slice(0,4)})} placeholder="OACI" style={inp}/></div></div>;
+            if(f.t==='crew') return <div key={f.k}><FLabel>{f.l}</FLabel><CustomSelect value={v||''} searchable icon={f.kind==='pnc'?'🧑‍✈️':'👨‍✈️'} placeholder="-- Choisir dans le registre Équipage --"
+              onChange={x=>{ setF(f.k,x); if(f.k==='nomCdb') setF('roleCdb',sgsCrewRole(crew,x)); if(f.k==='nomOpl') setF('roleOpl',sgsCrewRole(crew,x)); }} options={sgsCrewOpts(crew,f.kind,v)}/></div>;
+            if(f.t==='ro') return <div key={f.k}><FLabel>{f.l}</FLabel><div style={{...inp,color:v?C.text:C.slateL,background:"#EEF2F6"}}>{v||(f.k==='typeAv'?"Rempli selon l'appareil choisi":'Rempli selon le nom choisi')}</div></div>;
             if(f.t==='area') return <div key={f.k}><FLabel>{f.l}</FLabel><textarea aria-label={f.l} rows={3} value={v||''} onChange={e=>setF(f.k,e.target.value)} style={inp}/></div>;
             if(f.t==='yn') return <div key={f.k}><FLabel>{f.l}</FLabel><div style={{display:"flex",gap:6}}>{[['oui','Oui'],['non','Non']].map(([k,l])=><button key={k} onClick={()=>setF(f.k,k)} style={{flex:1,height:36,borderRadius:8,fontSize:12,fontWeight:700,...TAP,border:"1.5px solid "+(v===k?C.navy:C.border),background:v===k?C.navy:"white",color:v===k?"white":C.slate}}>{l}</button>)}</div></div>;
             if(f.t==='sel') return <div key={f.k}><FLabel>{f.l}</FLabel><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{f.opts.map(o=><button key={o} onClick={()=>setF(f.k,o)} style={{padding:"7px 10px",borderRadius:8,fontSize:12,fontWeight:700,...TAP,border:"1.5px solid "+(v===o?C.navy:C.border),background:v===o?C.navy:"white",color:v===o?"white":C.slate}}>{o}</button>)}</div></div>;
-            return <div key={f.k}><FLabel>{f.l}</FLabel><input aria-label={f.l} type={f.t==='time'?'time':'text'} value={v||''} placeholder={f.ph||''} onChange={e=>setF(f.k,e.target.value)} style={inp}/></div>; };
+            if(f.t==='time') return <div key={f.k}><FLabel>{f.l}</FLabel><TimeField value={v||''} onChange={x=>setF(f.k,x)} style={{height:40}}/></div>;
+            if(f.t==='ac') return <div key={f.k}><FLabel>{f.l}</FLabel><AircraftSelect aircraft={aircraft} value={v} onChange={(im,ty)=>setFx(o=>({...o,immat:im,typeAv:ty||o.typeAv}))}/></div>;
+            return <div key={f.k}><FLabel>{f.l}</FLabel><input aria-label={f.l} type="text" value={v||''} placeholder={f.ph||''} onChange={e=>setF(f.k,e.target.value)} style={inp}/></div>; };
           return <>
             <div><FLabel>Titre de l'événement *</FLabel><input aria-label="Titre de l'événement" value={titre} onChange={e=>setTitre(e.target.value)} style={inp}/></div>
             {FD.redac&&<div><FLabel>Rédacteur</FLabel><input aria-label="Rédacteur" value={redac} onChange={e=>setRedac(e.target.value)} placeholder="Laisser vide si le rapport est anonyme" style={inp}/></div>}
@@ -3023,7 +3100,7 @@ function SgsAnalyseEditor({ e, init, nomResp, onSave, onCancel }){
   const up=p=>setD(x=>({...x,...p}));
   const upB=(i,p)=>up({barrieres:d.barrieres.map((b,k)=>k===i?{...b,...p}:b)});
   const STEPS=[{k:1,l:'Groupe'},{k:2,l:'Faits'},{k:3,l:'EI / EU'},{k:4,l:'Barrières'},{k:5,l:'Causes'},{k:6,l:'Conclusion'}];
-  const inp=(k,ph,type)=><input type={type||"text"} value={d[k]||''} onChange={x=>up({[k]:x.target.value})} placeholder={ph} style={sgsInput}/>;
+  const inp=(k,ph,type)=>type==='date'?<DateField value={d[k]||''} onChange={v=>up({[k]:v})} max={new Date().toISOString().slice(0,10)} style={sgsInput}/>:<input type={type||"text"} value={d[k]||''} onChange={x=>up({[k]:x.target.value})} placeholder={ph} style={sgsInput}/>;
   const txt=(k,rows,ph)=><textarea rows={rows||3} value={d[k]||''} onChange={x=>up({[k]:x.target.value})} placeholder={ph} style={sgsInput}/>;
   const save=()=>{ if(!d.dateReunion){ uiAlert("⚠️ Indiquez la date de la réunion du groupe d'analyse (étape Groupe)."); setStep(1); return; }
     if(!(d.causes||'').trim()&&!(d.conclusion||'').trim()){ uiAlert("⚠️ Indiquez au moins les causes (étape Causes) ou la conclusion (étape Conclusion)."); return; }
@@ -3147,7 +3224,7 @@ Sections exactement dans cet ordre : ${SGS_RS_SECTIONS.map(s=>'"'+s+'"').join(',
       <SgsField label="2. Année examinée"><SgsPills value={an} onChange={setAn} options={ans.map(y=>({k:y,l:String(y)}))} color="#0F766E"/></SgsField>
       <div style={{height:10}}/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <SgsField label="3. Date de la revue"><input type="date" value={date} onChange={e=>setDate(e.target.value)} style={sgsInput}/></SgsField>
+        <SgsField label="3. Date de la revue"><DateField value={date} onChange={v=>setDate(v)} style={sgsInput}/></SgsField>
         <SgsField label="Lieu"><input value={lieu} onChange={e=>setLieu(e.target.value)} style={sgsInput}/></SgsField></div>
       <div style={sgsH}>4. Participants</div>
       <div style={{display:"flex",flexDirection:"column",gap:4}}>{SGS_RS_PARTICIPANTS.map(p=>{ const on=part.includes(p);
@@ -3251,7 +3328,7 @@ function SgsChangesView({ items, setItems, nomResp, onDanger }){
           {ed.miseEnOeuvre.map((m,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:6,alignItems:"center"}}>
             <input value={m.mesure||''} onChange={e=>up({miseEnOeuvre:ed.miseEnOeuvre.map((y,k)=>k===i?{...y,mesure:e.target.value}:y)})} placeholder="Mesure" style={sgsInput}/>
             <input value={m.entite||''} onChange={e=>up({miseEnOeuvre:ed.miseEnOeuvre.map((y,k)=>k===i?{...y,entite:e.target.value}:y)})} placeholder="Entité" style={sgsInput}/>
-            <input type="date" value={m.echeance||''} onChange={e=>up({miseEnOeuvre:ed.miseEnOeuvre.map((y,k)=>k===i?{...y,echeance:e.target.value}:y)})} style={sgsInput}/>
+            <DateField value={m.echeance||''} onChange={v=>up({miseEnOeuvre:ed.miseEnOeuvre.map((y,k)=>k===i?{...y,echeance:v}:y)})} style={sgsInput}/>
             <span role="button" onClick={()=>up({miseEnOeuvre:ed.miseEnOeuvre.filter((_,k)=>k!==i)})} style={{color:"#B91C1C",...TAP}}>✕</span></div>)}
           <SgsBtn l="+ Mesure à mettre en œuvre" onClick={()=>up({miseEnOeuvre:[...ed.miseEnOeuvre,{mesure:'',entite:'',echeance:''}]})} full/>
         </>}
@@ -3317,7 +3394,7 @@ function SgsAuditsView({ items, setItems, nomResp, onAction }){
       <div style={{display:"flex",flexDirection:"column",gap:11}}>
         <SgsField label="Type"><SgsPills value={ed.type} onChange={v=>up({type:v,items:v==='eval'&&!(ed.items||[]).length?SGS_GUIDE.map(g=>({n:g.n,eval:'',rem:''})):ed.items})} options={SGS_AUD_TYPES} color="#0F766E"/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Date (prévue ou réalisée)"><input type="date" value={ed.date||''} onChange={e=>up({date:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Date (prévue ou réalisée)"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
           <SgsField label="Statut"><SgsPills value={ed.statut} onChange={v=>up({statut:v})} options={[{k:'planifie',l:'Planifié'},{k:'realise',l:'Réalisé'},{k:'clos',l:'Clos'}]} color="#0F766E"/></SgsField></div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <SgsField label="Auditeur(s)"><input value={ed.auditeurs||''} onChange={e=>up({auditeurs:e.target.value})} style={sgsInput}/></SgsField>
@@ -3375,7 +3452,7 @@ const SGS_FORM_RES={absent:{l:'Absent',c:'#B91C1C',bg:'#FCEBEB'},present:{l:'For
 const sgsFormOK=(p,f)=>['present','reussi'].includes(sgsFormRes(p,f));
 // Personnes considérées comme formées (présentes, et reçues si un test a eu lieu)
 const sgsFormNoms=f=>sgsFormPers(f).filter(p=>p.nom&&sgsFormOK(p,f)).map(p=>p.nom);
-function SgsFormationsView({ items, setItems, nomResp }){
+function SgsFormationsView({ items, setItems, nomResp, crew }){
   const [ed,setEd]=useState(null);
   const today=sgsToday(), list=[...(items||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   // Dernière session réussie par personne → échéance de recyclage ; personnes à former (absentes ou à reprendre, sans réussite ultérieure)
@@ -3409,7 +3486,7 @@ function SgsFormationsView({ items, setItems, nomResp }){
         <SgsField label="Type"><SgsPills value={ed.type} onChange={v=>up({type:v})} options={SGS_FORM_TYPES} color="#0F766E"/></SgsField>
         <SgsField label="Intitulé"><input value={ed.intitule||''} onChange={e=>up({intitule:e.target.value})} style={sgsInput}/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Date"><input type="date" value={ed.date||''} onChange={e=>up({date:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Date"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
           <SgsField label="Durée"><input value={ed.duree||''} onChange={e=>up({duree:e.target.value})} placeholder="2 h" style={sgsInput}/></SgsField></div>
         <SgsField label="Formateur"><input value={ed.formateur||''} onChange={e=>up({formateur:e.target.value})} style={sgsInput}/></SgsField>
         <div style={{fontSize:11,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:".04em",marginTop:4}}>Participants · {rows.length}</div>
@@ -3424,6 +3501,9 @@ function SgsFormationsView({ items, setItems, nomResp }){
               <input aria-label={"Test du participant "+(i+1)} type="number" min="0" max="100" value={r.score??''} onChange={e=>setRow(i,{score:e.target.value})} placeholder="Test %" disabled={!r.present} style={{...cell,width:62,flex:"0 0 auto",opacity:r.present?1:.5}}/>
               {res&&<span style={{marginLeft:"auto",fontSize:10.5,fontWeight:800,borderRadius:6,padding:"3px 6px",background:res.bg,color:res.c,whiteSpace:"nowrap"}}>{res.l}</span>}</div>
           </div>; })}
+        {(crew||[]).length>0&&<CustomSelect value="" searchable icon="👥" placeholder="+ Ajouter depuis le registre Équipage"
+          onChange={v=>{ if(!v||rows.some(r=>r.nom===v)) return; setEd(o=>({...o,pers:[...(o.pers||[]).filter(r=>(r.nom||'').trim()),{nom:v,fonction:sgsCrewRole(crew,v),present:true,score:''}]})); }}
+          options={sgsCrewOpts(crew,'tous').filter(o=>!rows.some(r=>r.nom===o.value))}/>}
         <button onClick={()=>up({pers:[...rows,{nom:'',fonction:'',present:true,score:''}]})} style={{height:40,borderRadius:10,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",fontWeight:700,...TAP}}>+ Ajouter un participant</button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <SgsField label="Seuil de réussite au test (%)"><input type="number" min="0" max="100" value={ed.seuil??75} onChange={e=>up({seuil:e.target.value})} style={sgsInput}/></SgsField>
@@ -3493,8 +3573,8 @@ function SgsFratView({ items, setItems, flights, crew, standalone }){
           <option value="">-- Choisir un vol planifié --</option>{vols.map(f=><option key={String(f.id||f.num+f.date)} value={String(f.id||f.num+f.date)}>{(f.num||'')+' · '+(f.from||'')+'→'+(f.to||'')+' · '+sgsFr(f.date)}</option>)}</select></SgsField>
         {!ed.flightId&&<input value={ed.vol||''} onChange={e=>up({vol:e.target.value})} placeholder="Ou saisir le vol : AJS201 VIL→CMN" style={sgsInput}/>}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Date"><input type="date" value={ed.date||today} onChange={e=>up({date:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Commandant"><input value={ed.cdb||''} onChange={e=>up({cdb:e.target.value})} style={sgsInput}/></SgsField></div>
+          <SgsField label="Date"><DateField value={ed.date||today} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
+          <SgsField label="Commandant"><CustomSelect value={ed.cdb||''} onChange={v=>up({cdb:v})} searchable icon='👨‍✈️' placeholder='-- Choisir --' options={sgsCrewOpts(crew,'cdb',ed.cdb)}/></SgsField></div>
         <div style={{position:"sticky",top:0,zIndex:2,background:CC.bg,color:CC.fg,borderRadius:10,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,border:"1.5px solid "+CC.c}}>
           <div style={{fontSize:26,fontWeight:800}}>{score}</div><div style={{flex:1,fontSize:12.5,fontWeight:700}}>Résultat {CC.l.toLowerCase()}{phase===2?' après barrières':''}<div style={{fontWeight:400,fontSize:11}}>Vert 0 à {SGS_FRAT_SEUILS.jaune-1} · jaune {SGS_FRAT_SEUILS.jaune} à {SGS_FRAT_SEUILS.rouge-1} · rouge {SGS_FRAT_SEUILS.rouge} et plus</div></div></div>
         {phase===2&&<SgsField label="Barrières mises en place"><textarea rows={2} value={ed.barr} onChange={e=>up({barr:e.target.value})} placeholder="Changement de CDB, carburant supplémentaire, dégagement plus proche…" style={sgsInput}/></SgsField>}
@@ -3545,8 +3625,9 @@ function SgsMedaView({ items, setItems, nomResp, safety, aircraft }){
       <div style={{display:"flex",flexDirection:"column",gap:11}}>
         <SgsStepper steps={SGS_MEDA_ET} value={ed.statut} onPick={k=>up({statut:k})}/>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Date"><input type="date" value={ed.date||''} onChange={e=>up({date:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Avion"><select value={ed.immat||''} onChange={e=>up({immat:e.target.value})} style={sgsInput}><option value="">—</option>{(aircraft||[]).map(a=><option key={a.immat}>{a.immat}</option>)}</select></SgsField></div>
+          <SgsField label="Date"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
+          <SgsField label="Avion"><AircraftSelect aircraft={aircraft} value={ed.immat} onChange={(im,ty)=>up({immat:im,typeAv:ty})}/></SgsField></div>
+          <SgsField label="Type d'aéronef"><SgsRoField v={ed.typeAv||sgsAcType(aircraft,ed.immat)} ph="Rempli selon l'appareil choisi"/></SgsField>
         <SgsField label="1. Constatation de l'événement"><textarea rows={3} value={ed.description||''} onChange={e=>up({description:e.target.value})} placeholder="Retour au parking, retour au terrain de départ…" style={sgsInput}/></SgsField>
         <SgsField label="Traitement de l'anomalie et remise en état de vol"><textarea rows={2} value={ed.traitement||''} onChange={e=>up({traitement:e.target.value})} style={sgsInput}/></SgsField>
         <SgsField label="L'événement est-il lié à l'entretien ?"><SgsPills value={ed.lie} onChange={v=>up({lie:v})} options={[{k:'oui',l:'Oui — ouvrir l\'enquête'},{k:'non',l:'Non — fin'}]} color="#0F766E"/></SgsField>
@@ -3561,7 +3642,7 @@ function SgsMedaView({ items, setItems, nomResp, safety, aircraft }){
           <SgsField label="Raisons pour lesquelles l'événement est survenu"><textarea rows={3} value={ed.raisons||''} onChange={e=>up({raisons:e.target.value})} style={sgsInput}/></SgsField>
           <SgsField label="Recommandations pour éviter la répétition"><textarea rows={2} value={ed.recommandations||''} onChange={e=>up({recommandations:e.target.value})} style={sgsInput}/></SgsField>
           <SgsField label="Changements adoptés dans le système de maintenance"><textarea rows={2} value={ed.changements||''} onChange={e=>up({changements:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Information du personnel de maintenance (date)"><input type="date" value={ed.infoDate||''} onChange={e=>up({infoDate:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Information du personnel de maintenance (date)"><DateField value={ed.infoDate||''} onChange={v=>up({infoDate:v})} max={new Date().toISOString().slice(0,10)} style={sgsInput}/></SgsField>
         </>}
         <div style={{fontSize:10.5,color:C.slate}}>Types d'erreur et facteurs : grille MEDA standard, à valider — le manuel décrit le logigramme mais pas le formulaire.</div>
       </div>
@@ -3583,7 +3664,7 @@ function SgsMedaView({ items, setItems, nomResp, safety, aircraft }){
 const SGS_FDM_EV=['Approche non stabilisée','Vitesse excessive en approche','Taux de descente élevé','Assiette élevée à l\'atterrissage','Atterrissage dur (accélération verticale)','Survitesse (VMO / MMO)','Alarme GPWS','TCAS RA','Alarme de configuration','Vent traversier au-delà des limites','Autre'];
 const SGS_FDM_PH=['Roulage','Décollage','Montée','Croisière','Descente','Approche','Atterrissage'];
 const SGS_FDM_N={vert:{bg:'#EAF3DE',fg:'#27500A',c:'#1D9E75',l:'Vert'},jaune:{bg:'#FAEEDA',fg:'#633806',c:'#BA7517',l:'Jaune'},rouge:{bg:'#FCEBEB',fg:'#791F1F',c:'#DC2626',l:'Rouge'}};
-function SgsFdmView({ items, setItems, onDanger }){
+function SgsFdmView({ items, setItems, onDanger, aircraft }){
   const [ed,setEd]=useState(null); const list=[...(items||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   const rouges90=list.filter(f=>f.niveau==='rouge'&&sgsJours(f.date)<=90);
   const repet=Object.entries(rouges90.reduce((m,f)=>{ m[f.evenement]=(m[f.evenement]||0)+1; return m; },{})).filter(([,n])=>n>=2);
@@ -3594,8 +3675,11 @@ function SgsFdmView({ items, setItems, onDanger }){
     return (<Card accent="#0F766E"><FHeader icon="📈" title="Événement FDM" subtitle="SGS 02-05 · analyse des vols, programme non punitif" color="#0F766E"/>
       <div style={{display:"flex",flexDirection:"column",gap:11}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Date du vol"><input type="date" value={ed.date||''} onChange={e=>up({date:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Vol · immatriculation"><input value={ed.vol||''} onChange={e=>up({vol:e.target.value})} placeholder="AJS201 · CN-KTA" style={sgsInput}/></SgsField></div>
+          <SgsField label="Date du vol"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
+          <SgsField label="Vol"><input value={ed.vol||''} onChange={e=>up({vol:e.target.value})} placeholder="AJS201" style={sgsInput}/></SgsField></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <SgsField label="Appareil"><AircraftSelect aircraft={aircraft} value={ed.immat} onChange={(im,ty)=>up({immat:im,typeAv:ty})}/></SgsField>
+            <SgsField label="Type d'aéronef"><SgsRoField v={ed.typeAv||sgsAcType(aircraft,ed.immat)} ph="Selon l'appareil"/></SgsField></div>
         <SgsField label="Événement"><select value={ed.evenement||''} onChange={e=>up({evenement:e.target.value})} style={sgsInput}><option value="">—</option>{SGS_FDM_EV.map(x=><option key={x}>{x}</option>)}</select></SgsField>
         <SgsField label="Phase de vol"><SgsPills value={ed.phase} onChange={v=>up({phase:v})} options={SGS_FDM_PH.map(x=>({k:x,l:x}))} color="#0F766E"/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -3623,7 +3707,7 @@ function SgsFdmView({ items, setItems, onDanger }){
 // ══ Lot 2 — Interview équipage (SMS-04) et recommandations de sécurité (SMS-07) ══
 const SGS_ITW_CREW=[{k:'cdb',l:'Commandant',h:true},{k:'opl',l:'Copilote',h:true},{k:'scm',l:'Chef de cabine (SCM)',h:false}];
 const sgsEvLabel=e=>sgsFr(e.date)+' · '+(e.titre||safetyLabels(e).join(', ')).slice(0,60)+(e.num?' · '+e.num:'');
-function SgsInterviewsView({ items, setItems, safety, nomResp }){
+function SgsInterviewsView({ items, setItems, safety, nomResp, crew:crewReg, flights, aircraft }){   // crewReg : registre Équipage
   const [ed,setEd]=useState(null);
   const today=sgsToday(), list=[...(items||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   const evs=[...(safety||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,120);
@@ -3640,23 +3724,24 @@ function SgsInterviewsView({ items, setItems, safety, nomResp }){
     const inp={...sgsInput,padding:"7px 9px",fontSize:12.5};
     return (<Card accent="#0F766E"><FHeader icon="🎙" title={ed.ref||'Nouvelle interview'} subtitle="SMS-04 · interview équipage, investigation événement" color="#0F766E"/>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <SgsField label="Compte rendu concerné (référence processus)"><select value={ed.eventKey||''} onChange={e=>{ const ev=evs.find(x=>sgsEventKey(x)===e.target.value); up({eventKey:e.target.value,...(ev&&!ed.id?{date:ev.date,vol:ev.num||ed.vol,dep:ev.from||ed.dep,dest:ev.to||ed.dest,immat:(ev.fx||{}).immat||ed.immat}:{})}); }} style={sgsInput}>
+        <SgsField label="Compte rendu concerné (référence processus)"><select value={ed.eventKey||''} onChange={e=>{ const ev=evs.find(x=>sgsEventKey(x)===e.target.value); up({eventKey:e.target.value,...(ev&&!ed.id?{date:ev.date,vol:ev.num||ed.vol,dep:ev.from||ed.dep,dest:ev.to||ed.dest,immat:(ev.fx||{}).immat||ed.immat,
+          crew:(()=>{ const fl=(flights||[]).find(x=>x.num===ev.num&&x.date===ev.date), cr={...(ed.crew||{})}; if(fl){ [['cdb',fl.cm1],['opl',fl.cm2],['scm',fl.cc]].forEach(([k,n])=>{ if(n&&!(cr[k]||{}).nom) cr[k]={...(cr[k]||{}),nom:n}; }); } return cr; })()}:{})}); }} style={sgsInput}>
           <option value="">— Aucun —</option>{evs.map(e=><option key={sgsEventKey(e)} value={sgsEventKey(e)}>{sgsEvLabel(e)}</option>)}</select></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Avion · type"><input value={ed.type||''} onChange={e=>up({type:e.target.value})} placeholder="EMB-145" style={sgsInput}/></SgsField>
-          <SgsField label="Immatriculation"><input value={ed.immat||''} onChange={e=>up({immat:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Immatriculation"><AircraftSelect aircraft={aircraft} value={ed.immat} onChange={(im,ty)=>up({immat:im,type:ty})}/></SgsField>
+          <SgsField label="Avion · type"><SgsRoField v={ed.type||sgsAcType(aircraft,ed.immat)} ph="Selon l'appareil"/></SgsField>
           <SgsField label="Départ"><input value={ed.dep||''} onChange={e=>up({dep:e.target.value})} style={sgsInput}/></SgsField>
           <SgsField label="Destination"><input value={ed.dest||''} onChange={e=>up({dest:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Date"><input type="date" value={ed.date||''} onChange={e=>up({date:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Date"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
           <SgsField label="Vol"><input value={ed.vol||''} onChange={e=>up({vol:e.target.value})} style={sgsInput}/></SgsField></div>
         {SGS_ITW_CREW.map(c=>{ const m=crew[c.k]||{}; return <div key={c.k} style={{border:"1px solid "+C.border,borderRadius:10,padding:9,display:"flex",flexDirection:"column",gap:6}}>
           <div style={{fontSize:12,fontWeight:800,color:"#0F766E"}}>{c.l}</div>
-          <input aria-label={'Nom — '+c.l} value={m.nom||''} onChange={e=>setC(c.k,{nom:e.target.value})} placeholder="Nom" style={inp}/>
+          <CustomSelect value={m.nom||''} onChange={v=>setC(c.k,{nom:v})} searchable icon={c.k==='scm'?'🧑‍✈️':'👨‍✈️'} placeholder={'-- '+c.l+' --'} options={sgsCrewOpts(crewReg,c.k==='cdb'?'cdb':c.k==='opl'?'opl':'pnc',m.nom)}/>
           {c.h?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
               <input value={m.total||''} onChange={e=>setC(c.k,{total:e.target.value})} placeholder="Heures totales" style={inp}/>
               <input value={m.surType||''} onChange={e=>setC(c.k,{surType:e.target.value})} placeholder="Heures sur type" style={inp}/>
-              <div><div style={{fontSize:10,color:C.slate}}>Dernier simulateur</div><input type="date" value={m.sim||''} onChange={e=>setC(c.k,{sim:e.target.value})} style={inp}/></div>
-              <div><div style={{fontSize:10,color:C.slate}}>Dernier entraînement</div><input type="date" value={m.refr||''} onChange={e=>setC(c.k,{refr:e.target.value})} style={inp}/></div></div>
+              <div><div style={{fontSize:10,color:C.slate}}>Dernier simulateur</div><DateField value={m.sim||''} onChange={v=>setC(c.k,{sim:v})} max={new Date().toISOString().slice(0,10)} style={inp}/></div>
+              <div><div style={{fontSize:10,color:C.slate}}>Dernier entraînement</div><DateField value={m.refr||''} onChange={v=>setC(c.k,{refr:v})} max={new Date().toISOString().slice(0,10)} style={inp}/></div></div>
             :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
               <input value={m.service||''} onChange={e=>setC(c.k,{service:e.target.value})} placeholder="Période de service" style={inp}/>
               <input value={m.repos||''} onChange={e=>setC(c.k,{repos:e.target.value})} placeholder="Période de repos" style={inp}/></div>}
@@ -3695,7 +3780,7 @@ function SgsRecosView({ items, setItems, safety, H, onAction, nomResp }){
         <SgsField label="Autre référence processus"><input value={ed.refProc||''} onChange={e=>up({refProc:e.target.value})} placeholder="Audit, revue, retour d'expérience…" style={sgsInput}/></SgsField>
         <SgsField label="Recommandation"><textarea rows={7} value={ed.texte||''} onChange={e=>up({texte:e.target.value})} style={sgsInput}/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Date"><input type="date" value={ed.date||''} onChange={e=>up({date:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Date"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
           <SgsField label="Statut"><SgsPills value={ed.statut||'emise'} onChange={v=>up({statut:v})} options={SGS_RECO_ST} color="#0F766E"/></SgsField></div>
       </div>
       <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:8}}>
@@ -3780,7 +3865,7 @@ function SgsPlanningView({ items, setItems, auto, nomResp }){
   </div>);
 }
 const SGS_OSV_ITEMS=['Enveloppe de vol','Plan de vol exploitation','Plan de vol ATC','Dossier météo','Dossier NOTAM','Autorisations spéciales','Devis de masse et centrage','Compte-rendu matériel (CRM)','Vérification sûreté cabine','Manifeste PAX','Manifeste Fret','Bon carburant'];
-function SgsOsvView({ items, setItems, flights, nomResp }){
+function SgsOsvView({ items, setItems, flights, nomResp, aircraft }){
   const [ed,setEd]=useState(null);
   const today=sgsToday(), list=[...(items||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   const nc=o=>SGS_OSV_ITEMS.filter(i=>((o.rep||{})[i]||{}).v==='non').length, nr=o=>SGS_OSV_ITEMS.filter(i=>!((o.rep||{})[i]||{}).v).length;
@@ -3799,10 +3884,10 @@ function SgsOsvView({ items, setItems, flights, nomResp }){
         <SgsField label="Vol contrôlé"><select value={ed.flightKey||''} onChange={e=>{ const f=vols.find(x=>x.num+'|'+x.date===e.target.value); up({flightKey:e.target.value,...(f?{vol:f.num,dateVol:f.date,depO:f.from,arrO:f.to}:{})}); }} style={sgsInput}>
           <option value="">— Choisir un vol, ou saisir ci-dessous —</option>{vols.map(f=><option key={f.num+f.date} value={f.num+'|'+f.date}>{f.num} · {f.from}→{f.to} · {sgsFr(f.date)}</option>)}</select></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Date du contrôle"><input type="date" value={ed.date||''} onChange={e=>up({date:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Date du contrôle"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
           <SgsField label="Identification du vol"><input value={ed.vol||''} onChange={e=>up({vol:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Type d'aéronef"><input value={ed.type||''} onChange={e=>up({type:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Immatriculation"><input value={ed.immat||''} onChange={e=>up({immat:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Immatriculation"><AircraftSelect aircraft={aircraft} value={ed.immat} onChange={(im,ty)=>up({immat:im,type:ty})}/></SgsField>
+          <SgsField label="Type d'aéronef"><SgsRoField v={ed.type||sgsAcType(aircraft,ed.immat)} ph="Selon l'appareil"/></SgsField>
           <SgsField label="Départ — code OACI"><input value={ed.depO||''} onChange={e=>up({depO:e.target.value.toUpperCase()})} style={sgsInput}/></SgsField>
           <SgsField label="Arrivée — code OACI"><input value={ed.arrO||''} onChange={e=>up({arrO:e.target.value.toUpperCase()})} style={sgsInput}/></SgsField></div>
         <div style={{fontSize:12,fontWeight:800,color:C.text,marginTop:4}}>Les documents suivants sont-ils présents dans le dossier de vol ?</div>
@@ -3908,7 +3993,7 @@ function sgsCrPDF(e, evStatus, nom){
   sgsDocPDF({ref:F.k+'-'+String(e.date||'').replace(/-/g,'')+'-'+String(e.num||'HV').replace(/[^A-Z0-9]/gi,''),titre:F.l,sous:e.titre||safetyLabels(e).join(', '),meta,blocs,nom:nom||SGS_RESP_DEFAUT,fonction:'Responsable du Système de Gestion de la Sécurité'});
 }
 
-function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, reg:regIn, onBack, onSecu }){
+function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, reg:regIn, onBack, onSecu, crew }){
   const reg=regIn||{};
   const nomResp=(responsable||'').trim()||SGS_RESP_DEFAUT;
   const [nomEdit,setNomEdit]=useState(nomResp);
@@ -4068,7 +4153,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
               options={H.filter(h=>h.statut!=='clos').map(h=>({value:h.id,label:h.ref+' · '+h.titre,sub:(sgsRisqueCourant(h)||{}).l}))}/>
           </SgsField>
           <SgsField label="Responsable de la mise en œuvre"><input value={a.responsable||''} onChange={e=>up({responsable:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Échéance"><input type="date" value={a.echeance||''} onChange={e=>up({echeance:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Échéance"><DateField value={a.echeance||''} onChange={v=>up({echeance:v})} style={sgsInput}/></SgsField>
           <div style={{fontSize:10.5,color:C.slate,marginTop:-6}}>Proposée d'après le danger : immédiate si intolérable, 30 jours si tolérable.</div>
           <SgsField label="Critère d'évaluation de l'efficacité"><textarea rows={2} value={a.critere||''} onChange={e=>up({critere:e.target.value})} style={sgsInput}/></SgsField>
           <SgsField label="Statut"><SgsPills value={a.statut||'afaire'} onChange={v=>up({statut:v})} options={SGS_A_STATUTS} color="#0F766E"/></SgsField>
@@ -4357,15 +4442,15 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
       {tab==='revue'&&<SgsRevue safety={safety} ES={ES} H={H} A={A} spi={spi} reg={reg} revues={reg.revues} setRevues={reg.setRevues} meetings={MT} nomResp={nomResp}/>}
       {tab==='chg'&&<SgsChangesView items={reg.changes} setItems={reg.setChanges} nomResp={nomResp} onDanger={addHazardDirect}/>}
       {tab==='aud'&&<SgsAuditsView items={reg.audits} setItems={reg.setAudits} nomResp={nomResp} onAction={addActionDirect}/>}
-      {tab==='form'&&<SgsFormationsView items={reg.formations} setItems={reg.setFormations} nomResp={nomResp}/>}
-      {tab==='frat'&&<SgsFratView items={reg.frat} setItems={reg.setFrat} flights={flights}/>}
+      {tab==='form'&&<SgsFormationsView items={reg.formations} setItems={reg.setFormations} nomResp={nomResp} crew={crew}/>}
+      {tab==='frat'&&<SgsFratView items={reg.frat} setItems={reg.setFrat} flights={flights} crew={crew}/>}
       {tab==='meda'&&<SgsMedaView items={reg.meda} setItems={reg.setMeda} nomResp={nomResp} safety={safety} aircraft={aircraft}/>}
       {tab==='forms'&&<SgsFormsView reg={reg} safety={safety} ES={ES} go={go} onSecu={onSecu}/>}
-      {tab==='itw'&&<SgsInterviewsView items={reg.itw} setItems={reg.setItw} safety={safety} nomResp={nomResp}/>}
+      {tab==='itw'&&<SgsInterviewsView items={reg.itw} setItems={reg.setItw} safety={safety} nomResp={nomResp} crew={crew} flights={flights} aircraft={aircraft}/>}
       {tab==='reco'&&<SgsRecosView items={reg.reco} setItems={reg.setReco} safety={safety} H={H} nomResp={nomResp} onAction={o=>setEdit({kind:'action',data:o})}/>}
       {tab==='plan'&&<SgsPlanningView items={reg.plan} setItems={reg.setPlan} nomResp={nomResp} auto={{meetings:MT,revues:reg.revues,audits:reg.audits,osv:reg.osv,formations:reg.formations,bulletins:[...bullAuto,...(M.bulletins||[])]}}/>}
-      {tab==='osv'&&<SgsOsvView items={reg.osv} setItems={reg.setOsv} flights={flights} nomResp={nomResp}/>}
-      {tab==='fdm'&&<SgsFdmView items={reg.fdm} setItems={reg.setFdm} onDanger={o=>setEdit({kind:'hazard',data:o,step:1})}/>}
+      {tab==='osv'&&<SgsOsvView items={reg.osv} setItems={reg.setOsv} flights={flights} nomResp={nomResp} aircraft={aircraft}/>}
+      {tab==='fdm'&&<SgsFdmView items={reg.fdm} setItems={reg.setFdm} aircraft={aircraft} onDanger={o=>setEdit({kind:'hazard',data:o,step:1})}/>}
       {tab==='sm'&&<SgsMeeting safety={safety} spi={spi} H={H} A={A} meetings={MT} setMeetings={setMeetings} nomResp={nomResp}
         extra={{tauxLoadsheet,butees,tauxAnalyse,crmN,nbBull:bulls.length}}/>}
 
@@ -4463,7 +4548,7 @@ function SgsIndicateursView({ safety, spi, tauxLoadsheet, vols30, butees, tauxAn
     <div style={{background:C.bg,borderRadius:10,padding:10,display:"flex",flexDirection:"column",gap:7}}>
       <input value={nc.titre} onChange={e=>setNc({...nc,titre:e.target.value})} placeholder="Changement important (procédure, route, appareil…)" style={sgsInput}/>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        <input type="date" value={nc.date} onChange={e=>setNc({...nc,date:e.target.value})} style={{...sgsInput,flex:1}}/>
+        <DateField value={nc.date} onChange={v=>setNc({...nc,date:v})} style={{...sgsInput,flex:1}}/>
         <SgsPills value={nc.analyse?'o':'n'} onChange={v=>setNc({...nc,analyse:v==='o'})} options={[{k:'o',l:'Analysé'},{k:'n',l:'Non analysé'}]} color="#0F766E"/>
       </div>
       <button onClick={()=>{ if(!nc.titre.trim()){uiAlert("⚠️ Décrivez le changement.");return;} updM({changes:[...(M.changes||[]),{...nc,id:'CH'+Date.now()}]}); setNc({...nc,titre:''}); }}
@@ -4479,7 +4564,7 @@ function SgsIndicateursView({ safety, spi, tauxLoadsheet, vols30, butees, tauxAn
     <div style={{background:C.bg,borderRadius:10,padding:10,display:"flex",flexDirection:"column",gap:7}}>
       <input value={nb.titre} onChange={e=>setNb({...nb,titre:e.target.value})} placeholder="Bulletin ou safety newsletter publié hors générateur" style={sgsInput}/>
       <div style={{display:"flex",gap:8}}>
-        <input type="date" value={nb.date} onChange={e=>setNb({...nb,date:e.target.value})} style={{...sgsInput,flex:1}}/>
+        <DateField value={nb.date} onChange={v=>setNb({...nb,date:v})} max={new Date().toISOString().slice(0,10)} style={{...sgsInput,flex:1}}/>
         <button onClick={()=>{ if(!nb.titre.trim()){uiAlert("⚠️ Indiquez le titre du bulletin.");return;} updM({bulletins:[...(M.bulletins||[]),{...nb,id:'BU'+Date.now()}]}); setNb({...nb,titre:''}); }}
           style={{padding:"0 14px",borderRadius:9,border:"none",background:"#0F766E",color:"white",fontWeight:700,...TAP}}>Ajouter</button>
       </div>
@@ -6964,10 +7049,10 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
       {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)} flights={flights}/>}
       {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
       {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
-      {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} saved={saved}/>}
+      {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} crew={crew} saved={saved}/>}
       {effectiveActive==="frat" && sgs && <Card accent="#0F766E"><FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="Manuel SGS 02-04 · à remplir par le CDB avant chaque étape" color="#0F766E"/>
-        <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} standalone/></Card>}
-      {effectiveActive==="sgs" && sgs && <SgsTile safety={safetyData} flights={flights} aircraft={aircraft} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
+        <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} crew={crew} standalone/></Card>}
+      {effectiveActive==="sgs" && sgs && <SgsTile safety={safetyData} flights={flights} aircraft={aircraft} crew={crew} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {/* Opérations : consultation seule des documents */}
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"}/>}
