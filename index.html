@@ -1564,7 +1564,7 @@ const INIT_FLIGHTS = [
 
 const INIT_AIRCRAFT = [
   {
-    id:"AC001", immat:"CN-KTA", type:"EMB 135", sieges:18,
+    id:"AC001", immat:"CN-KTA", type:"EMB-140 LR", sieges:18,
     capa:5700, icao24:"CN-KTA",
     ttaf:4304.8, cycles:3186, nextCheckH:145, bCheckH:620, cCheckH:2400,
     evtMoteur:1, fiabMoteurs:98.9,
@@ -1639,7 +1639,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights }) 
     const ac=aircraft?.find(a=>a.id===acId);
     if(ac) setNum(ac.immat||"");
   },[acId]);
-  const ac=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{immat:"CN-KTA",type:"EMB 135",sieges:18,capa:5700,id:"AC001"};
+  const ac=aircraft?.find(a=>a.id===acId)||aircraft?.[0]||{immat:"CN-KTA",type:"EMB-140 LR",sieges:18,capa:5700,id:"AC001"};
   const SIEGES=ac.sieges||18;
   const [num,setNum]=useState("");
   const [from_,setFrom]=useState("");
@@ -6846,7 +6846,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
                     doc.text("Enquête de Satisfaction Passager",M+35,12);
                     doc.setFont("helvetica","normal");doc.setFontSize(8);
                     doc.setTextColor(148,163,184);
-                    doc.text("EMB 135  ·  CN-KTA  ·  Votre avis améliore nos services",M+35,18);
+                    doc.text("EMB-140 LR  ·  CN-KTA  ·  Votre avis améliore nos services",M+35,18);
                     let y=36;
                     // Info row
                     doc.setFillColor(...LIGHT);doc.rect(M,y,CW,10,"F");
@@ -6990,7 +6990,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
                     doc.setFillColor(...NAVY);doc.rect(0,PH-12,W,12,"F");
                     doc.setFillColor(...GOLD);doc.rect(0,PH-12,W,1.5,"F");
                     doc.setTextColor(...WHITE);doc.setFont("helvetica","normal");doc.setFontSize(7.5);
-                    doc.text("Merci pour votre confiance  ·  Afrijet Sahara  ·  EMB 135 CN-KTA",W/2,PH-5,{align:"center"});
+                    doc.text("Merci pour votre confiance  ·  Afrijet Sahara  ·  EMB-140 LR CN-KTA",W/2,PH-5,{align:"center"});
                     doc.setTextColor(...GOLD);doc.setFont("helvetica","bold");doc.setFontSize(7);
                     doc.text("Formulaire confidentiel",W-M,PH-5,{align:"right"});
                     doc.save("Satisfaction_Passager_Afrijet.pdf");
@@ -7003,7 +7003,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
                 <div style={{background:"linear-gradient(135deg,#0F1F3D,#1D3461)",padding:"16px",borderRadius:10,marginBottom:16}}>
                   <div style={{color:"#A0720A",fontSize:9,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Afrijet Sahara</div>
                   <div style={{color:"white",fontSize:18,fontWeight:800}}>Enquête de Satisfaction Passager</div>
-                  <div style={{color:"#94A3B8",fontSize:11,marginTop:4}}>EMB 135 · CN-KTA · Votre avis améliore nos services</div>
+                  <div style={{color:"#94A3B8",fontSize:11,marginTop:4}}>EMB-140 LR · CN-KTA · Votre avis améliore nos services</div>
                 </div>
                 {[
                   {num:"1",title:"Embarquement & Enregistrement",color:"#0F1F3D",items:["Accueil au sol","Rapidité de l'enregistrement","Information sur le vol","Processus d'embarquement"]},
@@ -9114,6 +9114,17 @@ function AppMain({ onLogout, profileId }) {
   const [sgsReco,setSgsReco] = usePersist("sgsReco",[]);
   const [sgsPlan,setSgsPlan] = usePersist("sgsPlan",[]);
   const [sgsOsv,setSgsOsv] = usePersist("sgsOsv",[]);
+  // Correction des données enregistrées : CN-KTA est un EMB-140 LR (auparavant « EMB 135 »).
+  // Idempotente : ne modifie que les enregistrements de CN-KTA dont le type diffère.
+  useEffect(()=>{ const T="EMB-140 LR", K="CN-KTA";
+    const t=setTimeout(()=>{
+      if((aircraft||[]).some(a=>a.immat===K&&a.type!==T)) setAircraft(l=>(l||[]).map(a=>a.immat===K?{...a,type:T}:a));
+      if((safetyData||[]).some(e=>e.fx&&e.fx.immat===K&&e.fx.typeAv&&e.fx.typeAv!==T)) setSafety(l=>(l||[]).map(e=>e.fx&&e.fx.immat===K&&e.fx.typeAv!==T?{...e,fx:{...e.fx,typeAv:T}}:e));
+      [[sgsItw,setSgsItw,'type'],[sgsOsv,setSgsOsv,'type'],[sgsMeda,setSgsMeda,'typeAv'],[sgsFdm,setSgsFdm,'typeAv']].forEach(([L,S,f])=>{
+        if((L||[]).some(x=>x.immat===K&&x[f]&&x[f]!==T)) S(l=>(l||[]).map(x=>x.immat===K&&x[f]&&x[f]!==T?{...x,[f]:T}:x)); });
+    },5000);   // après l'arrivée des données du cloud
+    return ()=>clearTimeout(t);
+  },[aircraft,safetyData,sgsItw,sgsOsv,sgsMeda,sgsFdm]);
   const [sgsResponsable,setSgsResponsable] = usePersist("sgsResponsable",SGS_RESP_DEFAUT);
   // Démonstration SGS : ajout unique, relié aux comptes rendus de démonstration présents
   const [demoSgsV1,setDemoSgsV1] = usePersist("demoSgsV1",false);
