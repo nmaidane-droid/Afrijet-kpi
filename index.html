@@ -2639,6 +2639,80 @@ function sgsExportRegistre(H, A, nom){
   return ref;
 }
 
+// ── Export des comptes rendus d'événement (A4 paysage) ──
+// Descriptions confidentielles masquées sauf choix explicite du responsable SGS.
+const SGS_PERIODES=[{k:'mois',l:'Mois en cours'},{k:'3m',l:'3 derniers mois'},{k:'12m',l:'12 derniers mois'},{k:'all',l:'Tout'}];
+function sgsFiltreEvenements(events, periode, svc){
+  const now=new Date(), mois=now.toISOString().slice(0,7);
+  return (events||[]).filter(e=>{
+    const j=sgsJours(e.date);
+    const okP=periode==='all'||(periode==='mois'?String(e.date).slice(0,7)===mois:periode==='3m'?j<=91:j<=365);
+    const okS=svc==='all'||SAFETY_EVENTS.some(x=>e[x.k]&&x.svc.includes(svc));
+    return okP&&okS;
+  }).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+}
+function sgsExportEvenements(events, { periode, svc, inclureConf, nom, evStatus, hazards }){
+  nom=(nom||'').trim()||SGS_RESP_DEFAUT;
+  const { jsPDF } = window.jspdf;
+  const doc=new jsPDF({ unit:'mm', format:'a4', orientation:'landscape' });
+  const W=297, HP=210, MX=12, CW=W-2*MX;
+  const now=new Date(), today=now.toISOString().slice(0,10), ref='CRE-SGS-'+today.replace(/-/g,'');
+  const edit=now.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
+  doc.setProperties({ title: ref, creator:'Afrijet Sahara — SGS' });
+  const clean=s=>String(s==null?'':s).replace(/[→]/g,'->').replace(/[–—]/g,'-').replace(/[’]/g,"'").replace(/[^\x00-\xFF\u0152\u0153]/g,'');
+  const txt=(s,x,y,o)=>doc.text(clean(s),x,y,o);
+  let y=0;
+  const header=()=>{ doc.setFillColor(139,0,0); doc.rect(0,0,W,11,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(255,255,255);
+    txt("AFRIJET SAHARA  -  REGISTRE DES COMPTES RENDUS D'ÉVÉNEMENT", MX, 7.3);
+    doc.setFont('helvetica','normal'); txt(ref, W-MX, 7.3, {align:'right'});
+    doc.setFontSize(7.5); doc.setTextColor(100,116,139);
+    txt('Document interne - confidentiel SGS  ·  Édité le '+edit+'  ·  Manuel SGS V03', MX, HP-6); y=18; };
+  header();
+  const L=[]; const per=(SGS_PERIODES.find(p=>p.k===periode)||{}).l, sv=svc==='all'?'Tous services':((SAFETY_SERVICES.find(s=>s.k===svc)||{}).l||svc);
+  const conf=events.filter(e=>e.confidentiel).length;
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(26,26,46); txt('Sélection', MX, y); y+=2;
+  doc.setDrawColor(139,0,0); doc.setLineWidth(.5); doc.line(MX,y,MX+CW,y); y+=6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(30,41,59);
+  [['Période', per],['Service', sv],['Comptes rendus', String(events.length)],
+   ['Dont confidentiels', conf+(conf?(inclureConf?'  (descriptions incluses sur décision du responsable SGS)':'  (descriptions masquées)'):'')],
+   ['Établi par', nom+', Responsable Qualité / SGS']].forEach(([a,b])=>{ doc.setFont('helvetica','bold'); txt(a+' :',MX+2,y); doc.setFont('helvetica','normal'); txt(b,MX+45,y); y+=5; });
+  y+=5;
+  const cols=[{l:'Date',w:20},{l:'Rattachement',w:34},{l:'Événement(s)',w:58},{l:'Description des faits',w:98},{l:'Statut SGS',w:22},{l:'Danger lié',w:41}];
+  const pad=1.6, lh=3.3;
+  const head=()=>{ doc.setFillColor(241,245,249); doc.rect(MX,y,CW,7,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(7.4); doc.setTextColor(26,26,46);
+    let x=MX; cols.forEach(c=>{ txt(c.l,x+pad,y+4.6); x+=c.w; }); y+=7; };
+  if(!events.length){ doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(100,116,139); txt('Aucun compte rendu pour cette sélection.',MX+2,y); y+=10; }
+  else { head();
+    events.forEach((e,ri)=>{
+      const key=sgsEventKey(e), st=((evStatus||{})[key]||{}).statut||'recu';
+      const rat=e.rattachement==='hors'?'Hors vol':e.rattachement==='appareil'?'Appareil '+(e.num||''):'Vol '+(e.num||'')+(e.from?'\n'+e.from+' - '+e.to:'');
+      const evs=safetyLabels(e).join('\n')+(e.unrulyType?'\nSuite : '+e.unrulyType:'');
+      let desc=e.description||'-';
+      if(e.confidentiel&&!inclureConf) desc='Confidentiel - consultable auprès du responsable SGS.';
+      const marques=[e.confidentiel?'CONFIDENTIEL':'',e.anonyme?'ANONYME':''].filter(Boolean).join(' · ');
+      if(marques) desc='['+marques+']\n'+desc;
+      const hz=(hazards||[]).filter(h=>h.eventKey===key).map(h=>h.ref+' '+h.titre).join('\n')||'-';
+      const v=[sgsFr(e.date),rat,evs,desc,(SGS_EV_STATUTS.find(s=>s.k===st)||{}).l,hz];
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.6);
+      const cells=cols.map((c,i)=>doc.splitTextToSize(clean(v[i]),c.w-2*pad));
+      const h=Math.max(...cells.map(l=>l.length))*lh+2*pad;
+      if(y+h>HP-12){ doc.addPage(); header(); head(); doc.setFont('helvetica','normal'); doc.setFontSize(7.6); }
+      if(ri%2){ doc.setFillColor(250,250,249); doc.rect(MX,y,CW,h,'F'); }
+      let x=MX; cols.forEach((c,i)=>{ doc.setTextColor(...(i===3&&e.confidentiel&&!inclureConf?[100,116,139]:[30,41,59])); cells[i].forEach((ln,k)=>doc.text(ln,x+pad,y+pad+2.6+k*lh)); x+=c.w; });
+      doc.setDrawColor(226,232,240); doc.setLineWidth(.2); doc.line(MX,y+h,MX+CW,y+h); y+=h;
+    }); y+=6; }
+  if(y>HP-40){ doc.addPage(); header(); }
+  y+=4; const sx=W-MX-80;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(26,26,46); txt(nom, sx, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(71,85,105);
+  txt('Responsable du Système de Gestion de la Sécurité', sx, y+4.5); txt('Date : '+edit, sx, y+9);
+  doc.setDrawColor(148,163,184); doc.setLineWidth(.3); doc.line(sx, y+22, sx+75, y+22); doc.setFontSize(7.5); txt('Signature', sx, y+26);
+  const n=doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(100,116,139); txt('Page '+i+' / '+n, W-MX, HP-6, {align:'right'}); }
+  doc.save(ref+'.pdf'); return ref;
+}
+
 function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, onBack }){
   const nomResp=(responsable||'').trim()||SGS_RESP_DEFAUT;
   const [nomEdit,setNomEdit]=useState(nomResp);
@@ -2649,6 +2723,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const [edit,setEdit]=useState(null);        // { kind:'hazard'|'action', data }
   const [evFilter,setEvFilter]=useState('todo');
   const [qE,setQE]=useState('');                          // recherche événements
+  const [expEv,setExpEv]=useState(null);                  // panneau d'export : {periode,svc,conf}
   const [qD,setQD]=useState(''), [fDst,setFDst]=useState('actifs'), [fDniv,setFDniv]=useState('all');   // dangers
   const [qA,setQA]=useState(''), [fAst,setFAst]=useState('ouvertes'), [fAty,setFAty]=useState('all');  // actions
   const today=new Date().toISOString().slice(0,10);
@@ -2809,6 +2884,23 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
       </div>)}
 
       {tab==='ev'&&(<div>
+        {!expEv
+          ? <button onClick={()=>setExpEv({periode:'3m',svc:'all',conf:false})} style={{width:"100%",height:44,marginBottom:10,borderRadius:10,border:"1.5px solid #0F766E",background:"white",color:"#0F766E",fontWeight:700,fontSize:13,...TAP}}>📄 Exporter les comptes rendus (PDF)</button>
+          : (()=>{ const sel=sgsFiltreEvenements(events,expEv.periode,expEv.svc);
+            return (<div style={{border:"1.5px solid #0F766E",borderRadius:12,padding:12,marginBottom:12,display:"flex",flexDirection:"column",gap:10,background:"#F0FDFA"}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#0F766E"}}>Exporter les comptes rendus</div>
+              <SgsField label="1. Période"><SgsPills value={expEv.periode} onChange={v=>setExpEv({...expEv,periode:v})} options={SGS_PERIODES} color="#0F766E"/></SgsField>
+              <SgsField label="2. Service"><SgsPills value={expEv.svc} onChange={v=>setExpEv({...expEv,svc:v})} options={[{k:'all',l:'Tous'},...SAFETY_SERVICES.map(s=>({k:s.k,l:s.l}))]} color="#0F766E"/></SgsField>
+              <SgsField label="3. Descriptions confidentielles">
+                <SgsPills value={expEv.conf?'o':'n'} onChange={v=>setExpEv({...expEv,conf:v==='o'})} options={[{k:'n',l:'Masquées'},{k:'o',l:'Incluses'}]} color="#0F766E"/>
+              </SgsField>
+              <div style={{fontSize:12,color:C.text}}><b>{sel.length}</b> compte(s) rendu(s) sélectionné(s){sel.filter(e=>e.confidentiel).length?', dont '+sel.filter(e=>e.confidentiel).length+' confidentiel(s)':''}.</div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>setExpEv(null)} style={{flex:1,height:42,borderRadius:10,border:"1.5px solid "+C.border,background:"white",color:C.slate,fontWeight:700,...TAP}}>Annuler</button>
+                <button onClick={()=>{ try{ const r=sgsExportEvenements(sel,{periode:expEv.periode,svc:expEv.svc,inclureConf:expEv.conf,nom:nomResp,evStatus:ES,hazards:H}); setExpEv(null); uiAlert("Comptes rendus exportés — "+r); }catch(err){ uiAlert("❌ Erreur PDF : "+(err.message||err)); } }}
+                  style={{flex:2,height:42,borderRadius:10,border:"none",background:"#0F766E",color:"white",fontWeight:700,...TAP}}>4. Générer le PDF</button>
+              </div>
+            </div>); })()}
         <SgsPills value={evFilter} onChange={setEvFilter} options={[{k:'todo',l:'À analyser ('+events.filter(e=>statutEv(e)==='recu').length+')'},{k:'analyse',l:'En analyse'},{k:'clos',l:'Clos'},{k:'all',l:'Tous'}]} color="#0F766E"/>
         <input value={qE} onChange={e=>setQE(e.target.value)} placeholder="🔍 Rechercher : description, vol, immatriculation" style={{...sgsInput,marginTop:10}}/>
         <div style={{marginTop:10}}>
