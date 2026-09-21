@@ -2260,14 +2260,15 @@ function FormSafety({ onSubmit, flights, aircraft, saved }) {
   const [secuPeriod,setSecuPeriod]=useState("30j");
   const [secuSearch,setSecuSearch]=useState("");
   // Événements cochés, précision passager, description, confidentialité
-  const [sel,setSel]=useState({});
+  const [sel,setSel]=useState(()=>{ try{ const p=sessionStorage.getItem("sgs_cr_preset"); const d=p&&SGS_CR_BY[p]; if(d&&d.auto){ const n={}; d.auto.forEach(a=>n[a]=true); return n; } }catch(_e){ logSilent(_e); } return {}; });
   const [unrulyType,setUnrulyType]=useState("");
   const [desc,setDesc]=useState("");
   const [conf,setConf]=useState(false);
   const [anon,setAnon]=useState(false);
   const [open,setOpen]=useState({FLT:true});
   // Formulaire officiel et ses champs (Manuel SGS 05-01)
-  const [form,setForm]=useState("SMS-19");
+  // Formulaire choisi depuis « Formulaires SMS » : présélectionné à l'ouverture
+  const [form,setForm]=useState(()=>{ try{ const p=sessionStorage.getItem("sgs_cr_preset"); if(p&&SGS_CR_BY[p]){ sessionStorage.removeItem("sgs_cr_preset"); return p; } }catch(_e){ logSilent(_e); } return "SMS-19"; });
   const [fx,setFx]=useState({});
   const [titre,setTitre]=useState(""), [redac,setRedac]=useState(""), [motif,setMotif]=useState("evenement"), [enquete,setEnquete]=useState(false);
   const [assess,setAssess]=useState([]), [risk,setRisk]=useState({});
@@ -2836,6 +2837,7 @@ const SGS_ICON_PATHS={
   frat:['M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0','M8 16l2-6l6-2l-2 6z'],
   meda:['M7 10h3V7L6.5 3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1-3 3l-6-6a6 6 0 0 1-8-8z'],
   fdm:['M3 12h4l3 8l4-16l3 8h4'],
+  forms:['M6 3h9l4 4v14H6z','M14 3v5h5','M9 12h7','M9 16h7'],
   itw:['M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z','M5 11a7 7 0 0 0 14 0','M12 18v3'],
   reco:['M9 18h6','M10 21h4','M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.3 1 2.5h6c0-1.2.4-1.9 1-2.5A6 6 0 0 0 12 3z'],
   plan:['M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z','M16 3v4','M8 3v4','M4 11h16','M9 15l2 2l4-4'],
@@ -3823,13 +3825,61 @@ function SgsOsvView({ items, setItems, flights, nomResp }){
   </div>);
 }
 
-const SGS_EXTRA=[['revue','Revue annuelle','Revue de sécurité, fascicule et compte rendu (SGS 03-04)'],['chg','Changements',"Évaluations d'impact sur la sécurité (SGS 03-05)"],
+// ── Formulaires SMS : sommaire des 17 formulaires du Manuel SGS, chapitre 05 (SGS 05-01) ──
+// Chaque ligne mène à l'écran où le formulaire se remplit ; les emplacements habituels restent inchangés.
+const SGS_FORMS_LIST=[
+  {k:'SMS-00',l:'Liste des documents et formulaires',ou:'Cette liste'},
+  {k:'SMS-01',l:'Compte rendu de revue de sécurité',ou:'Revue annuelle',tab:'revue'},
+  {k:'SMS-04',l:'Interview équipage — investigation événement',ou:'Interviews',tab:'itw'},
+  {k:'SMS-05',l:"Analyse d'événement",ou:"Événements · fiche d'analyse",tab:'ev'},
+  {k:'SMS-06',l:"Évaluation d'impact sur la sécurité",ou:'Changements',tab:'chg'},
+  {k:'SMS-07',l:'Recommandation de sécurité',ou:'Recommandations',tab:'reco'},
+  {k:'SMS-08',l:'Indicateurs de sécurité',ou:'Onglet Indicateurs',tab:'spi'},
+  {k:'SMS-09',l:"Rapport de danger — occurrence (retour d'expérience libre)",ou:'Tuile Sécurité',cr:true},
+  {k:'SMS-10',l:'Planning SGS',ou:'Planning SGS',tab:'plan'},
+  {k:'SMS-13',l:'CRIMD — incident lié à des marchandises dangereuses',ou:'Tuile Sécurité',cr:true},
+  {k:'SMS-16',l:'Compte rendu sûreté',ou:'Tuile Sécurité',cr:true},
+  {k:'SMS-17',l:'CRTSV — prolongation de TSV ou réduction du repos',ou:'Tuile Sécurité',cr:true},
+  {k:'SMS-18',l:'Contrôle OSV — contenu des enveloppes de vol',ou:'Contrôles OSV',tab:'osv'},
+  {k:'SMS-19',l:'Rapport de danger équipage',ou:'Tuile Sécurité',cr:true},
+  {k:'SMS-20',l:'Rapport de danger maintenance',ou:'Tuile Sécurité',cr:true},
+  {k:'SMS-21',l:'Rapport de danger — événement au sol',ou:'Tuile Sécurité',cr:true},
+  {k:'SMS-22',l:"Guide d'audit SGS",ou:'Audits',tab:'aud'}];
+function SgsFormsView({ reg, safety, ES, go, onSecu }){
+  const cnt=f=>{ if(f.cr) return (safety||[]).filter(e=>e.form===f.k).length;
+    switch(f.k){ case 'SMS-01': return (reg.revues||[]).filter(r=>r.kind==='cr').length; case 'SMS-04': return (reg.itw||[]).length;
+      case 'SMS-05': return Object.values(ES||{}).filter(s=>s&&s.analyse).length; case 'SMS-06': return (reg.changes||[]).length;
+      case 'SMS-07': return (reg.reco||[]).length; case 'SMS-10': return (reg.plan||[]).length; case 'SMS-18': return (reg.osv||[]).length;
+      case 'SMS-22': return (reg.audits||[]).filter(a=>a.type==='eval').length; default: return null; } };
+  const ouvrir=f=>{ if(f.cr) onSecu&&onSecu(f.k); else if(f.tab) go(f.tab); };
+  const groupes=[['Comptes rendus et rapports de danger',SGS_FORMS_LIST.filter(f=>f.cr)],['Analyse et enquête',SGS_FORMS_LIST.filter(f=>['SMS-04','SMS-05','SMS-07'].includes(f.k))],
+    ['Pilotage et assurance de la sécurité',SGS_FORMS_LIST.filter(f=>['SMS-01','SMS-06','SMS-08','SMS-10','SMS-18','SMS-22'].includes(f.k))]];
+  const [vue,setVue]=useState('manuel');
+  const ligne=f=>{ const n=cnt(f); return <div key={f.k} role={f.tab||f.cr?"button":undefined} onClick={()=>ouvrir(f)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid "+C.border,...(f.tab||f.cr?TAP:{})}}>
+    <span style={{fontFamily:"monospace",fontSize:11.5,fontWeight:800,color:"#8B0000",minWidth:52}}>{f.k}</span>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.3}}>{f.l}</div><div style={{fontSize:10.5,color:C.slate,marginTop:1}}>{f.ou}</div></div>
+    {n!=null&&<span style={{fontSize:11,fontWeight:800,borderRadius:8,padding:"2px 8px",background:n?"#E1F5EE":"#F1F5F9",color:n?"#085041":C.slateL}}>{n}</span>}
+    {(f.tab||f.cr)&&<SgsIcon n="chev" size={16} color={C.slate}/>}</div>; };
+  return (<div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <SgsIntro titre="Formulaires SMS" refm="SGS 05-01" txt="Les 17 formulaires du chapitre 05 du Manuel SGS, avec le nombre d'enregistrements de chacun. Touchez un formulaire pour l'ouvrir là où il se remplit."/>
+    <SgsPills value={vue} onChange={setVue} options={[{k:'manuel',l:'Ordre du manuel'},{k:'usage',l:'Par usage'}]} color="#0F766E"/>
+    {vue==='manuel'
+      ? <div style={sgsCard}>{SGS_FORMS_LIST.map(ligne)}</div>
+      : groupes.map(([t,L])=><div key={t} style={sgsCard}><div style={{...sgsH,marginTop:0}}>{t}</div>{L.map(ligne)}</div>)}
+  </div>);
+}
+
+const SGS_EXTRA=[['forms','Formulaires SMS','Les 17 formulaires du chapitre 05 — sommaire et accès direct'],['revue','Revue annuelle','Revue de sécurité, fascicule et compte rendu (SGS 03-04)'],['chg','Changements',"Évaluations d'impact sur la sécurité (SGS 03-05)"],
   ['aud','Audits','Audits internes et contrôles (SGS 03-01)'],['form','Formations','Sensibilisation et recyclages (SGS 04-01)'],
   ['frat','FRAT','Risque de chaque vol, par le CDB (SGS 02-04)'],['meda','MEDA','Erreurs de maintenance (SGS 02-06)'],['fdm','FDM','Événements issus de l\'analyse des vols (SGS 02-05)'],
   ['itw','Interviews','Interview équipage — investigation (SMS-04)'],['reco','Recommandations','Recommandations de sécurité (SMS-07)'],
   ['plan','Planning SGS','Programmation annuelle des activités (SMS-10)'],['osv','Contrôles OSV','Contenu des enveloppes de vol (SMS-18)']];
 // Pastille : ce qui attend une action dans chaque registre
+// Modules accessibles par « Formulaires SMS » : retirés du menu Plus, leurs alertes reportées sur cette tuile
+const SGS_IN_FORMS=['revue','itw','chg','reco','plan','osv','aud'];
+const SGS_EXTRA_MENU=()=>SGS_EXTRA.filter(x=>!SGS_IN_FORMS.includes(x[0]));
 function sgsExtraAlert(k,reg){ const t=sgsToday();
+  if(k==='forms') return SGS_IN_FORMS.reduce((s,x)=>s+sgsExtraAlert(x,reg),0);
   if(k==='revue'){ const y=new Date().getFullYear(); return (reg.revues||[]).some(r=>r.kind==='cr'&&(r.annee===y||r.annee===y-1))?0:1; }
   if(k==='chg') return (reg.changes||[]).filter(c=>sgsChgStatut(c).k==='etude'||sgsChgStatut(c).k==='evalue').length;
   if(k==='aud') return (reg.audits||[]).filter(a=>a.statut==='planifie'&&a.date<t).length;
@@ -3858,7 +3908,7 @@ function sgsCrPDF(e, evStatus, nom){
   sgsDocPDF({ref:F.k+'-'+String(e.date||'').replace(/-/g,'')+'-'+String(e.num||'HV').replace(/[^A-Z0-9]/gi,''),titre:F.l,sous:e.titre||safetyLabels(e).join(', '),meta,blocs,nom:nom||SGS_RESP_DEFAUT,fonction:'Responsable du Système de Gestion de la Sécurité'});
 }
 
-function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, reg:regIn, onBack }){
+function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, reg:regIn, onBack, onSecu }){
   const reg=regIn||{};
   const nomResp=(responsable||'').trim()||SGS_RESP_DEFAUT;
   const [nomEdit,setNomEdit]=useState(nomResp);
@@ -4300,7 +4350,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
         crmN={crmN} crmMois={crmMois} bulls={bulls} dernierBull={dernierBull} M={M} setManual={setManual}/>}
 
       {tab==='plus'&&<div style={{display:"grid",gridTemplateColumns:wide?"1fr 1fr 1fr":"1fr 1fr",gap:10}}>
-        {SGS_EXTRA.map(([k,l,d])=>{ const n=sgsExtraAlert(k,reg); return <div key={k} role="button" onClick={()=>go(k)} style={{...sgsCard,...TAP,display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
+        {SGS_EXTRA_MENU().map(([k,l,d])=>{ const n=sgsExtraAlert(k,reg); return <div key={k} role="button" onClick={()=>go(k)} style={{...sgsCard,...TAP,display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
           <SgsIcon n={k} size={24} color="#0F766E"/><div style={{fontSize:13.5,fontWeight:800,color:C.text}}>{l}</div><div style={{fontSize:11,color:C.slate,lineHeight:1.35}}>{d}</div>
           {n>0&&<span style={{position:"absolute",top:10,right:10,minWidth:18,height:18,borderRadius:9,background:"#DC2626",color:"white",fontSize:10.5,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px"}}>{n}</span>}</div>; })}
       </div>}
@@ -4310,6 +4360,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
       {tab==='form'&&<SgsFormationsView items={reg.formations} setItems={reg.setFormations} nomResp={nomResp}/>}
       {tab==='frat'&&<SgsFratView items={reg.frat} setItems={reg.setFrat} flights={flights}/>}
       {tab==='meda'&&<SgsMedaView items={reg.meda} setItems={reg.setMeda} nomResp={nomResp} safety={safety} aircraft={aircraft}/>}
+      {tab==='forms'&&<SgsFormsView reg={reg} safety={safety} ES={ES} go={go} onSecu={onSecu}/>}
       {tab==='itw'&&<SgsInterviewsView items={reg.itw} setItems={reg.setItw} safety={safety} nomResp={nomResp}/>}
       {tab==='reco'&&<SgsRecosView items={reg.reco} setItems={reg.setReco} safety={safety} H={H} nomResp={nomResp} onAction={o=>setEdit({kind:'action',data:o})}/>}
       {tab==='plan'&&<SgsPlanningView items={reg.plan} setItems={reg.setPlan} nomResp={nomResp} auto={{meetings:MT,revues:reg.revues,audits:reg.audits,osv:reg.osv,formations:reg.formations,bulletins:[...bullAuto,...(M.bulletins||[])]}}/>}
@@ -4322,11 +4373,11 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   return (() => {
     const TEAL="#0F766E";
     const NAV=[['bord','Bord',0],['ev','Événements',recus.length],['dg','Dangers',hRouges.length],['ac','Actions',aRetard.length],['spi','Indicateurs',spiAlertes],['sm','Meeting',0]];
-    const EXTRA=SGS_EXTRA.map(([k,l])=>[k,l,sgsExtraAlert(k,reg)]);
+    const EXTRA=SGS_EXTRA_MENU().map(([k,l])=>[k,l,sgsExtraAlert(k,reg)]);
     const nExtra=EXTRA.reduce((s,x)=>s+x[2],0);
     const NAVP=[...NAV,['plus','Plus',nExtra]];
     const extraSide=<><div style={{fontSize:10.5,fontWeight:800,color:C.slateL,textTransform:"uppercase",letterSpacing:".06em",padding:"14px 16px 4px"}}>Assurance et outils</div>
-      {EXTRA.map(([k,l,n])=>{ const on=tab===k&&!editorView;
+      {EXTRA.map(([k,l,n])=>{ const on=(tab===k||(k==='forms'&&SGS_IN_FORMS.includes(tab)))&&!editorView;
         return <div key={k} role="button" onClick={()=>go(k)} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 16px",fontSize:13,...TAP,
           color:on?"#085041":C.slate,fontWeight:on?800:500,background:on?"#E1F5EE":"transparent",borderLeft:"3px solid "+(on?TEAL:"transparent")}}>
           <SgsIcon n={k} size={18}/>{l}{n>0&&<span style={{marginLeft:"auto",fontSize:11,fontWeight:800,borderRadius:9,padding:"1px 7px",background:"#FCEBEB",color:"#791F1F"}}>{n}</span>}</div>; })}</>;
@@ -6916,7 +6967,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="frat" && sgs && <Card accent="#0F766E"><FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="Manuel SGS 02-04 · à remplir par le CDB avant chaque étape" color="#0F766E"/>
         <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} standalone/></Card>}
-      {effectiveActive==="sgs" && sgs && <SgsTile safety={safetyData} flights={flights} aircraft={aircraft} {...sgs} onBack={()=>setActive(null)}/>}
+      {effectiveActive==="sgs" && sgs && <SgsTile safety={safetyData} flights={flights} aircraft={aircraft} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {/* Opérations : consultation seule des documents */}
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"}/>}
