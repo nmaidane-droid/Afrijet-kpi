@@ -2197,7 +2197,9 @@ function FormSafety({ onSubmit, flights, saved }) {
   const reset=()=>{setVolNum("");setApproche(false);setTcas(false);setGpws(false);setHardLanding(false);setSafa(false);};
 
   const submit=()=>{
-    if(!volNum)return;
+    if(!volNum){ uiAlert("⚠️ Sélectionnez le vol concerné."); return; }
+    // Un événement sans indicateur fausserait l'analyse de sécurité
+    if(!(approche||tcas||gpws||hardLanding||safa)){ uiAlert("⚠️ Cochez au moins un indicateur pour enregistrer l'événement."); return; }
     const parts=volNum.split("|");
     const f=flights.find(f=>f.num===parts[0]&&f.date===parts[1])||flights.find(f=>f.num===parts[0]);
     onSubmit({
@@ -2417,7 +2419,7 @@ function FormClients({ clients, setClients, flights, canEdit }) {
         <FGrid><FField label="Pays" value={pays} onChange={setPays}/><FField label="Ville" value={ville} onChange={setVille}/></FGrid>
         <FSection title="Contact" color="#0891B2"/>
         <FGrid><FField label="Nom contact" value={contact} onChange={setContact}/><FField label="Téléphone" value={tel} onChange={setTel}/></FGrid>
-        <FField label="Email" value={email} onChange={setEmail}/>
+        <FField label="Email" value={email} onChange={setEmail} raw/>
         <FField label="N° Contrat" value={contrat} onChange={setContrat}/>
         <FField label="Notes" value={notes} onChange={setNotes}/>
         <div style={{display:"flex",gap:10}}>
@@ -3089,6 +3091,7 @@ function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive })
   },[]);
   const live=useRef({});   // valeurs en cours de saisie (équivalent de l'objet state du PWA)
   const [search,setSearch]=useState("");
+  const [archFam,setArchFam]=useState("ALL");   // filtre par famille : ALL, NS, RE, ND, AS
   const [toast,setToast]=useState("");
 
   const flash=(m)=>{ setToast(m); setTimeout(()=>setToast(""),2800); };
@@ -3530,7 +3533,10 @@ Diffusion prévue : ${to||'Non précisée'}`;
   // ══ ARCHIVES ══
   if(tab==="archive"){
     const f=search.toLowerCase();
-    const filtered=archive.filter(r=>
+    const fam=r=>String(r.ref||'').split('-')[0].toUpperCase();
+    const FAMS=[{k:"ALL",l:"Tous"},{k:"NS",l:"NS"},{k:"RE",l:"RE"},{k:"ND",l:"ND"},{k:"AS",l:"AS"}];
+    const count=k=>k==="ALL"?archive.length:archive.filter(r=>fam(r)===k).length;
+    const filtered=archive.filter(r=>archFam==="ALL"||fam(r)===archFam).filter(r=>
       (r.ref||'').toLowerCase().includes(f)||
       (r.objet||'').toLowerCase().includes(f)||
       (r.category||'').toLowerCase().includes(f))
@@ -3538,7 +3544,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
     return (
       <Card accent="#0F1F3D">
         {Toast}
-        <FHeader icon="📋" title="Note de Service" subtitle="Archives" color="#0F1F3D"/>
+        <FHeader icon="📋" title="Archives" subtitle="Documents du générateur IA" color="#0F1F3D"/>
         {TabBar}
         <div style={{display:"flex",gap:8,marginBottom:14}}>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher par référence, sujet ou catégorie…"
@@ -3548,9 +3554,21 @@ Diffusion prévue : ${to||'Non précisée'}`;
             Importer
           </button>
         </div>
+        <div style={{display:"flex",gap:6,marginBottom:12}}>
+          {FAMS.map(x=>{
+            const on=archFam===x.k, n=count(x.k);
+            return (
+              <button key={x.k} onClick={()=>setArchFam(x.k)}
+                style={{flex:1,height:36,borderRadius:9,fontSize:11.5,fontWeight:700,...TAP,
+                  border:"1.5px solid "+(on?C.navy:C.border),background:on?C.navy:"white",color:on?"white":(n?C.navy:C.slateL)}}>
+                {x.l} <span style={{opacity:.75,fontWeight:600}}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
         {filtered.length===0&&(
           <div style={{textAlign:"center",color:C.slateL,fontSize:13,padding:"40px 0"}}>
-            Aucune note archivée{search?" pour cette recherche":""}.
+            Aucun document{archFam!=="ALL"?" de ce type":""}{search?" pour cette recherche":""}.
           </div>
         )}
         {filtered.map(r=>(
@@ -4199,7 +4217,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
                 <div style={{color:"white",fontWeight:800,fontSize:14}}>📋 Formulaire Satisfaction</div>
                 <div style={{color:"#A0720A",fontSize:10}}>Afrijet Sahara</div>
               </div>
-              <button onClick={()=>setActive("vol")}
+              <button onClick={()=>setActive(null)}
                 style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"8px 16px",color:"white",fontSize:13,fontWeight:700,...TAP}}>
                 Fermer
               </button>
@@ -6748,6 +6766,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
                 // ── Répartition par type de vol ──
                 drawSection("  RÉPARTITION PAR TYPE DE VOL",15,31,61);
                 const pFTypes=[{v:"Commercial",code:"COM",color:[0,147,106]},{v:"Ferry",code:"FRY",color:[3,105,161]},{v:"Positioning",code:"POS",color:[217,119,6]}];
+                const pDoneVols=flights.filter(f=>f.status==="Termine");   // vols terminés — utilisé par plusieurs sections
                 const pTotalF=pDoneVols.length;
                 pFTypes.forEach(t=>{
                   if(y>270){doc.addPage();y=15;}
@@ -6927,7 +6946,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
                   if(acIdx<pAcList.length-1) y+=4;
                 });
                 const pTechVols=flights.filter(f=>f.status==="Termine"&&f.causeRetard==="Technique");
-                const pDoneVols=flights.filter(f=>f.status==="Termine");
+                
                 const pTechDelay=pDoneVols.length>0?Math.round((pTechVols.length/pDoneVols.length)*1000)/10:0;
                 const pPlanned=flights.filter(f=>f.status!=="Annule");
                 const pDR=pPlanned.length>0?Math.round((pDoneVols.length/pPlanned.length)*1000)/10:0;
