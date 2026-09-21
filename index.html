@@ -2866,7 +2866,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
           <input value={nomEdit} onChange={e=>setNomEdit(e.target.value)} onBlur={commitNom}
             onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); }} style={sgsInput}/>
         </SgsField>
-        <button onClick={exporter} style={{height:44,borderRadius:10,border:"1.5px solid #0F766E",background:"white",color:"#0F766E",fontWeight:700,fontSize:13,...TAP}}>📄 Exporter le registre (PDF)</button>
+        <button onClick={exporter} style={{height:44,borderRadius:10,border:"1.5px solid #0F766E",background:"white",color:"#0F766E",fontWeight:700,fontSize:13,...TAP}}>📄 Exporter le registre des dangers et actions (PDF)</button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
           <Kpi n={hRouges.length} l="Risques intolérables" c="#DC2626"/>
           <Kpi n={hJaunes.length} l="Risques tolérables" c="#B45309"/>
