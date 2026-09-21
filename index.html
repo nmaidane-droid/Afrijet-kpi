@@ -5060,7 +5060,6 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
           <div style={{flex:1}}>
             <div style={{fontWeight:800,fontSize:15,color:C.navy}}>Formulaires de saisie</div>
             <div style={{fontSize:11,color:C.slate}}>Saisie par departement</div>
-            <UpdateStatusLine/>
           </div>
         </div>
         <ActionBar isAdmin={isAdmin} doExport={doExport} onRestore={onRestore} onReset={onReset} onLogout={onLogout}/>
@@ -7190,20 +7189,6 @@ async function fetchRemoteBuild(){
     const v=r.headers.get('etag')||r.headers.get('last-modified')||null;
     updSet({remote:v,error:v?null:'aucun identifiant de version (page sans balise app-build)'}); return v;
   }catch(e){ logSilent(e); updSet({remote:null,error:'réseau indisponible'}); return null; }
-}
-// Ligne de diagnostic : version affichée, heure de la dernière vérification.
-// Un toucher force une vérification immédiate (et recharge si une version plus récente existe).
-function UpdateStatusLine(){
-  const [,tick]=useState(0);
-  useEffect(()=>{ const f=()=>tick(n=>n+1); window.addEventListener('afrijet-upd',f); return ()=>window.removeEventListener('afrijet-upd',f); },[]);
-  const cur=currentBuild(), s=UPD_STATUS;
-  const h=s.at?s.at.toLocaleTimeString('fr-FR'):null;
-  const nouvelle=s.remote&&cur&&s.remote!==cur;
-  const txt='Version '+(cur||'?')+(s.error?' · vérification échouée'+(h?' à '+h:'')+' : '+s.error
-    :nouvelle?' · nouvelle version '+s.remote+' disponible'
-    :h?' · vérifiée à '+h:' · vérification en attente');
-  return <div onClick={()=>{ if(window.__afrijetCheckUpdate) window.__afrijetCheckUpdate(true); }}
-    style={{fontSize:9.5,color:s.error?"#B45309":nouvelle?"#DC2626":C.slateL,marginTop:3,...TAP}}>{txt}</div>;
 }
 function UpdateWatcher(){
   const [avail,setAvail]=useState(false);
