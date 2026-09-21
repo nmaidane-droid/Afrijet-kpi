@@ -2451,6 +2451,7 @@ function safetyLabels(e){
 const NDS_DIFFUSION = [
   'Ensemble des Pilotes (PNT)',
   'Encadrement Opérations',
+  'Responsable Qualité / SGS',
   'Maintenance / Technique',
   'Personnel Navigant Commercial (PNC)',
   'Direction Générale',
@@ -2998,6 +2999,9 @@ function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive })
   const selectMode=(m)=>{
     if(!m) return;
     setMode(m); setErr("");
+    // Le responsable Qualité / SGS est destinataire d'office des documents SGS.
+    if(m==="re"||m==="as")
+      setDiffusion(d=>d.includes('Responsable Qualité / SGS')?d:[...d,'Responsable Qualité / SGS']);
     setRef(ndsNextRef(m==="re"?"RE":m==="dgac"?"ND":m==="as"?"AS":"NS-"+((cat&&cat.prefix)||"OPS")));
     // Mention par défaut : un compte rendu adressé à l'autorité ne relève pas
     // de la diffusion interne. Le champ reste modifiable document par document.
