@@ -3004,12 +3004,12 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
     const heatC=<div style={card}><div style={h3}>Carte des risques ouverts</div>
       <div style={{display:"grid",gridTemplateColumns:"16px repeat(5,1fr)",gap:3,alignItems:"center"}}>
         {[5,4,3,2,1].map(p=>[<div key={'l'+p} style={{fontSize:11,color:C.slate}}>{p}</div>,...['A','B','C','D','E'].map(g=>{ const r=sgsRisque(p,g), v=heatN[p+g]||0;
-          return <div key={p+g} onClick={v?()=>go('dg',()=>{setFDst('actifs');setFDniv(r.niv);}):undefined} title={r.cell+' · '+r.l}
+          return <div key={p+g} role="button" onClick={v?()=>go('dg',()=>{setFDst('actifs');setFDniv(r.niv);}):()=>sgsToast('Aucun danger ouvert en '+r.cell+' ('+r.l.toLowerCase()+')')} title={r.cell+' · '+r.l}
             style={{height:wide?32:26,borderRadius:5,background:r.bg,color:r.c,opacity:v?1:.55,outline:v?"2px solid "+r.c:"none",outlineOffset:-2,
-            display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,...(v?TAP:{})}}>{v||''}</div>; })])}
+            display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,...TAP}}>{v||''}</div>; })])}
         <div/>{['A','B','C','D','E'].map(g=><div key={g} style={{fontSize:11,color:C.slate,textAlign:"center"}}>{g}</div>)}
       </div>
-      <div style={{fontSize:10.5,color:C.slate,marginTop:6}}>Probabilité (1 à 5) × gravité (A à E). Touchez une case pour voir les dangers.</div></div>;
+      <div style={{fontSize:10.5,color:C.slate,marginTop:6}}>{hOuverts.length?'Probabilité (1 à 5) × gravité (A à E). Touchez une case pour voir les dangers.':'Aucun danger ouvert pour l\'instant. La carte se remplit dès qu\'un danger est évalué (onglet Événements, bouton + Danger).'}</div></div>;
     const chartC=<div style={card}><div style={h3}>Comptes rendus reçus sur 12 mois</div>
       <div style={{display:"flex",alignItems:"flex-end",gap:wide?10:4,height:wide?110:80}}>
         {parMois.map((v,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
@@ -3418,6 +3418,40 @@ function sgsDemoSafety(){
     V("d13",40,"AJS209","RBA","VIL",{cfg:true},"Alarme de configuration au décollage : volets non sortis, décollage interrompu à basse vitesse."),
     V("d14",80,"AJS303","VIL","NKC",{peqInjury:true},"Membre d'équipage de cabine blessé au poignet lors d'une turbulence."),
   ];
+}
+
+// Démonstration SGS : dangers, actions et statuts reliés aux comptes rendus de démonstration.
+// Ajoutée une seule fois (drapeau demoSgsV1) ; ne modifie ni n'écrase aucune donnée existante.
+function sgsDemoSgs(evs, H0, A0){
+  const byId=Object.fromEntries((evs||[]).filter(e=>e.demoId).map(e=>[e.demoId,e]));
+  const key=id=>byId[id]?sgsEventKey(byId[id]):null;
+  const d=n=>{ const x=new Date(); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10); };
+  const iso=n=>{ const x=new Date(); x.setDate(x.getDate()+n); return x.toISOString(); };
+  const haveH=new Set((H0||[]).map(h=>h.demoId).filter(Boolean)), haveA=new Set((A0||[]).map(a=>a.demoId).filter(Boolean));
+  const H=[...(H0||[])], A=[...(A0||[])], outH=[], outA=[];
+  const addH=o=>{ if(haveH.has(o.demoId)) return; const h={...o,id:'H'+o.demoId,ref:sgsNextRef(H,'DG'),demo:true}; H.push(h); outH.push(h); };
+  const addA=o=>{ if(haveA.has(o.demoId)) return; const a={...o,id:'A'+o.demoId,ref:sgsNextRef(A,'AC'),demo:true}; A.push(a); outA.push(a); };
+  addH({demoId:'dh1',titre:"Collisions aviaires en approche et au décollage à Dakhla",origine:'reactif',eventKey:key('d03'),
+    description:"Trois impacts en 12 jours. Conséquence la plus pessimiste : ingestion multiple, perte de poussée au décollage.",
+    P:4,G:'B',strategie:'reduction',mesures:"Effarouchement coordonné avec l'aéroport avant chaque mouvement ; briefing des équipages ; phares allumés en approche. Résiduel visé : 2C, à réévaluer après les actions.",
+    statut:'ouvert',createdAt:iso(-10),updatedAt:iso(-2)});
+  addH({demoId:'dh2',titre:"Ingestion de sable au roulage à Dakhla",origine:'proactif',description:"Érosion des compresseurs et baisse de la marge EGT.",
+    P:3,G:'C',strategie:'reduction',mesures:"Roulage à puissance réduite ; inspection boroscopique renforcée.",statut:'maitrise',createdAt:iso(-40),updatedAt:iso(-20)});
+  addH({demoId:'dh3',titre:"Chargement de fret sans document de pesée",origine:'reactif',eventKey:key('d10'),description:"Masse réelle inconnue : risque d'erreur de centrage.",
+    P:3,G:'D',strategie:'evitement',mesures:"Refus systématique de tout fret sans bon de pesée.",statut:'ouvert',createdAt:iso(-18),updatedAt:iso(-18)});
+  addH({demoId:'dh4',titre:"Ouverture de la ligne Dakhla – Nouakchott",origine:'changement',description:"Nouveau terrain, nouvelle procédure d'approche, assistance au sol non encore auditée.",
+    P:2,G:'C',statut:'ouvert',createdAt:iso(-30),updatedAt:iso(-30)});
+  addH({demoId:'dh5',titre:"Batteries lithium non déclarées au fret",origine:'reactif',eventKey:key('d11'),description:"Risque d'incendie en soute.",
+    P:2,G:'B',strategie:'segregation',mesures:"Contrôle radioscopique de tout colis électronique.",P2:1,G2:'B',statut:'clos',createdAt:iso(-58),updatedAt:iso(-45)});
+  const hid=dm=>(H.find(h=>h.demoId===dm)||{}).id;
+  addA({demoId:'da1',titre:"Convention d'effarouchement avec l'aéroport de Dakhla",type:'corrective',hazardId:hid('dh1'),responsable:"Directeur des opérations",echeance:d(-1),critere:"Moins d'un impact par mois sur 3 mois",statut:'encours',createdAt:iso(-10)});
+  addA({demoId:'da2',titre:"Briefing « risque aviaire » à tous les équipages",type:'preventive',hazardId:hid('dh1'),responsable:"Chef pilote",echeance:d(5),critere:"100 % des équipages briefés et émargés",statut:'afaire',createdAt:iso(-10)});
+  addA({demoId:'da3',titre:"Refus du fret sans bon de pesée",type:'corrective',hazardId:hid('dh3'),responsable:"Responsable fret",echeance:d(12),critere:"Aucune non-conformité au prochain audit",statut:'encours',createdAt:iso(-18)});
+  addA({demoId:'da4',titre:"Contrôle radioscopique des colis électroniques",type:'preventive',hazardId:hid('dh5'),responsable:"Responsable sûreté",echeance:d(-50),critere:"Aucun colis non déclaré sur 2 mois",statut:'efficace',preuve:"Rapport de contrôle du mois, aucun écart",createdAt:iso(-58),closedAt:iso(-45)});
+  const ev={};
+  [['d01','clos'],['d02','clos'],['d03','analyse'],['d04','clos'],['d05','clos'],['d06','clos'],['d07','clos'],['d08','clos'],['d09','clos'],['d10','analyse'],['d11','clos'],['d13','clos'],['d14','clos']]
+    .forEach(([id,st])=>{ const k=key(id); if(k) ev[k]={statut:st,updatedAt:new Date().toISOString()}; });
+  return { hazards:outH, actions:outA, ev };
 }
 
 function FormFin({ onSubmit, saved }) {
@@ -7791,6 +7825,21 @@ function AppMain({ onLogout, profileId }) {
   const [sgsManual,setSgsManual]     = usePersist("sgsManual",{changes:[],crm:[],bulletins:[]});
   const [sgsMeetings,setSgsMeetings] = usePersist("sgsMeetings",[]);
   const [sgsResponsable,setSgsResponsable] = usePersist("sgsResponsable",SGS_RESP_DEFAUT);
+  // Démonstration SGS : ajout unique, relié aux comptes rendus de démonstration présents
+  const [demoSgsV1,setDemoSgsV1] = usePersist("demoSgsV1",false);
+  useEffect(()=>{
+    if(demoSgsV1) return;
+    const t=setTimeout(()=>{
+      const evs=(safetyData||[]).filter(e=>e.demoId);
+      if(!evs.length) return;   // pas de comptes rendus de démonstration : rien à relier
+      const d=sgsDemoSgs(evs, sgsHazards||[], sgsActions||[]);
+      if(d.hazards.length) setSgsHazards(l=>[...(l||[]),...d.hazards.filter(h=>!(l||[]).some(x=>x.demoId===h.demoId))]);
+      if(d.actions.length) setSgsActions(l=>[...(l||[]),...d.actions.filter(a=>!(l||[]).some(x=>x.demoId===a.demoId))]);
+      setSgsEvStatus(s=>{ const n={...(s||{})}; Object.entries(d.ev).forEach(([k,v])=>{ if(!n[k]) n[k]=v; }); return n; });
+      setDemoSgsV1(true);
+    },5000);   // laisse le temps aux données du cloud d'arriver
+    return ()=>clearTimeout(t);
+  },[demoSgsV1,safetyData]);
   // Risques intolérables : visibles de la Direction (Dirigeant Responsable) et du SGS
   const sgsRed = (profileId==="dir"||profileId==="sgs") ? (sgsHazards||[]).filter(h=>h.statut!=="clos"&&(sgsRisqueCourant(h)||{}).niv==="intolerable") : [];
   const sync=useSyncStatus();   // indicateur bandeau : hors ligne, écritures en attente
