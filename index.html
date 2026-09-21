@@ -2443,6 +2443,7 @@ const sgsEventKey = e => String(e.timestamp||'')+'|'+(e.date||'')+'|'+(e.num||''
 const sgsNextRef = (list,prefix) => prefix+'-'+String(1+Math.max(0,...(list||[]).map(x=>parseInt(String(x.ref||'').split('-').pop(),10)||0))).padStart(3,'0');
 const sgsAddDays = (n) => { const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
 const sgsFr = d => d ? String(d).slice(0,10).split('-').reverse().join('/') : '—';
+const SGS_RESP_DEFAUT='Youssef IKLI';   // responsable Qualité / SGS par défaut
 const SGS_MOIS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 // Appel IA (même relais et même repli que le générateur de notes)
@@ -2512,10 +2513,144 @@ const SGS_H_STATUTS=[{k:'ouvert',l:'Ouvert'},{k:'maitrise',l:'Maîtrisé'},{k:'c
 const SGS_A_STATUTS=[{k:'afaire',l:'À faire'},{k:'encours',l:'En cours'},{k:'realisee',l:'Réalisée'},{k:'efficace',l:'Efficace'}];
 const sgsActionOuverte=a=>a.statut!=='realisee'&&a.statut!=='efficace';
 
-function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, onBack }){
+// Recherche insensible à la casse et aux accents
+const sgsNorm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const sgsMatch = (q, ...champs) => !q.trim() || sgsNorm(champs.join(' ')).includes(sgsNorm(q.trim()));
+
+// ── Export du registre des dangers et des actions (A4 paysage) ──
+// Tout le registre, clos compris ; aucune description de compte rendu d'événement.
+function sgsExportRegistre(H, A, nom){
+  nom=(nom||'').trim()||SGS_RESP_DEFAUT;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'landscape' });
+  const W=297, HP=210, MX=12, CW=W-2*MX;
+  const now=new Date(), today=now.toISOString().slice(0,10);
+  const ref='REG-SGS-'+today.replace(/-/g,'');
+  const edit=now.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
+  doc.setProperties({ title: ref, creator:'Afrijet Sahara — SGS' });
+  const hex=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  const txt=(s,x,yy,o)=>doc.text(String(s==null?'':s).replace(/[→–—]/g,'-').replace(/[’]/g,"'"),x,yy,o);
+  const clean=s=>String(s==null?'':s).replace(/[→]/g,'->').replace(/[–—]/g,'-').replace(/[’]/g,"'").replace(/[^\x00-\xFF\u0152\u0153]/g,'');
+  let y=0, page=0;
+  const header=()=>{
+    page++;
+    doc.setFillColor(139,0,0); doc.rect(0,0,W,11,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(255,255,255);
+    txt('AFRIJET SAHARA  -  REGISTRE DU SYSTÈME DE GESTION DE LA SÉCURITÉ', MX, 7.3);
+    doc.setFont('helvetica','normal'); txt(ref, W-MX, 7.3, {align:'right'});
+    doc.setFontSize(7.5); doc.setTextColor(100,116,139);
+    txt('Document interne - confidentiel SGS  ·  Édité le '+edit+'  ·  Manuel SGS V03', MX, HP-6);
+    y=18;
+  };
+  const footer=()=>{ const n=doc.getNumberOfPages();
+    for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(100,116,139); txt('Page '+i+' / '+n, W-MX, HP-6, {align:'right'}); } };
+  const title=(s)=>{ if(y>HP-40){ doc.addPage(); header(); }
+    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(26,26,46); txt(s, MX, y); y+=2;
+    doc.setDrawColor(139,0,0); doc.setLineWidth(.5); doc.line(MX,y,MX+CW,y); y+=5; };
+
+  // Tableau à cellules multilignes, en-tête répété à chaque page
+  const table=(cols, rows)=>{
+    const pad=1.6, fs=7.6, lh=3.3;
+    const drawHead=()=>{ doc.setFillColor(241,245,249); doc.rect(MX,y,CW,7,'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.4); doc.setTextColor(26,26,46);
+      let x=MX; cols.forEach(c=>{ txt(c.l, x+pad, y+4.6); x+=c.w; }); y+=7; };
+    drawHead();
+    rows.forEach((r,ri)=>{
+      doc.setFont('helvetica','normal'); doc.setFontSize(fs);
+      const cells=cols.map((c,i)=>doc.splitTextToSize(clean(r.v[i]), c.w-2*pad));
+      const h=Math.max(...cells.map(l=>l.length))*lh+2*pad;
+      if(y+h>HP-12){ doc.addPage(); header(); drawHead(); doc.setFont('helvetica','normal'); doc.setFontSize(fs); }
+      if(ri%2){ doc.setFillColor(250,250,249); doc.rect(MX,y,CW,h,'F'); }
+      let x=MX;
+      cols.forEach((c,i)=>{
+        const st=(r.style||{})[i];
+        if(st&&st.bg){ doc.setFillColor(...hex(st.bg)); doc.rect(x+.6,y+.6,c.w-1.2,h-1.2,'F'); }
+        doc.setFont('helvetica',st&&st.bold?'bold':'normal');
+        doc.setTextColor(...(st&&st.fg?hex(st.fg):[30,41,59]));
+        cells[i].forEach((ln,k)=>doc.text(ln, x+pad, y+pad+2.6+k*lh));
+        x+=c.w;
+      });
+      doc.setDrawColor(226,232,240); doc.setLineWidth(.2); doc.line(MX,y+h,MX+CW,y+h);
+      y+=h;
+    });
+    y+=6;
+  };
+
+  header();
+  // ── Synthèse
+  title('1. Synthèse');
+  const Hc=H.map(h=>({h,r:sgsRisqueCourant(h)}));
+  const ouv=Hc.filter(x=>x.h.statut!=='clos');
+  const aOuv=A.filter(sgsActionOuverte), aRet=aOuv.filter(a=>a.echeance&&a.echeance<today);
+  const synth=[
+    ['Dangers enregistrés', H.length, ''],
+    ['  dont ouverts ou maîtrisés', ouv.length, ''],
+    ['  risque intolérable (ouverts)', ouv.filter(x=>x.r&&x.r.niv==='intolerable').length, '#DC2626'],
+    ['  risque tolérable (ouverts)', ouv.filter(x=>x.r&&x.r.niv==='tolerable').length, '#B45309'],
+    ['  risque acceptable (ouverts)', ouv.filter(x=>x.r&&x.r.niv==='acceptable').length, '#047857'],
+    ['Actions enregistrées', A.length, ''],
+    ['  dont ouvertes', aOuv.length, ''],
+    ['  dont en retard', aRet.length, aRet.length?'#DC2626':''],
+    ['  dont closes (réalisées ou efficaces)', A.length-aOuv.length, ''],
+  ];
+  synth.forEach(([l,n,c])=>{ doc.setFont('helvetica',l.startsWith('  ')?'normal':'bold'); doc.setFontSize(9);
+    doc.setTextColor(...(c?hex(c):[30,41,59])); txt(l, MX+2, y); txt(String(n), MX+95, y, {align:'right'}); y+=5; });
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(30,41,59);
+  txt('Établi par : '+nom+', Responsable Qualité / SGS', MX+2, y+2); y+=12;
+
+  // ── Registre des dangers
+  title('2. Registre des dangers');
+  const ORI={reactif:'Réactive (événement)',proactif:'Proactive',changement:'Gestion du changement'};
+  const ordre={intolerable:0,tolerable:1,acceptable:2};
+  const Hs=[...Hc].sort((a,b)=>(a.h.statut==='clos')-(b.h.statut==='clos')||(ordre[(a.r||{}).niv]??3)-(ordre[(b.r||{}).niv]??3)||String(a.h.ref).localeCompare(String(b.h.ref)));
+  const cell=r=>r?{bg:r.bg,fg:r.c,bold:true}:null;
+  if(!Hs.length){ doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(100,116,139); txt('Aucun danger enregistré.',MX+2,y); y+=10; }
+  else table(
+    [{l:'Réf.',w:15},{l:'Danger',w:52},{l:'Origine',w:24},{l:'Initial',w:22},{l:'Stratégie et mesures',w:78},{l:'Résiduel',w:22},{l:'Statut',w:20},{l:'Mis à jour',w:40}],
+    Hs.map(({h,r})=>{ const r1=sgsRisque(h.P,h.G), r2=sgsRisque(h.P2,h.G2);
+      const strat=(SGS_STRATEGIES.find(s=>s.k===h.strategie)||{}).l;
+      return { v:[h.ref, h.titre+(h.description?'\n'+h.description:''), ORI[h.origine]||'-',
+          r1?r1.cell+' '+r1.l:'-', [strat,h.mesures].filter(Boolean).join(' : ')||'-', r2?r2.cell+' '+r2.l:'-',
+          (SGS_H_STATUTS.find(s=>s.k===(h.statut||'ouvert'))||{}).l, sgsFr(h.updatedAt||h.createdAt)],
+        style:{3:cell(r1),5:cell(r2)} };
+    }));
+
+  // ── Registre des actions
+  title('3. Registre des actions correctives et préventives');
+  const As=[...A].sort((a,b)=>(!sgsActionOuverte(a))-(!sgsActionOuverte(b))||String(a.echeance).localeCompare(String(b.echeance)));
+  if(!As.length){ doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(100,116,139); txt('Aucune action enregistrée.',MX+2,y); y+=10; }
+  else table(
+    [{l:'Réf.',w:15},{l:'Action',w:50},{l:'Type',w:18},{l:'Danger',w:16},{l:'Responsable',w:26},{l:'Échéance',w:20},{l:'Statut',w:22},{l:"Critère d'efficacité",w:53},{l:'Preuve',w:53}],
+    As.map(a=>{ const late=sgsActionOuverte(a)&&a.echeance&&a.echeance<today, h=H.find(x=>x.id===a.hazardId);
+      return { v:[a.ref, a.titre, a.type==='preventive'?'Préventive':'Corrective', h?h.ref:'-', a.responsable,
+          sgsFr(a.echeance)+(late?'\nEN RETARD':''), (SGS_A_STATUTS.find(s=>s.k===a.statut)||{}).l, a.critere||'-', a.preuve||'-'],
+        style: late?{5:{fg:'#DC2626',bold:true}}:{} };
+    }));
+  // Bloc de signature
+  if(y>HP-40){ doc.addPage(); header(); }
+  y+=4; const sx=W-MX-80;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(26,26,46); txt(nom, sx, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(71,85,105);
+  txt('Responsable du Système de Gestion de la Sécurité', sx, y+4.5); txt('Date : '+edit, sx, y+9);
+  doc.setDrawColor(148,163,184); doc.setLineWidth(.3); doc.line(sx, y+22, sx+75, y+22);
+  doc.setFontSize(7.5); txt('Signature', sx, y+26);
+  footer();
+  doc.save(ref+'.pdf');
+  return ref;
+}
+
+function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, onBack }){
+  const nomResp=(responsable||'').trim()||SGS_RESP_DEFAUT;
+  const [nomEdit,setNomEdit]=useState(nomResp);
+  useEffect(()=>{ setNomEdit(nomResp); },[nomResp]);
+  // Enregistré à la sortie du champ ; vide → nom par défaut
+  const commitNom=()=>{ const v=nomEdit.trim()||SGS_RESP_DEFAUT; setNomEdit(v); if(v!==nomResp&&setResponsable) setResponsable(v); };
   const [tab,setTab]=useState('bord');
   const [edit,setEdit]=useState(null);        // { kind:'hazard'|'action', data }
   const [evFilter,setEvFilter]=useState('todo');
+  const [qE,setQE]=useState('');                          // recherche événements
+  const [qD,setQD]=useState(''), [fDst,setFDst]=useState('actifs'), [fDniv,setFDniv]=useState('all');   // dangers
+  const [qA,setQA]=useState(''), [fAst,setFAst]=useState('ouvertes'), [fAty,setFAty]=useState('all');  // actions
   const today=new Date().toISOString().slice(0,10);
   const H=hazards||[], A=actions||[], ES=evStatus||{}, M=manual||{changes:[],crm:[],bulletins:[]}, MT=meetings||[];
 
@@ -2539,6 +2674,15 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const bulls=[...bullAuto,...(M.bulletins||[])].filter(b=>b.date&&sgsJours(b.date)<=365);
   const dernierBull=bulls.map(b=>b.date).sort().pop();
   const spiAlertes=spi.filter(s=>s.alerte).length+(tauxAnalyse<100?1:0)+(crmN>=6?1:0)+(butees.length?1:0)+(!dernierBull||sgsJours(dernierBull)>30?1:0);
+
+  // ── Registres filtrés ──
+  const nivOf=h=>(sgsRisqueCourant(h)||{}).niv;
+  const dStOk=h=>fDst==='all'||(fDst==='actifs'?h.statut!=='clos':(h.statut||'ouvert')===fDst);
+  const Hf=H.filter(h=>dStOk(h)&&(fDniv==='all'||nivOf(h)===fDniv)&&sgsMatch(qD,h.ref,h.titre,h.description,h.mesures));
+  const aStOk=a=>fAst==='all'||(fAst==='ouvertes'?sgsActionOuverte(a):fAst==='retard'?(sgsActionOuverte(a)&&a.echeance&&a.echeance<today):a.statut===fAst);
+  const Af=A.filter(a=>{ const h=H.find(x=>x.id===a.hazardId);
+    return aStOk(a)&&(fAty==='all'||(a.type||'corrective')===fAty)&&sgsMatch(qA,a.ref,a.titre,a.responsable,h&&h.ref,h&&h.titre); });
+  const exporter=()=>{ try{ const r=sgsExportRegistre(H,A,nomResp); uiAlert("Registre exporté — "+r); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
 
   // ── Enregistrement ──
   const saveHazard=h=>{
@@ -2643,6 +2787,11 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
       </div>
 
       {tab==='bord'&&(<div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <SgsField label="Responsable Qualité / SGS (signataire des rapports)">
+          <input value={nomEdit} onChange={e=>setNomEdit(e.target.value)} onBlur={commitNom}
+            onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); }} style={sgsInput}/>
+        </SgsField>
+        <button onClick={exporter} style={{height:44,borderRadius:10,border:"1.5px solid #0F766E",background:"white",color:"#0F766E",fontWeight:700,fontSize:13,...TAP}}>📄 Exporter le registre (PDF)</button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
           <Kpi n={hRouges.length} l="Risques intolérables" c="#DC2626"/>
           <Kpi n={hJaunes.length} l="Risques tolérables" c="#B45309"/>
@@ -2661,8 +2810,9 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
 
       {tab==='ev'&&(<div>
         <SgsPills value={evFilter} onChange={setEvFilter} options={[{k:'todo',l:'À analyser ('+events.filter(e=>statutEv(e)==='recu').length+')'},{k:'analyse',l:'En analyse'},{k:'clos',l:'Clos'},{k:'all',l:'Tous'}]} color="#0F766E"/>
+        <input value={qE} onChange={e=>setQE(e.target.value)} placeholder="🔍 Rechercher : description, vol, immatriculation" style={{...sgsInput,marginTop:10}}/>
         <div style={{marginTop:10}}>
-        {events.filter(e=>evFilter==='all'||(evFilter==='todo'?statutEv(e)==='recu':statutEv(e)===evFilter)).slice(0,80).map((e,i)=>{
+        {events.filter(e=>evFilter==='all'||(evFilter==='todo'?statutEv(e)==='recu':statutEv(e)===evFilter)).filter(e=>sgsMatch(qE,e.description,e.num,e.from,e.to,safetyLabels(e).join(' '))).slice(0,80).map((e,i)=>{
           const st=statutEv(e), late=st==='recu'&&sgsJours(e.date)>20;
           return (<div key={sgsEventKey(e)+i} style={{padding:"11px 0",borderBottom:"1px solid "+C.border}}>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:5}}>
@@ -2686,33 +2836,43 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
 
       {tab==='dg'&&(<div>
         <button onClick={()=>setEdit({kind:'hazard',data:{origine:'proactif',statut:'ouvert'}})} style={{width:"100%",height:44,borderRadius:10,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",fontWeight:700,...TAP}}>+ Nouveau danger</button>
+        <input value={qD} onChange={e=>setQD(e.target.value)} placeholder="🔍 Rechercher : référence, intitulé, mesures" style={{...sgsInput,marginTop:10}}/>
+        <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}>
+          <SgsPills value={fDst} onChange={setFDst} color="#0F766E" options={[{k:'actifs',l:'Ouverts et maîtrisés ('+H.filter(h=>h.statut!=='clos').length+')'},{k:'ouvert',l:'Ouverts ('+H.filter(h=>(h.statut||'ouvert')==='ouvert').length+')'},{k:'maitrise',l:'Maîtrisés ('+H.filter(h=>(h.statut||'ouvert')==='maitrise').length+')'},{k:'clos',l:'Clos ('+H.filter(h=>(h.statut||'ouvert')==='clos').length+')'},{k:'all',l:'Tous ('+H.length+')'}]}/>
+          <SgsPills value={fDniv} onChange={setFDniv} color="#0F766E" options={[{k:'all',l:'Tous niveaux'},...['intolerable','tolerable','acceptable'].map(k=>({k,l:SGS_NIVEAUX[k].l+' ('+H.filter(h=>dStOk(h)&&nivOf(h)===k).length+')'}))]}/>
+        </div>
         <div style={{marginTop:10}}><SgsMatrice small P={null} G={null}/></div>
-        {[...H].sort((a,b)=>{const o={intolerable:0,tolerable:1,acceptable:2}; return (a.statut==='clos')-(b.statut==='clos')||o[(sgsRisqueCourant(a)||{}).niv]-o[(sgsRisqueCourant(b)||{}).niv];}).map(h=>{
+        {[...Hf].sort((a,b)=>{const o={intolerable:0,tolerable:1,acceptable:2}; return (a.statut==='clos')-(b.statut==='clos')||o[(sgsRisqueCourant(a)||{}).niv]-o[(sgsRisqueCourant(b)||{}).niv];}).map(h=>{
           const r=sgsRisqueCourant(h), r1=sgsRisque(h.P,h.G), na=A.filter(a=>a.hazardId===h.id);
           return <Row key={h.id} color={r?r.c:C.border} onClick={()=>setEdit({kind:'hazard',data:h})}
             left={<span style={{opacity:h.statut==='clos'?.55:1}}>{h.ref} · {h.titre}</span>}
             sub={(SGS_H_STATUTS.find(s=>s.k===(h.statut||'ouvert'))||{}).l+(h.P2?' · initial '+r1.cell+' → résiduel '+r.cell:'')+' · '+na.length+' action'+(na.length>1?'s':'')}
             right={<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}><SgsBadge r={r}/><span onClick={ev=>{ev.stopPropagation();delHazard(h);}} style={{fontSize:13,...TAP}}>🗑</span></div>}/>;
         })}
-        {!H.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>Aucun danger enregistré.</div>}
+        {!Hf.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>{H.length?"Aucun danger ne correspond à la recherche.":"Aucun danger enregistré."}</div>}
       </div>)}
 
       {tab==='ac'&&(<div>
         <button onClick={()=>setEdit({kind:'action',data:{type:'corrective',statut:'afaire',echeance:sgsAddDays(30)}})} style={{width:"100%",height:44,borderRadius:10,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",fontWeight:700,...TAP}}>+ Nouvelle action</button>
-        {[...A].sort((a,b)=>(!sgsActionOuverte(a))-(!sgsActionOuverte(b))||String(a.echeance).localeCompare(String(b.echeance))).map(a=>{
+        <input value={qA} onChange={e=>setQA(e.target.value)} placeholder="🔍 Rechercher : référence, action, responsable, danger" style={{...sgsInput,marginTop:10}}/>
+        <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}>
+          <SgsPills value={fAst} onChange={setFAst} color="#0F766E" options={[{k:'ouvertes',l:'Ouvertes ('+A.filter(sgsActionOuverte).length+')'},{k:'retard',l:'En retard ('+aRetard.length+')'},{k:'realisee',l:'Réalisées'},{k:'efficace',l:'Efficaces'},{k:'all',l:'Toutes ('+A.length+')'}]}/>
+          <SgsPills value={fAty} onChange={setFAty} color="#0F766E" options={[{k:'all',l:'Tous types'},{k:'corrective',l:'Corrective'},{k:'preventive',l:'Préventive'}]}/>
+        </div>
+        {[...Af].sort((a,b)=>(!sgsActionOuverte(a))-(!sgsActionOuverte(b))||String(a.echeance).localeCompare(String(b.echeance))).map(a=>{
           const late=sgsActionOuverte(a)&&a.echeance<today, h=H.find(x=>x.id===a.hazardId);
           return <Row key={a.id} color={late?"#DC2626":sgsActionOuverte(a)?"#0F766E":C.emerald} onClick={()=>setEdit({kind:'action',data:a})}
             left={<span style={{opacity:sgsActionOuverte(a)?1:.55}}>{a.ref} · {a.titre}</span>}
             sub={(SGS_A_STATUTS.find(s=>s.k===a.statut)||{}).l+' · '+a.responsable+' · échéance '+sgsFr(a.echeance)+(h?' · '+h.ref:'')}
             right={<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>{late&&<span style={{fontSize:9,fontWeight:800,color:"white",background:"#DC2626",borderRadius:5,padding:"1px 5px"}}>RETARD</span>}<span onClick={ev=>{ev.stopPropagation();delAction(a);}} style={{fontSize:13,...TAP}}>🗑</span></div>}/>;
         })}
-        {!A.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>Aucune action enregistrée.</div>}
+        {!Af.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>{A.length?"Aucune action ne correspond à la recherche.":"Aucune action enregistrée."}</div>}
       </div>)}
 
       {tab==='spi'&&<SgsIndicateursView spi={spi} tauxLoadsheet={tauxLoadsheet} vols30={vols30} butees={butees} tauxAnalyse={tauxAnalyse} ch365={ch365}
         crmN={crmN} crmMois={crmMois} bulls={bulls} dernierBull={dernierBull} M={M} setManual={setManual}/>}
 
-      {tab==='sm'&&<SgsMeeting safety={safety} spi={spi} H={H} A={A} meetings={MT} setMeetings={setMeetings}
+      {tab==='sm'&&<SgsMeeting safety={safety} spi={spi} H={H} A={A} meetings={MT} setMeetings={setMeetings} nomResp={nomResp}
         extra={{tauxLoadsheet,butees,tauxAnalyse,crmN,nbBull:bulls.length}}/>}
 
       <button onClick={onBack} style={{width:"100%",height:46,marginTop:14,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,...TAP}}>← Retour</button>
@@ -2771,7 +2931,7 @@ function SgsIndicateursView({ spi, tauxLoadsheet, vols30, butees, tauxAnalyse, c
 // ── Onglet Safety Meeting : compte rendu mensuel rédigé par l'IA ──
 // L'IA ne reçoit que des données factuelles et anonymisées : aucun nom, aucune
 // description d'événement (les comptes rendus peuvent être confidentiels).
-function SgsMeeting({ safety, spi, H, A, meetings, setMeetings, extra }){
+function SgsMeeting({ safety, spi, H, A, meetings, setMeetings, extra, nomResp }){
   const now=new Date();
   const mois=[...Array(12)].map((_,i)=>{ const d=new Date(now.getFullYear(),now.getMonth()-i,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); });
   const [mSel,setMSel]=useState(mois[0]);
@@ -2801,9 +2961,9 @@ Sections dans cet ordre : "Participants", "Événements de sécurité du mois", 
       const yyyymm=mSel.replace('-','');
       const nn=1+(meetings||[]).filter(m=>String(m.ref).startsWith('SM-'+yyyymm)).length;
       setNote({ref:'SM-'+yyyymm+'-'+String(nn).padStart(2,'0'), date:new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}),
-        from:'Responsable Qualité / SGS', to:'Dirigeant Responsable · Responsables Désignés',
+        from:(nomResp||SGS_RESP_DEFAUT)+' — Responsable Qualité / SGS', to:'Dirigeant Responsable · Responsables Désignés',
         objet:j.objet||('Safety Meeting — '+moisFr(mSel)), intro:j.intro||'', sections:(j.sections||[]).map(s=>({title:s.title,content:s.content||''})),
-        closingText:j.closing||'', approbNom:'Responsable Qualité / SGS', approbFonction:'Responsable du Système de Gestion de la Sécurité',
+        closingText:j.closing||'', approbNom:nomResp||SGS_RESP_DEFAUT, approbFonction:'Responsable du Système de Gestion de la Sécurité',
         docType:'COMPTE RENDU SAFETY MEETING', classification:'Diffusion interne — confidentiel SGS', revision:'00', mois:mSel});
     }catch(e){ uiAlert("❌ Génération impossible : "+(e.message||e)); }
     setBusy(null);
@@ -4746,7 +4906,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
       safetyData,
       clients,
       ndsArchive,
-      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings}:{}),
+      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable}:{}),
     };
     setProgress(p=>({...p,currentStep:1,pct:40}));
     try{
@@ -7138,6 +7298,7 @@ function AppMain({ onLogout, profileId }) {
   const [sgsEvStatus,setSgsEvStatus] = usePersist("sgsEvStatus",{});
   const [sgsManual,setSgsManual]     = usePersist("sgsManual",{changes:[],crm:[],bulletins:[]});
   const [sgsMeetings,setSgsMeetings] = usePersist("sgsMeetings",[]);
+  const [sgsResponsable,setSgsResponsable] = usePersist("sgsResponsable",SGS_RESP_DEFAUT);
   // Risques intolérables : visibles de la Direction (Dirigeant Responsable) et du SGS
   const sgsRed = (profileId==="dir"||profileId==="sgs") ? (sgsHazards||[]).filter(h=>h.statut!=="clos"&&(sgsRisqueCourant(h)||{}).niv==="intolerable") : [];
   const sync=useSyncStatus();   // indicateur bandeau : hors ligne, écritures en attente
@@ -7149,7 +7310,7 @@ function AppMain({ onLogout, profileId }) {
   const AUTO_BACKUP_MS = 30*60*1000;
   const stateRef = useRef({});
   stateRef.current = { flights, maintData, crew, finData, kpis, dismissed, safetyData, clients, ndsArchive,
-    sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings };
+    sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings, sgsResponsable };
   const buildBackup = () => ({ version:"1.0", exportDate:new Date().toISOString(), auto:true, ...stateRef.current });
   const lastAutoRef = useRef(0);
   const autoBackup = async (reason) => {
@@ -7193,6 +7354,7 @@ function AppMain({ onLogout, profileId }) {
     if(data.sgsEvStatus)setSgsEvStatus(data.sgsEvStatus);
     if(data.sgsManual)  setSgsManual(data.sgsManual);
     if(data.sgsMeetings)setSgsMeetings(data.sgsMeetings);
+    if(data.sgsResponsable)setSgsResponsable(data.sgsResponsable);
   };
 const [showRestoreModal,setShowRestoreModal] = useState(false);
   const [restoreProgress,setRestoreProgress] = useState(null);
@@ -7228,8 +7390,8 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     clearStorage();
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);
-    setClients(INIT_CLIENTS);setNdsArchive([]);
-    setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);   // sinon ces deux-là reviennent depuis le cloud
+    setClients(INIT_CLIENTS);setNdsArchive([]);   // sinon ces deux-là reviennent depuis le cloud
+    setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);
     setReport(null);setReset(false);setTab("forms");
   };
 
@@ -7305,7 +7467,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
         {tab==="forms"   && <ScreenForms
-          sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,ndsArchive}}
+          sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,ndsArchive}}
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
           onSubmitMaint={d=>{
             if(d.acId){
