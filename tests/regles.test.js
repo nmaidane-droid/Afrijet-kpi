@@ -24,7 +24,7 @@ function extract(name){
     else if(!fm&&depth===0&&(ch===';'||ch==='\n')) return code.slice(i,k+1);
   }
 }
-const names=['sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -106,6 +106,12 @@ test('chaque indicateur a un seuil',    ()=>attendu(T.SAFETY_EVENTS.filter(e=>e.
 console.log('\nRecherche dans les registres SGS');
 test('insensible aux accents et majuscules', ()=>attendu(T.sgsMatch('SURETE','Sûreté aéroportuaire')&&T.sgsMatch('dakhla','Ingestion à DAKHLA'),'accent ou casse mal géré'));
 test('recherche vide : tout correspond',     ()=>attendu(T.sgsMatch('  ','x')&&!T.sgsMatch('abc','xyz'),'filtre vide faux'));
+
+console.log('\nExport des comptes rendus : sélection');
+{ const d=n=>{const x=new Date();x.setDate(x.getDate()-n);return x.toISOString().slice(0,10);};
+  const ev=[{date:d(5),bird:true},{date:d(200),cgoProc:true},{date:d(400),unruly:true}];
+  test('période : 3 mois / 12 mois / tout', ()=>attendu(T.sgsFiltreEvenements(ev,'3m','all').length===1&&T.sgsFiltreEvenements(ev,'12m','all').length===2&&T.sgsFiltreEvenements(ev,'all','all').length===3,'filtre de période faux'));
+  test('service : Fret, Sûreté, Maintenance', ()=>attendu(T.sgsFiltreEvenements(ev,'all','CGO').length===1&&T.sgsFiltreEvenements(ev,'all','SEC').length===1&&T.sgsFiltreEvenements(ev,'all','MNT').length===1,'filtre de service faux')); }
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
