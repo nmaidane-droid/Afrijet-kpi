@@ -1070,6 +1070,15 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
 // ── Alerts ───────────────────────────────────────────────────────────────────
 function computeAlerts(kpis, flights, maintData, aircraft, crew) {
   const a=[];
+  // Vols planifiés compromis : réexaminés à chaque calcul, pour attraper un titre
+  // ou un MEL devenu échu après la planification — bien avant le jour du départ.
+  (flights||[]).filter(f=>f.status==="Planifie").forEach(f=>{
+    const pb=volCompromis(f, crew, aircraft);
+    if(!pb.length) return;
+    const d=String(f.date||'').slice(0,10).split('-').reverse().join('/');
+    a.push({id:"vc-"+f.num+"-"+f.date, sev:"danger", icon:"🛫",
+            msg:"Vol "+f.num+" du "+d+" compromis — "+pb.map(p=>p.label).join(" · ")});
+  });
   // Échéances équipage : titre échu, puis échéance sous 30 puis 90 jours.
   (crew||[]).forEach(m=>{
     const d=m.dates||{};
@@ -1163,6 +1172,45 @@ function titresEchus(m){
   if(!m) return [];
   const d=m.dates||{};
   return crewItemsFor(m.role).filter(i=>i.bloquant && joursAvant(d[i.k])!==null && joursAvant(d[i.k])<0);
+}
+
+// ── Contrôle d'un vol planifié à sa date ──────────────────────────────────────
+// Un vol est « compromis » si, à la date où il doit avoir lieu, l'appareil porte
+// un MEL échu ou un membre d'équipage un titre bloquant échu. Utilisé à la
+// planification, dans les alertes et dans la liste des vols.
+function melDateToISO(exp){
+  // « JJ/MM/AA » ou « JJ/MM/AAAA » → « AAAA-MM-JJ »
+  const p=String(exp||'').split('/');
+  if(p.length!==3) return null;
+  const yr=p[2].length===2 ? 2000+Number(p[2]) : Number(p[2]);
+  if(isNaN(yr)||isNaN(Number(p[1]))||isNaN(Number(p[0]))) return null;
+  return yr+'-'+String(p[1]).padStart(2,'0')+'-'+String(p[0]).padStart(2,'0');
+}
+function volCompromis(vol, crew, aircraft){
+  const pb=[];
+  const dateVol=String(vol.date||'').slice(0,10);
+  if(!dateVol) return pb;
+  // MEL de l'appareil, échus à la date du vol
+  const ac=(aircraft||[]).find(a=>a.id===vol.acId);
+  if(ac&&Array.isArray(ac.mels)){
+    ac.mels.forEach(m=>{
+      const iso=melDateToISO(m.exp);
+      if(iso && iso<dateVol)
+        pb.push({type:'mel', label:`MEL ${m.mel||''} ${m.sys||''} (Cat.${m.sev||'?'}) expiré le ${m.exp}`.replace(/\s+/g,' ').trim()});
+    });
+  }
+  // Titres bloquants de l'équipage, échus à la date du vol
+  const nomComplet=m=>m.nom+' '+m.prenom;
+  [vol.cm1,vol.cm2,vol.cc].filter(Boolean).forEach(n=>{
+    const m=(crew||[]).find(x=>nomComplet(x)===n);
+    if(!m) return;
+    const d=m.dates||{};
+    crewItemsFor(m.role).filter(i=>i.bloquant).forEach(i=>{
+      const exp=String(d[i.k]||'').slice(0,10);
+      if(exp && exp<dateVol) pb.push({type:'crew', label:`${n} : ${i.label} échu le ${exp.split('-').reverse().join('/')}`});
+    });
+  });
+  return pb;
 }
 
 const INIT_CREW = [
@@ -1433,21 +1481,6 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
 
   const submit=()=>{
     if(!num.trim()||!dep){alert("N° vol et départ requis");return;}
-    // Équipage : un titre bloquant échu interdit l'affectation.
-    const nomComplet=(m)=>m.nom+" "+m.prenom;
-    const assignes=[cm1,cm2,cc].filter(Boolean);
-    const inaptes=[];
-    assignes.forEach(n=>{
-      const m=(crew||[]).find(x=>nomComplet(x)===n);
-      if(!m) return;
-      const echus=titresEchus(m);
-      if(echus.length) inaptes.push(n+" : "+echus.map(e=>e.label).join(", "));
-    });
-    if(inaptes.length){
-      alert("⛔ Planification impossible — titre échu\n\n"+inaptes.join("\n")
-        +"\n\nMettez à jour les échéances dans Formulaires → Équipage, ou désignez un autre membre.");
-      return;
-    }
     // Le client est obligatoire pour un vol commercial ; ferry et positionnement en sont dispensés.
     if(flightType==="Commercial" && !clientId){
       alert("⚠️ Un client est requis pour un vol commercial.\n\nSélectionnez un client, ou choisissez le type FRY (ferry) ou POS (positionnement).");
@@ -1455,22 +1488,16 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
     }
     const todayStr=new Date().toISOString().slice(0,10);
     if(date<todayStr){alert("⚠️ La date du vol ne peut pas être dans le passé.");return;}
-    // Vérification MEL expiré à la planification
-    const selAc=(aircraft||[]).find(a=>a.id===acId);
-    if(selAc&&selAc.mels&&selAc.mels.length>0){
-      const today=new Date(); today.setHours(0,0,0,0);
-      const expired=selAc.mels.filter(m=>{
-        if(!m.exp) return false;
-        const parts=m.exp.split("/");
-        if(parts.length!==3) return false;
-        const yr=parseInt(parts[2])<100?2000+parseInt(parts[2]):parseInt(parts[2]);
-        const expDate=new Date(yr,parseInt(parts[1])-1,parseInt(parts[0]));
-        return expDate<today;
-      });
-      if(expired.length>0){
-        alert("⛔ Planification impossible — MEL expiré sur "+selAc.immat+" :\n"+expired.map(m=>"• Cat."+m.sev+" — "+m.sys+" ("+m.mel+", exp. "+m.exp+")").join("\n")+"\n\nRésolvez ou étendez ce MEL avant de planifier un vol.");
-        return;
-      }
+    // MEL et titres équipage sont contrôlés À LA DATE DU VOL, pas à la date du
+    // jour : un titre qui expire entre aujourd'hui et le vol bloque dès maintenant.
+    const pb=volCompromis({date,acId,cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim()}, crew, aircraft);
+    if(pb.length){
+      const mel=pb.filter(p=>p.type==='mel'), eq=pb.filter(p=>p.type==='crew');
+      let msg="⛔ Planification impossible pour le "+date.split('-').reverse().join('/')+" :\n";
+      if(mel.length) msg+="\nAppareil :\n"+mel.map(p=>"• "+p.label).join("\n")+"\n";
+      if(eq.length)  msg+="\nÉquipage :\n"+eq.map(p=>"• "+p.label).join("\n")+"\n";
+      msg+="\nRésolvez ces points, choisissez une autre date, ou désignez un autre membre.";
+      alert(msg); return;
     }
     // Pre-calculate planned duration
     let planDuree=0;
@@ -4301,7 +4328,7 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
   );
 }
 
-function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, clients }) {
+function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, clients, crew }) {
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
   const [opsSaved,setOpsSaved]=useState(false);
@@ -4404,6 +4431,20 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
           alert("⛔ Vol non autorisé — MEL expiré sur "+ac.immat+" :\n"+expired.map(m=>"• Cat."+m.sev+" — "+m.sys+" ("+m.mel+", exp. "+m.exp+")").join("\n")+"\n\nRésolvez ou étendez ce MEL avant de mettre l'avion En vol.");
           return;
         }
+      }
+      // Équipage : réévalué au départ, car un titre a pu échoir depuis la planification.
+      const nomComplet=m=>m.nom+" "+m.prenom;
+      const inaptes=[];
+      [edit.cm1,edit.cm2,edit.cc].filter(Boolean).forEach(n=>{
+        const m=(crew||[]).find(x=>nomComplet(x)===n);
+        if(!m) return;
+        const echus=titresEchus(m);
+        if(echus.length) inaptes.push("• "+n+" : "+echus.map(e=>e.label).join(", "));
+      });
+      if(inaptes.length){
+        alert("⛔ Vol non autorisé — titre équipage échu :\n"+inaptes.join("\n")
+          +"\n\nMettez à jour les échéances dans Formulaires → Équipage, ou modifiez l'équipage de ce vol avant de le mettre En vol.");
+        return;
       }
     }
 
@@ -4665,6 +4706,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
         {filtered.map((f,i)=>{
           const secEvts=getSecEvents(f.num,f.date);
           const hasSecu=secEvts.length>0;
+          const compromis=f.status==="Planifie" ? volCompromis(f, crew, aircraft) : [];
           return (
           <div key={i} onClick={()=>{if(canEdit!==false){setEdit({...f});setOrigStatus(f.status);}}}
             style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none",cursor:canEdit!==false?"pointer":"default",WebkitTapHighlightColor:"transparent"}}>
@@ -4676,7 +4718,13 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
                 {f.num} · {f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--"} · {f.from}→{f.to}
                 {(()=>{const t=f.flightType||"Commercial";const c=t==="Ferry"?"#0369A1":t==="Positioning"?"#D97706":"#00936A";const code=t==="Ferry"?"FRY":t==="Positioning"?"POS":"COM";return <span style={{background:c,color:"white",borderRadius:6,padding:"1px 5px",fontSize:9,fontWeight:800,flexShrink:0}}>{code}</span>;})()}
                 {hasSecu&&<span style={{background:"#FEE2E2",color:"#DC2626",borderRadius:6,padding:"1px 5px",fontSize:9,fontWeight:800}}>🛡 {secEvts.length}</span>}
+                {compromis.length>0&&<span title={compromis.map(p=>p.label).join(" · ")} style={{background:"#DC2626",color:"white",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800,flexShrink:0}}>⛔ COMPROMIS</span>}
               </div>
+              {compromis.length>0&&(
+                <div style={{fontSize:10,color:"#DC2626",marginTop:2,lineHeight:1.35}}>
+                  {compromis.map((p,k)=><div key={k}>• {p.label}</div>)}
+                </div>
+              )}
               <div style={{fontSize:11,color:C.textSub}}>
                 {f.dep} - {f.arr} · {f.pax} pax · {f.load}%
                 {(()=>{if(f.dureeMin>0)return<span style={{color:C.emerald,fontWeight:700}}> · {Math.floor(f.dureeMin/60)}h{String(f.dureeMin%60).padStart(2,"0")}</span>;return null;})()}
@@ -6178,7 +6226,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew}/>}
-        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients}/>}
+        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
