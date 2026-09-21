@@ -102,11 +102,11 @@ const PROFILES = [
   {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
    pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
    forms:["avion","crew","vol","secu","docavion","regl","sat"],
-   tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes","fin"] },
+   tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes"] },
   {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
    pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
    forms:["maint"],
-   tabs:["forms"],       readOnly:["live","secu","ops","fin","perf","alertes","maint"] },
+   tabs:["forms"],       readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"fin",   label:"Finances",    icon:"💰",  color:"#7C3AED",
    pwdHash:"2bb078f176007917292c786bdc9fd0a51a88eebf9bfbae142455c0c652f9475c",
    forms:["fin"],
@@ -117,10 +117,10 @@ const PROFILES = [
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
   {id:"comm",  label:"Commercial",     icon:"💼",  color:"#0891B2",
    pwdHash:"d01acdec3a3b87b33882a0fb8959ffda858a0642f7f54190f67aa230e04d1547",
-   forms:["clients"], tabs:["forms"], readOnly:["live","secu","ops","fin","perf","alertes","maint"], blocked:[] },
+   forms:["clients"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"], blocked:[] },
   {id:"sgs",   label:"Qualité / SGS",  icon:"🛡", color:"#0F766E",
    pwdHash:"e6a585f2870b2afbc4e0900a53d6b6b050781460d2d1eb575c347693b29b0d4e",
-   forms:["sgs","secu"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint","fin"] },
+   forms:["sgs","secu"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
    forms:null, tabs:null, readOnly:[] },
@@ -7041,11 +7041,16 @@ function RestoreModal({ onClose, setRestoreProgress, onImport }){
 
 function AppMain({ onLogout, profileId }) {
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
-  const canForm = (id) => id==="sgs" ? profile.id==="sgs" : (profile.forms===null || profile.forms.includes(id));
+  // Tuile Finances : profil Finances seul. Tuile SGS : Qualité / SGS et Administrateur.
+  const canForm = (id) => id==="fin" ? profile.id==="fin"
+                        : id==="sgs" ? (profile.id==="sgs"||profile.id==="rdoa")
+                        : (profile.forms===null || profile.forms.includes(id));
+  // Onglet Finances : Administrateur, Finances et Direction uniquement
+  const canTab = (id) => id!=="fin" || ["rdoa","fin","dir"].includes(profile.id);
   const readOnly = (id) => (profile.readOnly||[]).includes(id);
   const [now,setNow]         = useState(new Date());
   const [tab,setTab]         = useState(() => {
-    try { return sessionStorage.getItem(PFX+"tab") || "forms"; } catch(_e) { return "forms"; }
+    try { const t=sessionStorage.getItem(PFX+"tab")||"forms"; return canTab(t)?t:"forms"; } catch(_e) { return "forms"; }
   });
   useEffect(() => {
     try { sessionStorage.setItem(PFX+"tab", tab); } catch(_e){ logSilent(_e); }
@@ -7275,7 +7280,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
-        {tab==="fin"     && <ScreenFin finData={finData}/>}
+        {tab==="fin" && canTab("fin") && <ScreenFin finData={finData}/>}
       </div>
 
 
@@ -7822,15 +7827,20 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
       {/* BOTTOM NAV */}
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",height:BOT,background:C.white,borderTop:"1px solid "+C.border,display:"flex",alignItems:"stretch",boxShadow:"0 -2px 12px rgba(0,0,0,.08)",zIndex:200}}>
         {TABS.map(t=>{
+          const interdit=!canTab(t.id);   // visible mais inactif
           const active=tab===t.id;
           const badge=t.id==="alertes"&&critCount>0?critCount:null;
-          const isRO=readOnly(t.id);
+          const isRO=readOnly(t.id)||(t.id==="fin"&&!interdit);
           return (
-            <button key={t.id} onClick={()=>setTab(t.id)}
+            <button key={t.id} onClick={()=>{ if(!interdit) setTab(t.id); }} aria-disabled={interdit}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:"6px 2px",position:"relative",...NOTAP,borderTop:active?"2.5px solid "+C.gold:"2.5px solid transparent"}}>
-              <span style={{fontSize:17,lineHeight:1}}>{t.icon}</span>
-              <span style={{fontSize:8,fontWeight:active?700:500,color:active?C.gold:C.slate}}>{t.label}</span>
-              {isRO&&<span style={{fontSize:7,color:C.slateL}}>👁</span>}
+              <span style={{fontSize:17,lineHeight:1,opacity:interdit?.35:1,filter:interdit?"grayscale(1)":"none"}}>{t.icon}</span>
+              <span style={{fontSize:8,fontWeight:active?700:500,color:interdit?"#CBD5E1":active?C.gold:C.slate}}>{t.label}</span>
+              {isRO&&!interdit&&<span style={{fontSize:7,color:C.slateL}}>👁</span>}
+              {interdit&&<svg width="11" height="9" viewBox="0 0 24 18" aria-label="Accès non autorisé" style={{display:"block"}}>
+                <path d="M1 9s4-7 11-7 11 7 11 7-4 7-11 7S1 9 1 9z" fill="none" stroke="#94A3B8" strokeWidth="2"/>
+                <circle cx="12" cy="9" r="3" fill="none" stroke="#94A3B8" strokeWidth="2"/>
+                <line x1="3" y1="17" x2="21" y2="1" stroke="#94A3B8" strokeWidth="2.2" strokeLinecap="round"/></svg>}
               {badge&&(
                 <div style={{position:"absolute",top:4,right:"50%",transform:"translateX(10px)",background:C.danger,color:"white",borderRadius:10,minWidth:16,height:16,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>
                   {badge}
