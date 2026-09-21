@@ -24,7 +24,7 @@ function extract(name){
     else if(!fm&&depth===0&&(ch===';'||ch==='\n')) return code.slice(i,k+1);
   }
 }
-const names=['SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -121,6 +121,16 @@ test('Changement : en étude → évalué → approuvé', ()=>{ const c={eis:[{P
   attendu(a==='etude'&&b==='evalue'&&d==='approuve'&&T.sgsChgAnalyse({...c,conclusion:'ok'}),'statuts faux '+[a,b,d]); });
 test('Analyse : ancienne fiche relue (date → dateReunion)', ()=>attendu(T.sgsAnaNorm({date:'2026-09-15'}).dateReunion==='2026-09-15','compatibilité perdue'));
 test('Analyse : résumé masqué pour un confidentiel', ()=>{ const r=T.sgsAnaResume({dateReunion:'2026-09-15',causes:'secret'},{},true); attendu(/Réunion du 15\/09\/2026/.test(r)&&!/secret/.test(r),'masquage faux'); });
+
+console.log('\nFormations SGS : résultat par participant (SGS 04-01)');
+{ const f={seuil:75,pers:[{nom:'A',present:true,score:''},{nom:'B',present:true,score:80},{nom:'C',present:true,score:60},{nom:'D',present:false,score:''}]};
+  test('présent sans test : formé', ()=>attendu(T.sgsFormRes(f.pers[0],f)==='present'&&T.sgsFormOK(f.pers[0],f),'faux'));
+  test('test au-dessus du seuil : réussi', ()=>attendu(T.sgsFormRes(f.pers[1],f)==='reussi','faux'));
+  test('test sous le seuil : à reprendre, non formé', ()=>attendu(T.sgsFormRes(f.pers[2],f)==='reprendre'&&!T.sgsFormOK(f.pers[2],f),'faux'));
+  test('absent : non formé', ()=>attendu(T.sgsFormRes(f.pers[3],f)==='absent'&&!T.sgsFormOK(f.pers[3],f),'faux'));
+  test('personnes formées : A et B', ()=>attendu(T.sgsFormNoms(f).join()==='A,B','obtenu '+T.sgsFormNoms(f).join()));
+  test('ancienne session convertie sans perte', ()=>{ const old={participants:'Nour MAIDANE — CDB\nMarie DUPONT'}; const p=T.sgsFormPers(old);
+    attendu(p.length===2&&p[0].nom==='Nour MAIDANE'&&p[0].fonction==='CDB'&&p[1].present===true&&T.sgsFormNoms(old).length===2,'conversion fausse'); }); }
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
