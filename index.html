@@ -36,9 +36,17 @@
       function prog(p, t){ if(bar){bar.style.width=p+'%';} if(lbl){lbl.textContent=t;} }
       try {
         prog(30, 'Chargement des bibliothèques...');
-        var code = document.getElementById('app-code').textContent;
-        prog(50, 'Compilation de l\'application...');
-        var compiled = Babel.transform(code, { presets: ['react'] }).code;
+        var el = document.getElementById('app-code');
+        var code = el.textContent;
+        // Version compilée à l'avance par Vercel (data-compiled) : pas de Babel
+        // dans le navigateur. Sinon, compilation sur place comme auparavant.
+        var compiled;
+        if (el.getAttribute('data-compiled') === '1') {
+          compiled = code;
+        } else {
+          prog(50, 'Compilation de l\'application...');
+          compiled = Babel.transform(code, { presets: ['react'] }).code;
+        }
         prog(80, 'Démarrage...');
         var fn = new Function('React', 'ReactDOM', compiled + '\nreturn App;');
         var App = fn(React, ReactDOM);
@@ -54,6 +62,17 @@
   <script id="app-code" type="text/plain">
 // React hooks available globally via Babel standalone
 const { useState, useEffect, useRef } = React;
+
+// Trace discrète des erreurs non bloquantes : jamais d'interruption pour
+// l'utilisateur, mais une ligne en console pour le diagnostic.
+// Comportement tactile commun aux éléments cliquables : curseur main et pas de
+// surbrillance grise au toucher sur mobile. Étalé dans chaque style ({...TAP}).
+const TAP   = { cursor:"pointer", WebkitTapHighlightColor:"transparent" };
+const NOTAP = { WebkitTapHighlightColor:"transparent" };
+
+function logSilent(e){ try{ console.warn("[afrijet]", e&&e.message?e.message:e); }catch(_x){} }
+
+
 
 class ErrorBoundary extends React.Component {
   constructor(props){super(props);this.state={error:null};}
@@ -152,7 +171,7 @@ const TOP=60, BOT=58, PFX="ajs135v1_";
 const fmtMAD = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 
 const lsGet = k => { try { return localStorage.getItem(k); } catch(_e) { return null; } };
-const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch(_e) {} };
+const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch(_e){ logSilent(_e); } };
 
 
 // ── Persistance locale + cloud, avec horodatage ──────────────────────────────
@@ -174,6 +193,25 @@ function unwrapEnv(raw){
 }
 
 const PERSIST_DEBOUNCE_MS = 400;
+
+// État de synchronisation partagé : nombre d'écritures en attente et
+// fonctions de renvoi, pour l'indicateur du bandeau et le retour du réseau.
+const SYNC = { pending:new Set(), flushers:new Set(), listeners:new Set(), lastError:null };
+SYNC.notify = () => SYNC.listeners.forEach(fn=>{ try{ fn(); }catch(_e){ logSilent(_e); } });
+SYNC.flushAll = () => SYNC.flushers.forEach(fn=>{ try{ fn(); }catch(_e){ logSilent(_e); } });
+window.addEventListener("online", ()=>{ SYNC.lastError=null; SYNC.flushAll(); SYNC.notify(); });
+window.addEventListener("offline", ()=>SYNC.notify());
+
+// Abonnement React à cet état
+function useSyncStatus(){
+  const [,tick]=useState(0);
+  useEffect(()=>{
+    const fn=()=>tick(t=>t+1);
+    SYNC.listeners.add(fn);
+    return ()=>SYNC.listeners.delete(fn);
+  },[]);
+  return { pending:SYNC.pending.size, offline:typeof navigator!=="undefined"&&navigator.onLine===false, lastError:SYNC.lastError };
+}
 
 function usePersist(key, init) {
   const fk = PFX+key;
@@ -199,16 +237,21 @@ function usePersist(key, init) {
     if (!env) return;
     pending.current = null;
     sbSet(fk, env).then(ok => {
-      // Échec : on garde l'enveloppe pour réessayer au prochain changement
-      // ou à la prochaine ouverture (le local restera plus récent).
-      if (!ok && !pending.current) pending.current = env;
+      // Échec : on garde l'enveloppe pour réessayer au retour du réseau,
+      // au prochain changement ou à la prochaine ouverture.
+      if (!ok) { if (!pending.current) pending.current = env; SYNC.lastError = fk; }
+      else { SYNC.pending.delete(fk); if (SYNC.lastError===fk) SYNC.lastError=null; }
+      SYNC.notify();
     });
   };
   const schedule = env => {
     pending.current = env;
+    SYNC.pending.add(fk); SYNC.notify();
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flush, PERSIST_DEBOUNCE_MS);
   };
+  // Enregistré pour le renvoi global au retour du réseau
+  useEffect(() => { SYNC.flushers.add(flush); return () => SYNC.flushers.delete(flush); }, [fk]);
 
   // Chargement distant au montage, avec fusion par horodatage
   useEffect(() => {
@@ -262,7 +305,7 @@ function clearStorage() {
   try {
     const keys = Object.keys(localStorage).filter(k => k.startsWith(PFX));
     keys.forEach(k => localStorage.removeItem(k));
-  } catch(_e) {}
+  } catch(_e){ logSilent(_e); }
 }
 
 
@@ -290,7 +333,7 @@ function KpiTile({ title, value, unit, sub, accent, icon, info }) {
               style={{fontSize:12,color:C.slateL,cursor:"pointer",fontWeight:700,
                 background:C.bg,borderRadius:"50%",width:16,height:16,display:"flex",
                 alignItems:"center",justifyContent:"center",flexShrink:0,
-                border:"1px solid "+C.border,WebkitTapHighlightColor:"transparent"}}>ⓘ</span>
+                border:"1px solid "+C.border,...NOTAP}}>ⓘ</span>
           )}
           <span style={{ fontSize:18 }}>{icon}</span>
         </div>
@@ -468,7 +511,7 @@ function FSubmit({ label, color="#0F1F3D", onClick, saved }) {
     <button onClick={onClick}
       style={{ width:"100%", height:52, background:bg, border:"none", borderRadius:12,
                cursor:"pointer", color:"white", fontSize:15, fontWeight:700,
-               WebkitTapHighlightColor:"transparent", boxShadow:"0 2px 12px "+bg+"55",
+               ...NOTAP, boxShadow:"0 2px 12px "+bg+"55",
                transition:"background 0.3s" }}>
       {lbl}
     </button>
@@ -641,7 +684,7 @@ function FAirport({ label, value, onChange }) {
             <button key={a.c} onMouseDown={()=>pick(a.c)}
               style={{ width:"100%", background:"none", border:"none", padding:"10px 14px",
                        cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center",
-                       gap:10, borderBottom:"1px solid "+C.bg, WebkitTapHighlightColor:"transparent" }}>
+                       gap:10, borderBottom:"1px solid "+C.bg, ...NOTAP }}>
               <span style={{ fontWeight:800, fontSize:14, color:C.navy, fontFamily:"monospace", minWidth:36 }}>{a.c}</span>
               <span style={{ fontSize:12, color:C.slate }}>{a.n}</span>
             </button>
@@ -745,7 +788,7 @@ function FlightCatBadge({ iata }) {
       <span onClick={e=>{e.stopPropagation();setShow(s=>!s);}}
         style={{fontSize:12,color:C.slateL,cursor:"pointer",background:C.bg,borderRadius:"50%",
           width:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",
-          border:"1px solid "+C.border,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>ⓘ</span>
+          border:"1px solid "+C.border,flexShrink:0,...NOTAP}}>ⓘ</span>
       {show&&(
         <div onClick={()=>setShow(false)}
           style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:999,
@@ -869,7 +912,7 @@ async function fetchByIcao24(registration) {
       const j = await r.json();
       if (j.data?.[0]) return j.data[0];
     }
-  } catch(_e) {}
+  } catch(_e){ logSilent(_e); }
   return null;
 }
 
@@ -886,7 +929,7 @@ async function fetchRegionalTraffic(lat, lon) {
       const j = await r.json();
       return j.data ?? [];
     }
-  } catch(_e) {}
+  } catch(_e){ logSilent(_e); }
   return simulateMoroccoTraffic();
 }
 
@@ -1093,7 +1136,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
           }}
             style={{background:C.gold,border:"none",borderRadius:8,padding:"6px 10px",
                     color:"white",fontSize:12,fontWeight:700,cursor:"pointer",
-                    WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+                    ...NOTAP,flexShrink:0}}>
             &#x2708; Centrer
           </button>
           <div style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,
@@ -1115,7 +1158,7 @@ function computeAlerts(kpis, flights, maintData, aircraft, crew) {
   // Vols planifiés compromis : réexaminés à chaque calcul, pour attraper un titre
   // ou un MEL devenu échu après la planification — bien avant le jour du départ.
   (flights||[]).filter(f=>f.status==="Planifie").forEach(f=>{
-    const pb=volCompromis(f, crew, aircraft);
+    const pb=[...volCompromis(f, crew, aircraft), ...chevauchements(f, flights)];
     if(!pb.length) return;
     const d=String(f.date||'').slice(0,10).split('-').reverse().join('/');
     a.push({id:"vc-"+f.num+"-"+f.date, sev:"danger", icon:"🛫",
@@ -1250,6 +1293,35 @@ function volCompromis(vol, crew, aircraft){
     crewItemsFor(m.role).filter(i=>i.bloquant).forEach(i=>{
       const exp=String(d[i.k]||'').slice(0,10);
       if(exp && exp<dateVol) pb.push({type:'crew', label:`${n} : ${i.label} échu le ${exp.split('-').reverse().join('/')}`});
+    });
+  });
+  return pb;
+}
+
+// ── Chevauchement d'équipage ──────────────────────────────────────────────────
+// Un membre ne peut pas être sur deux vols dont les plages horaires se
+// recouvrent le même jour. Plage = départ prévu → arrivée prévue ; à défaut
+// d'arrivée, durée planifiée ou 2 h par défaut.
+function plageVol(v){
+  const toMin=t=>{ if(!t||!String(t).includes(":")) return null; const [h,m]=String(t).split(":").map(Number); return h*60+m; };
+  const d=toMin(v.dep); if(d===null) return null;
+  let a=toMin(v.arr);
+  if(a===null) a = d + (Number(v.dureeMin)>0 ? Number(v.dureeMin) : 120);
+  if(a<=d) a+=1440;   // passage minuit
+  return {d,a};
+}
+function chevauchements(vol, flights){
+  const pb=[];
+  const p=plageVol(vol); if(!p) return pb;
+  const membres=[vol.cm1,vol.cm2,vol.cc].filter(Boolean);
+  (flights||[]).forEach(f=>{
+    if(f===vol || f.num===vol.num && f.date===vol.date && f.dep===vol.dep) return;
+    if(f.date!==vol.date) return;
+    if(f.status!=="Planifie" && f.status!=="En vol") return;
+    const q=plageVol(f); if(!q) return;
+    if(p.d>=q.a || q.d>=p.a) return;   // pas de recouvrement
+    [f.cm1,f.cm2,f.cc].filter(Boolean).forEach(n=>{
+      if(membres.includes(n)) pb.push({type:'overlap', label:`${n} déjà affecté au vol ${f.num} (${f.from}→${f.to}, ${f.dep}–${f.arr||'?'})`});
     });
   });
   return pb;
@@ -1494,7 +1566,7 @@ const INIT_FIN = [
 ];
 
 // ── Forms ────────────────────────────────────────────────────────────────────
-function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
+function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights }) {
   const today=new Date().toISOString().slice(0,10);
   const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
 
@@ -1522,24 +1594,32 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
   const load=Math.round(pn/SIEGES*100);
 
   const submit=()=>{
-    if(!num.trim()||!dep){alert("N° vol et départ requis");return;}
+    if(!num.trim()||!dep){uiAlert("N° vol et départ requis");return;}
+    // Contrôles de cohérence de saisie
+    const paxSaisi=Number(pax)||0;
+    if(paxSaisi>SIEGES){ uiAlert("⚠️ "+paxSaisi+" passagers pour un appareil de "+SIEGES+" sièges.\n\nCorrigez le nombre de passagers."); return; }
+    if(paxSaisi<0){ uiAlert("⚠️ Le nombre de passagers ne peut pas être négatif."); return; }
+    const o=String(from_||"").trim().toUpperCase(), d2=String(to||"").trim().toUpperCase();
+    if(o && d2 && o===d2){ uiAlert("⚠️ L'aérodrome de départ et d'arrivée sont identiques ("+o+")."); return; }
     // Le client est obligatoire pour un vol commercial ; ferry et positionnement en sont dispensés.
     if(flightType==="Commercial" && !clientId){
-      alert("⚠️ Un client est requis pour un vol commercial.\n\nSélectionnez un client, ou choisissez le type FRY (ferry) ou POS (positionnement).");
+      uiAlert("⚠️ Un client est requis pour un vol commercial.\n\nSélectionnez un client, ou choisissez le type FRY (ferry) ou POS (positionnement).");
       return;
     }
     const todayStr=new Date().toISOString().slice(0,10);
-    if(date<todayStr){alert("⚠️ La date du vol ne peut pas être dans le passé.");return;}
+    if(date<todayStr){uiAlert("⚠️ La date du vol ne peut pas être dans le passé.");return;}
     // MEL et titres équipage sont contrôlés À LA DATE DU VOL, pas à la date du
     // jour : un titre qui expire entre aujourd'hui et le vol bloque dès maintenant.
-    const pb=volCompromis({date,acId,cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim()}, crew, aircraft);
+    const projet={date,acId,dep,arr,cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim()};
+    const pb=[...volCompromis(projet, crew, aircraft), ...chevauchements(projet, flights)];
     if(pb.length){
-      const mel=pb.filter(p=>p.type==='mel'), eq=pb.filter(p=>p.type==='crew');
+      const mel=pb.filter(p=>p.type==='mel'), eq=pb.filter(p=>p.type==='crew'), ov=pb.filter(p=>p.type==='overlap');
       let msg="⛔ Planification impossible pour le "+date.split('-').reverse().join('/')+" :\n";
       if(mel.length) msg+="\nAppareil :\n"+mel.map(p=>"• "+p.label).join("\n")+"\n";
       if(eq.length)  msg+="\nÉquipage :\n"+eq.map(p=>"• "+p.label).join("\n")+"\n";
+      if(ov.length)  msg+="\nChevauchement :\n"+ov.map(p=>"• "+p.label).join("\n")+"\n";
       msg+="\nRésolvez ces points, choisissez une autre date, ou désignez un autre membre.";
-      alert(msg); return;
+      uiAlert(msg); return;
     }
     // Pre-calculate planned duration
     let planDuree=0;
@@ -1567,7 +1647,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
               <button key={t.v} onClick={()=>setFlightType(t.v)}
                 style={{flex:1,height:40,borderRadius:10,border:"2px solid "+(flightType===t.v?t.c:"#CBD5E1"),
                   background:flightType===t.v?t.c:"white",color:flightType===t.v?"white":C.slate,
-                  fontWeight:700,fontSize:12,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  fontWeight:700,fontSize:12,...TAP}}>
                 {t.code}
               </button>
             ))}
@@ -1622,7 +1702,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack }) {
         </div>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onBack}
-            style={{flex:1,height:52,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            style={{flex:1,height:52,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,...TAP}}>
             ← Retour
           </button>
           <div style={{flex:2}}><FSubmit label="Planifier le vol" onClick={submit} saved={saved}/></div>
@@ -1648,7 +1728,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   const ficheRef = useRef(null);               // pour remonter à la fiche en modification
 
   const addOrUpdate = () => {
-    if (!nom.trim()||!prenom.trim()) { alert("Nom et prenom requis"); return; }
+    if (!nom.trim()||!prenom.trim()) { uiAlert("Nom et prenom requis"); return; }
     if (editing !== null) {
       setCrew(c => c.map(m => m.id===editing
         ? {...m,nom:nom.trim(),prenom:prenom.trim(),role,licence:licence.trim(),dates:{...dates}}
@@ -1745,12 +1825,12 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
           <div style={{display:"flex",gap:10}}>
             {editing!==null && (
               <button onClick={cancel}
-                style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,...TAP}}>
                 Annuler
               </button>
             )}
             <button onClick={addOrUpdate}
-              style={{flex:2,height:48,background:saved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.3s"}}>
+              style={{flex:2,height:48,background:saved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,...TAP,transition:"background 0.3s"}}>
               {saved?"✅ Enregistré":editing!==null?"Enregistrer modifications":"+ Ajouter"}
             </button>
           </div>
@@ -1808,11 +1888,11 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
                   </div>
                   <div style={{display:"flex",gap:6}}>
                     <button onClick={()=>startEdit(m)}
-                      style={{background:C.bg,border:"1px solid "+C.border,borderRadius:7,padding:"5px 10px",fontSize:11,color:C.slate,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                      style={{background:C.bg,border:"1px solid "+C.border,borderRadius:7,padding:"5px 10px",fontSize:11,color:C.slate,...TAP}}>
                       ✏
                     </button>
                     <button onClick={()=>remove(m.id)}
-                      style={{background:"#FEE2E2",border:"1px solid #DC2626",borderRadius:7,padding:"5px 10px",fontSize:11,color:"#DC2626",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                      style={{background:"#FEE2E2",border:"1px solid #DC2626",borderRadius:7,padding:"5px 10px",fontSize:11,color:"#DC2626",...TAP}}>
                       ✕
                     </button>
                   </div>
@@ -1891,7 +1971,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   };
   const saveResolve=()=>{
     if(!rDate.trim()||!rTech.trim()||!rAction.trim()||!rOT.trim()){
-      alert("Tous les champs sont obligatoires");return;
+      uiAlert("Tous les champs sont obligatoires");return;
     }
     const ac=aircraft?.find(a=>a.id===acId)||aircraft?.[0];
     const mel=mels[resolveIdx];
@@ -1916,7 +1996,15 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   const sevBg=s=>s==="A"?"#FEE2E2":s==="B"?"#FEF3C7":"#F1F5F9";
   const isMelExpired=m=>{if(!m.exp)return false;const p=m.exp.split("/");if(p.length!==3)return false;const d=new Date(parseInt(p[2])<100?2000+parseInt(p[2]):parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));const t=new Date();t.setHours(0,0,0,0);return d<t;};
 
-  const submit=()=>{
+  const submit=async()=>{
+    // Compteurs : jamais négatifs, et le TTAF ne recule pas sans raison
+    const nums={"TTAF":ttaf,"Cycles":cycles,"Prochaine visite":nextH,"B-Check":bCheckH,"C-Check":cCheckH};
+    const neg=Object.entries(nums).filter(([,v])=>v!==""&&v!==undefined&&Number(v)<0).map(([k])=>k);
+    if(neg.length){ uiAlert("⚠️ Valeur négative refusée : "+neg.join(", ")+"."); return; }
+    const acCur=(aircraft||[]).find(a=>a.id===acId);
+    if(acCur && Number(ttaf)>0 && Number(ttaf)<Number(acCur.ttaf||0)){
+      if(!(await uiConfirm("⚠️ Le TTAF saisi ("+ttaf+" h) est inférieur au TTAF actuel de "+acCur.immat+" ("+acCur.ttaf+" h).\n\nConfirmer cette correction ?"))) return;
+    }
     const volsDone=Number(md.volsDone||0);
     const evt=Number(evtMoteur)||0;
     const fiabCalc=volsDone>0?Math.round(((volsDone-evt)/volsDone)*1000)/10:0;
@@ -1983,18 +2071,18 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
               </div>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>openEdit(m,i)}
-                  style={{width:36,height:36,background:"white",border:"1.5px solid "+C.border,borderRadius:8,fontSize:16,cursor:"pointer",color:C.slate,WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  style={{width:36,height:36,background:"white",border:"1.5px solid "+C.border,borderRadius:8,fontSize:16,cursor:"pointer",color:C.slate,...NOTAP,display:"flex",alignItems:"center",justifyContent:"center"}}>
                   ✏
                 </button>
                 <button onClick={()=>openResolve(m,i)}
-                  style={{width:36,height:36,background:"#00936A",border:"none",borderRadius:8,fontSize:16,fontWeight:700,color:"white",cursor:"pointer",WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  style={{width:36,height:36,background:"#00936A",border:"none",borderRadius:8,fontSize:16,fontWeight:700,color:"white",...TAP,display:"flex",alignItems:"center",justifyContent:"center"}}>
                   ✓
                 </button>
               </div>
             </div>
           ))}
           <button onClick={openAdd}
-            style={{height:42,background:"white",border:"1.5px dashed #00936A",borderRadius:10,color:"#00936A",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            style={{height:42,background:"white",border:"1.5px dashed #00936A",borderRadius:10,color:"#00936A",fontSize:13,fontWeight:700,...TAP}}>
             + Ajouter un MEL
           </button>
         </div>
@@ -2079,11 +2167,11 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
             </div>
             <div style={{display:"flex",gap:10,marginTop:16}}>
               <button onClick={()=>setShowMelForm(false)}
-                style={{flex:1,height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                style={{flex:1,height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,...TAP}}>
                 Annuler
               </button>
               <button onClick={saveMel}
-                style={{flex:2,height:46,background:"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                style={{flex:2,height:46,background:"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,...TAP}}>
                 Enregistrer
               </button>
             </div>
@@ -2142,7 +2230,7 @@ function FormSafety({ onSubmit, flights, saved }) {
   const Check=({label,value,onChange,color="#DC2626"})=>(
     <div onClick={()=>onChange(!value)}
       style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:value?color+"15":"white",
-        border:"1.5px solid "+(value?color:C.border),borderRadius:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+        border:"1.5px solid "+(value?color:C.border),borderRadius:10,...TAP}}>
       <div style={{width:22,height:22,borderRadius:6,border:"2px solid "+(value?color:C.border),
         background:value?color:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
         {value&&<span style={{color:"white",fontSize:14,fontWeight:800}}>✓</span>}
@@ -2200,7 +2288,7 @@ function FormFin({ onSubmit, saved }) {
   const marge=revN>0?Math.round((1-coutN/revN)*100):null;
 
   const submit=()=>{
-    if(!rev||!cout){alert("Revenus et couts requis");return;}
+    if(!rev||!cout){uiAlert("Revenus et couts requis");return;}
     onSubmit({mois,revenus:revN,couts:coutN,coutCarbu:Number(cCarbu)||0,
       revenuVol:revN>0?Math.round(revN/35):0,billetMoyen:revN>0?Math.round(revN/(35*18)):0,marge:marge||0});
   };
@@ -2298,7 +2386,9 @@ function FormClients({ clients, setClients, flights, canEdit }) {
   const openNew=()=>{setNom("");setType("Corporate");setPays("Maroc");setVille("");setContact("");setTel("");setEmail("");setContrat("");setNotes("");setEditId(null);setShowForm(true);};
   const openEdit=(c)=>{setNom(c.nom);setType(c.type);setPays(c.pays);setVille(c.ville);setContact(c.contact);setTel(c.tel);setEmail(c.email);setContrat(c.contrat);setNotes(c.notes||"");setEditId(c.id);setShowForm(true);};
   const save=()=>{
-    if(!nom.trim()){alert("Nom requis");return;}
+    if(!nom.trim()){uiAlert("Nom requis");return;}
+    const em=String(email||"").trim();
+    if(em && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)){ uiAlert("⚠️ Adresse courriel invalide : « "+em+" »."); return; }
     if(editId){
       setClients(clients.map(c=>c.id===editId?{...c,nom,type,pays,ville,contact,tel,email,contrat,notes}:c));
     } else {
@@ -2306,7 +2396,13 @@ function FormClients({ clients, setClients, flights, canEdit }) {
     }
     setShowForm(false);setSelected(null);
   };
-  const del=(id)=>{if(window.confirm("Supprimer ce client ?")) setClients(clients.filter(c=>c.id!==id));};
+  const del=async(id)=>{
+    const nb=(flights||[]).filter(f=>f.clientId===id).length;
+    const msg = nb
+      ? "Ce client est rattaché à "+nb+" vol"+(nb>1?"s":"")+". Ces vols resteront enregistrés mais perdront la mention du client.\n\nSupprimer quand même ?"
+      : "Supprimer ce client ?";
+    if(await uiConfirm(msg)) setClients(clients.filter(c=>c.id!==id));
+  };
 
   if(showForm) return (
     <Card accent="#0891B2">
@@ -2338,7 +2434,7 @@ function FormClients({ clients, setClients, flights, canEdit }) {
     return <ClientDetail c={c} flights={flights} canEdit={canEdit}
       onBack={()=>setSelected(null)}
       onEdit={()=>openEdit(c)}
-      onDel={()=>{del(c.id);setSelected(null);}}/>;
+      onDel={async()=>{ await del(c.id); setSelected(null); }}/>;
   }
 
   return (
@@ -2482,7 +2578,7 @@ function ndsMaxSeqInArchive(base, stamp){
       const m = re.exec(String(r.ref||'').trim());
       if(m){ const n=parseInt(m[1],10); if(n>max) max=n; }
     });
-  }catch(_e){}
+  }catch(_e){ logSilent(_e); }
   return max;
 }
 // base vaut 'NS-OPS', 'NS-TEC'… pour les notes, 'RE' pour un rapport
@@ -2573,7 +2669,7 @@ function ndsLegacyArchive(){
     return Array.isArray(a) ? a : [];
   }catch(_e){ return []; }
 }
-function ndsClearLegacy(){ try{ localStorage.removeItem(NDS_ARCHIVE_KEY); }catch(_e){} }
+function ndsClearLegacy(){ try{ localStorage.removeItem(NDS_ARCHIVE_KEY); }catch(_e){ logSilent(_e); } }
 
 function ndsExportPDF(state, opts={}){
   // Build tag embedded in PDF metadata (Fichier > Propriétés côté lecteur PDF) —
@@ -2933,6 +3029,25 @@ function NdsEditable({ html, field, live, onCommit, style, tag }){
   });
 }
 
+// Fiche d'un document archivé : référence, objet, catégorie, date et actions.
+// Extraite de FormNDS ; l'export PDF se fait ici, sans passer par le parent.
+function ArchiveCard({ r, onOpen, onDelete }){
+  const pdf=()=>{ try{ ndsExportPDF({...r,closing:r.closingText||r.closing||''}); }catch(e){ uiAlert("Erreur PDF : "+e.message); } };
+  const b={height:36,background:"white",border:"1.5px solid "+C.border,borderRadius:8,color:C.navy,fontSize:11.5,fontWeight:600,cursor:"pointer"};
+  return (
+          <div style={{background:"white",border:"1.5px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:10}}>
+            <div style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#DC2626",marginBottom:5}}>{r.ref}</div>
+            <div style={{fontSize:13,fontWeight:500,color:C.text,lineHeight:1.4}}>{r.objet||'(sans objet)'}</div>
+            <div style={{fontSize:11,color:C.slate,marginTop:5,marginBottom:10}}>{r.category} · {r.date}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+              <button onClick={()=>onOpen(r)} style={b}>Ouvrir</button>
+              <button onClick={pdf} style={b}>PDF</button>
+              <button onClick={()=>onDelete(r.id)} style={{...b,border:"1.5px solid #FCA5A5",color:"#DC2626"}}>Supprimer</button>
+            </div>
+          </div>
+  );
+}
+
 function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive }){
   const [tab,setTab]=useState("editor");           // editor | archive
   const [cat,setCat]=useState(NDS_CATEGORIES[2]);
@@ -3052,8 +3167,8 @@ function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive })
     setArchive(arch);
   };
 
-  const deleteFromArchive=(id)=>{
-    if(!window.confirm('Supprimer cette note des archives ?')) return;
+  const deleteFromArchive=async(id)=>{
+    if(!(await uiConfirm('Supprimer cette note des archives ?'))) return;
     setArchive(prev=>(prev||[]).filter(r=>r.id!==id));
   };
 
@@ -3306,7 +3421,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
         body:JSON.stringify({...body,stream:true})
       });
       if(!r.ok){
-        let d={}; try{ d=await r.json(); }catch(_e){}
+        let d={}; try{ d=await r.json(); }catch(_e){ logSilent(_e); }
         const e=new Error((d.error&&d.error.message)||d.error||'Erreur API');
         e.fatal=true; throw e;   // erreur de l'API : le repli échouerait pareil
       }
@@ -3393,13 +3508,13 @@ Diffusion prévue : ${to||'Non précisée'}`;
       <button onClick={()=>setTab("editor")}
         style={{flex:1,height:38,borderRadius:9,border:"1.5px solid "+(tab==="editor"?C.navy:C.border),
           background:tab==="editor"?C.navy:"white",color:tab==="editor"?"white":C.slate,
-          fontSize:12,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+          fontSize:12,fontWeight:700,...TAP}}>
         Rédaction
       </button>
       <button onClick={()=>setTab("archive")}
         style={{flex:1,height:38,borderRadius:9,border:"1.5px solid "+(tab==="archive"?C.navy:C.border),
           background:tab==="archive"?C.navy:"white",color:tab==="archive"?"white":C.slate,
-          fontSize:12,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+          fontSize:12,fontWeight:700,...TAP}}>
         Archives ({archive.length})
       </button>
     </div>
@@ -3439,19 +3554,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
           </div>
         )}
         {filtered.map(r=>(
-          <div key={r.id} style={{background:"white",border:"1.5px solid "+C.border,borderRadius:12,padding:"14px 16px",marginBottom:10}}>
-            <div style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#DC2626",marginBottom:5}}>{r.ref}</div>
-            <div style={{fontSize:13,fontWeight:500,color:C.text,lineHeight:1.4}}>{r.objet||'(sans objet)'}</div>
-            <div style={{fontSize:11,color:C.slate,marginTop:5,marginBottom:10}}>{r.category} · {r.date}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-              <button onClick={()=>openFromArchive(r)}
-                style={{height:36,background:"white",border:"1.5px solid "+C.border,borderRadius:8,color:C.navy,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Ouvrir</button>
-              <button onClick={()=>{try{ndsExportPDF({...r,closing:r.closingText||r.closing||''});}catch(e){alert("Erreur PDF : "+e.message);}}}
-                style={{height:36,background:"white",border:"1.5px solid "+C.border,borderRadius:8,color:C.navy,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF</button>
-              <button onClick={()=>deleteFromArchive(r.id)}
-                style={{height:36,background:"white",border:"1.5px solid #FCA5A5",borderRadius:8,color:"#DC2626",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Supprimer</button>
-            </div>
-          </div>
+          <ArchiveCard key={r.id} r={r} onOpen={openFromArchive} onDelete={deleteFromArchive}/>
         ))}
         <button onClick={onBack}
           style={{width:"100%",height:46,marginTop:6,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,cursor:"pointer"}}>← Retour</button>
@@ -3469,7 +3572,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
         <button onClick={()=>{live.current={};setNote(null);}} style={{background:C.bg,border:"1.5px solid "+C.border,borderRadius:8,padding:"7px 12px",cursor:"pointer",color:C.slate,fontSize:11.5,fontWeight:600}}>← Modifier</button>
         <button onClick={saveToArchive} style={{background:"white",border:"1.5px solid "+C.navy,borderRadius:8,padding:"7px 12px",cursor:"pointer",color:C.navy,fontSize:11.5,fontWeight:700}}>💾 Archiver</button>
-        <button onClick={()=>{try{const c=syncNote(note);setNote(c);ndsExportPDF(c);}catch(e){alert("Erreur PDF : "+e.message);}}}
+        <button onClick={()=>{try{const c=syncNote(note);setNote(c);ndsExportPDF(c);}catch(e){uiAlert("Erreur PDF : "+e.message);}}}
           style={{marginLeft:"auto",background:C.navy,border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",color:"white",fontSize:11.5,fontWeight:700}}>📄 PDF</button>
       </div>
       <div style={{fontSize:10.5,color:C.slate,marginBottom:8,fontStyle:"italic"}}>✏️ Touchez un texte pour le modifier directement.</div>
@@ -3600,7 +3703,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
                     border:"1.5px solid "+(asPeriode===o.v?C.navy:C.border),
                     background:asPeriode===o.v?C.navy:"white",
                     color:asPeriode===o.v?"white":C.slate,
-                    WebkitTapHighlightColor:"transparent"}}>
+                    ...NOTAP}}>
                   {o.l}
                 </button>
               ))}
@@ -3623,7 +3726,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
                 style={{padding:"10px 8px",borderRadius:10,cursor:"pointer",textAlign:"left",
                   border:"1.5px solid "+(cat&&cat.id===c.id?c.color:C.border),
                   background:cat&&cat.id===c.id?c.color+"15":"white",
-                  WebkitTapHighlightColor:"transparent"}}>
+                  ...NOTAP}}>
                 <div style={{fontWeight:700,fontSize:11,color:cat&&cat.id===c.id?c.color:C.navy}}>{c.label}</div>
                 <div style={{fontSize:9,color:C.slate,marginTop:2}}>{c.hint}</div>
               </button>
@@ -3663,7 +3766,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
             const on=diffusion.includes(opt);
             return (
               <div key={opt} onClick={()=>toggleDiff(opt)}
-                style={{display:"flex",alignItems:"center",gap:10,padding:"7px 2px",cursor:"pointer",fontSize:12.5,WebkitTapHighlightColor:"transparent"}}>
+                style={{display:"flex",alignItems:"center",gap:10,padding:"7px 2px",cursor:"pointer",fontSize:12.5,...NOTAP}}>
                 <div style={{width:18,height:18,flexShrink:0,borderRadius:4,border:"1.5px solid "+(on?C.navy:"#CBD5E1"),background:on?C.navy:"white",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:11,fontWeight:800}}>{on?"✓":""}</div>
                 <span style={{color:on?C.text:C.slate}}>{opt}</span>
               </div>
@@ -3714,7 +3817,7 @@ function FormDocStore({ storeKey, label }) {
 
   React.useEffect(() => {
     (async () => {
-      try { const list = await sbGet(PFX + storeKey + "_index") || []; setDocs(list); } catch(_e) {}
+      try { const list = await sbGet(PFX + storeKey + "_index") || []; setDocs(list); } catch(_e){ logSilent(_e); }
       setLoading(false);
     })();
   }, [storeKey]);
@@ -3723,8 +3826,8 @@ function FormDocStore({ storeKey, label }) {
 
   const handleAdd = async (e) => {
     const file = e.target.files?.[0]; if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".pdf")) { alert("Seuls les fichiers PDF sont acceptés."); return; }
-    const name = prompt("Nom du document :", file.name.replace(".pdf","")) || file.name;
+    if (!file.name.toLowerCase().endsWith(".pdf")) { uiAlert("Seuls les fichiers PDF sont acceptés."); return; }
+    const name = (await uiPrompt("Nom du document :", file.name.replace(".pdf",""))) || file.name;
     setMsg("📤 Import en cours...");
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -3742,8 +3845,8 @@ function FormDocStore({ storeKey, label }) {
 
   const handleUpdate = async (doc, e) => {
     const file = e.target.files?.[0]; if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".pdf")) { alert("Seuls les fichiers PDF sont acceptés."); return; }
-    if (!window.confirm("⚠️ Ceci remplacera la version du " + doc.date + " de « " + doc.name + " ». Confirmer ?")) { e.target.value=""; return; }
+    if (!file.name.toLowerCase().endsWith(".pdf")) { uiAlert("Seuls les fichiers PDF sont acceptés."); return; }
+    if (!(await uiConfirm("⚠️ Ceci remplacera la version du " + doc.date + " de « " + doc.name + " ». Confirmer ?"))) { e.target.value=""; return; }
     setMsg("📤 Mise à jour en cours...");
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -3758,7 +3861,7 @@ function FormDocStore({ storeKey, label }) {
   };
 
   const handleDelete = async (doc) => {
-    if (!window.confirm("⚠️ Supprimer « " + doc.name + " » ? Cette action est irréversible.")) return;
+    if (!(await uiConfirm("⚠️ Supprimer « " + doc.name + " » ? Cette action est irréversible."))) return;
     setMsg("🗑 Suppression...");
     await sbSet(PFX_DOCS + doc.id, null);
     const newDocs = docs.filter(d => d.id !== doc.id);
@@ -3846,17 +3949,17 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   },[sel]);
 
   const save=()=>{
-    if(!immat.trim()||!type.trim()){alert("Immatriculation et type requis");return;}
+    if(!immat.trim()||!type.trim()){uiAlert("Immatriculation et type requis");return;}
     const icaoTrim=immat.trim().toUpperCase();
     if(sel==="new"){
       const duplicate=aircraft.find(a=>a.immat.toUpperCase()===icaoTrim);
-      if(duplicate){alert("⛔ L'immatriculation "+icaoTrim+" existe déjà. Choisissez un autre identifiant.");return;}
+      if(duplicate){uiAlert("⛔ L'immatriculation "+icaoTrim+" existe déjà. Choisissez un autre identifiant.");return;}
       const newAc={id:"AC"+Date.now(),immat:icaoTrim,type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim,ttaf:0,cycles:0,nextCheckH:null,bCheckH:null,cCheckH:null,evtMoteur:0,fiabMoteurs:100,mels:[]};
       onUpdate([...aircraft,newAc]);
       setMsg("Avion ajouté ✅");
     } else {
       const duplicate=aircraft.find(a=>a.immat.toUpperCase()===icaoTrim&&a.id!==sel);
-      if(duplicate){alert("⛔ L'immatriculation "+icaoTrim+" est déjà utilisée par un autre avion.");return;}
+      if(duplicate){uiAlert("⛔ L'immatriculation "+icaoTrim+" est déjà utilisée par un autre avion.");return;}
       onUpdate(aircraft.map(a=>a.id===sel?{...a,immat:icaoTrim,type:type.trim(),sieges:Number(sieges)||18,capa:Number(capa)||5700,icao24:icaoTrim}:a));
       setMsg("Avion mis à jour ✅");
     }
@@ -3864,9 +3967,9 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
     setLocalSaved(true);
   };
 
-  const del=()=>{
-    if(aircraft.length<=1){alert("Impossible de supprimer le seul avion");return;}
-    if(window.confirm("Supprimer "+immat+" ?")){
+  const del=async()=>{
+    if(aircraft.length<=1){uiAlert("Impossible de supprimer le seul avion");return;}
+    if(await uiConfirm("⚠️ Supprimer "+immat+" ?")){
       onUpdate(aircraft.filter(a=>a.id!==sel));
       setSel(aircraft.find(a=>a.id!==sel)?.id||"new");
     }
@@ -3920,6 +4023,35 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
+// Barre des cinq actions (Export, Restore, Effacer, Manuel, Exit), même gabarit.
+// Extraite de ScreenForms ; les trois premières sont réservées à l'Administrateur.
+function ActionBar({ isAdmin, doExport, onRestore, onReset, onLogout }){
+          // Cinq boutons de même gabarit : icône centrée au-dessus, libellé centré dessous.
+          const base={flex:1,minWidth:0,height:54,borderRadius:10,cursor:"pointer",
+            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,
+            fontSize:9.5,fontWeight:700,textDecoration:"none",boxSizing:"border-box",
+            ...NOTAP,padding:0};
+          const ico={fontSize:17,lineHeight:1};
+          const actions=[
+            isAdmin&&{k:"exp", icon:"📥", label:"Export",  bg:"#D1FAE5", bd:"#059669", fg:"#065F46", on:doExport},
+            isAdmin&&{k:"res", icon:"☁️", label:"Restore", bg:"#DBEAFE", bd:"#0369A1", fg:"#0369A1", on:onRestore},
+            isAdmin&&{k:"rst", icon:"🗑", label:"Effacer", bg:"#FEE2E2", bd:"#DC2626", fg:"#DC2626", on:onReset},
+            {k:"man", icon:"📖", label:"Manuel", bg:"#EFF6FF", bd:"#0369A1", fg:"#0369A1", href:"Manuel_Utilisateur_Afrijet_v3.pdf"},
+            {k:"out", icon:"🔒", label:"Exit",   bg:"#F1F5F9", bd:"#64748B", fg:"#64748B", on:onLogout},
+          ].filter(Boolean);
+          return (
+            <div style={{display:"flex",gap:8,marginTop:10}}>
+              {actions.map(a=>{
+                const style={...base,background:a.bg,border:"1.5px solid "+a.bd,color:a.fg};
+                const inner=<><span style={ico}>{a.icon}</span><span>{a.label}</span></>;
+                return a.href
+                  ? <a key={a.k} href={a.href} target="_blank" rel="noopener" style={style}>{inner}</a>
+                  : <button key={a.k} onClick={a.on} style={style}>{inner}</button>;
+              })}
+            </div>
+          );
+}
+
 function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
   const isAdmin = profileId === "rdoa";
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="comm"?"clients":null;
@@ -3951,7 +4083,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
     try{
       await sbSet(PFX+"lastBackupData", data);
       setLastBackup(data.exportDate);
-    }catch(_e){}
+    }catch(_e){ logSilent(_e); }
     setProgress(p=>({...p,currentStep:2,pct:75}));
     await sleep(300);
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
@@ -4008,32 +4140,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
             <div style={{fontSize:11,color:C.slate}}>Saisie par departement</div>
           </div>
         </div>
-        {(()=>{
-          // Cinq boutons de même gabarit : icône centrée au-dessus, libellé centré dessous.
-          const base={flex:1,minWidth:0,height:54,borderRadius:10,cursor:"pointer",
-            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,
-            fontSize:9.5,fontWeight:700,textDecoration:"none",boxSizing:"border-box",
-            WebkitTapHighlightColor:"transparent",padding:0};
-          const ico={fontSize:17,lineHeight:1};
-          const actions=[
-            isAdmin&&{k:"exp", icon:"📥", label:"Export",  bg:"#D1FAE5", bd:"#059669", fg:"#065F46", on:doExport},
-            isAdmin&&{k:"res", icon:"☁️", label:"Restore", bg:"#DBEAFE", bd:"#0369A1", fg:"#0369A1", on:onRestore},
-            isAdmin&&{k:"rst", icon:"🗑", label:"Effacer", bg:"#FEE2E2", bd:"#DC2626", fg:"#DC2626", on:onReset},
-            {k:"man", icon:"📖", label:"Manuel", bg:"#EFF6FF", bd:"#0369A1", fg:"#0369A1", href:"Manuel_Utilisateur_Afrijet_v3.pdf"},
-            {k:"out", icon:"🔒", label:"Exit",   bg:"#F1F5F9", bd:"#64748B", fg:"#64748B", on:onLogout},
-          ].filter(Boolean);
-          return (
-            <div style={{display:"flex",gap:8,marginTop:10}}>
-              {actions.map(a=>{
-                const style={...base,background:a.bg,border:"1.5px solid "+a.bd,color:a.fg};
-                const inner=<><span style={ico}>{a.icon}</span><span>{a.label}</span></>;
-                return a.href
-                  ? <a key={a.k} href={a.href} target="_blank" rel="noopener" style={style}>{inner}</a>
-                  : <button key={a.k} onClick={a.on} style={style}>{inner}</button>;
-              })}
-            </div>
-          );
-        })()}
+        <ActionBar isAdmin={isAdmin} doExport={doExport} onRestore={onRestore} onReset={onReset} onLogout={onLogout}/>
       </Card>
       {saved&&(
         <div style={{padding:"12px 16px",borderRadius:10,fontSize:13,fontWeight:700,textAlign:"center",background:"#D1FAE5",color:"#00936A",border:"1px solid #00936A"}}>
@@ -4075,7 +4182,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
             if(fm.id==="rapport"){ if(onReport) onReport(); return; }
             setActive(fm.id);
           }}
-            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",
+            style={{padding:"8px 4px",borderRadius:10,border:"1.5px solid",fontSize:9,fontWeight:700,...TAP,
               borderColor:effectiveActive===fm.id?fm.color:C.border,
               background:effectiveActive===fm.id?fm.color+"15":"white",
               color:effectiveActive===fm.id?fm.color:C.slate}}>
@@ -4093,13 +4200,13 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
                 <div style={{color:"#A0720A",fontSize:10}}>Afrijet Sahara</div>
               </div>
               <button onClick={()=>setActive("vol")}
-                style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"8px 16px",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"8px 16px",color:"white",fontSize:13,fontWeight:700,...TAP}}>
                 Fermer
               </button>
             </div>
               <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0}}>
                 <button onClick={()=>{
-                  if(!window.jspdf){alert("jsPDF non charge. Verifiez votre connexion.");return;}
+                  if(!window.jspdf){uiAlert("jsPDF non charge. Verifiez votre connexion.");return;}
                   try {
                     const {jsPDF} = window.jspdf;
                     const doc = new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
@@ -4263,9 +4370,9 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
                     doc.setTextColor(...GOLD);doc.setFont("helvetica","bold");doc.setFontSize(7);
                     doc.text("Formulaire confidentiel",W-M,PH-5,{align:"right"});
                     doc.save("Satisfaction_Passager_Afrijet.pdf");
-                  } catch(e){alert("Erreur: "+e.message);}
+                  } catch(e){uiAlert("Erreur: "+e.message);}
                 }}
-                style={{width:"100%",padding:"12px",background:"#7C3AED",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                style={{width:"100%",padding:"12px",background:"#7C3AED",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,...TAP}}>
                   📥 Télécharger le formulaire PDF
                 </button>
             <div style={{flex:1,overflowY:"auto",background:"white",padding:"16px"}}>
@@ -4316,7 +4423,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
           </div>
         )}
       </div>
-      {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)}/>}
+      {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)} flights={flights}/>}
       {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
       {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} saved={saved}/>}
@@ -4374,16 +4481,64 @@ function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading,
   );
 }
 
-function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, clients, crew }) {
+// Couleurs et pictogramme d'un statut de vol — fonctions pures de la palette.
+const sBg=s=>s==="Termine"?C.emeraldL:s==="En vol"?C.goldL:s==="Annule"?C.dangerL:C.bg;
+const sTx=s=>s==="Termine"?C.emeraldD:s==="En vol"?C.gold:s==="Annule"?C.danger:C.slate;
+const sIc=s=>s==="Termine"?"✓":s==="En vol"?"✈":s==="Annule"?"✗":"○";
+
+// Ligne d'un vol dans la liste Ops. Extraite de ScreenOps : reçoit le vol et
+// ce qu'il faut pour afficher ses badges, rien de l'état interne du parent.
+function FlightRow({ f, isLast, canEdit, onOpen, secEvts, compromis, clients }){
+  const hasSecu=secEvts.length>0;
+  return (
+          <div onClick={()=>{if(canEdit!==false) onOpen(f);}}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:!isLast?"1px solid "+C.border:"none",cursor:canEdit!==false?"pointer":"default",...NOTAP}}>
+            <div style={{width:34,height:34,borderRadius:9,background:sBg(f.status),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontWeight:800,fontSize:14,color:sTx(f.status)}}>{sIc(f.status)}</span>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13,color:C.text,display:"flex",alignItems:"center",gap:6}}>
+                {f.num} · {f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--"} · {f.from}→{f.to}
+                {(()=>{const t=f.flightType||"Commercial";const c=t==="Ferry"?"#0369A1":t==="Positioning"?"#D97706":"#00936A";const code=t==="Ferry"?"FRY":t==="Positioning"?"POS":"COM";return <span style={{background:c,color:"white",borderRadius:6,padding:"1px 5px",fontSize:9,fontWeight:800,flexShrink:0}}>{code}</span>;})()}
+                {hasSecu&&<span style={{background:"#FEE2E2",color:"#DC2626",borderRadius:6,padding:"1px 5px",fontSize:9,fontWeight:800}}>🛡 {secEvts.length}</span>}
+                {compromis.length>0&&<span title={compromis.map(p=>p.label).join(" · ")} style={{background:"#DC2626",color:"white",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800,flexShrink:0}}>⛔ COMPROMIS</span>}
+              </div>
+              {compromis.length>0&&(
+                <div style={{fontSize:10,color:"#DC2626",marginTop:2,lineHeight:1.35}}>
+                  {compromis.map((p,k)=><div key={k}>• {p.label}</div>)}
+                </div>
+              )}
+              <div style={{fontSize:11,color:C.textSub}}>
+                {f.dep} - {f.arr} · {f.pax} pax · {f.load}%
+                {(()=>{if(f.dureeMin>0)return<span style={{color:C.emerald,fontWeight:700}}> · {Math.floor(f.dureeMin/60)}h{String(f.dureeMin%60).padStart(2,"0")}</span>;return null;})()}
+              </div>
+              {(f.cm1||f.cm2||f.cc||f.clientId)&&<div style={{fontSize:10,color:C.slateL,marginTop:1,fontStyle:"italic"}}>
+                {[f.cm1,f.cm2,f.cc].filter(Boolean).join(" · ")}
+                {f.clientId&&clients&&(()=>{const c=clients.find(x=>x.id===f.clientId);return c?<span style={{color:"#0891B2",fontWeight:600}}> · 🏢 {c.nom}</span>:null;})()}
+              </div>}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+              <span style={{fontSize:10,fontWeight:700,color:sTx(f.status),background:sBg(f.status),padding:"2px 8px",borderRadius:8}}>{f.status}</span>
+              {f.status==="Termine"&&(
+                <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:8,
+                  background:f.delayMin<=0?"#D1FAE5":f.delayMin<=15?"#D1FAE5":f.delayMin<=30?"#FEF3C7":"#FEE2E2",
+                  color:f.delayMin<=0?"#065F46":f.delayMin<=15?"#065F46":f.delayMin<=30?"#92400E":"#991B1B"}}>
+                  {f.delayMin<=0?"Ponctuel":"+"+f.delayMin+" min"}
+                </span>
+              )}
+              <span style={{fontSize:10,color:C.slateL}}>✏</span>
+            </div>
+          </div>
+  );
+}
+
+function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, clients, crew, onDeleteFlight, isAdmin }) {
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
   const [opsSaved,setOpsSaved]=useState(false);
   const [search,setSearch]=useState("");
   const [filterStatus,setFilterStatus]=useState("Tous");
   const [filterPeriodOps,setFilterPeriodOps]=useState("Tout");
-  const sBg=s=>s==="Termine"?C.emeraldL:s==="En vol"?C.goldL:s==="Annule"?C.dangerL:C.bg;
-  const sTx=s=>s==="Termine"?C.emeraldD:s==="En vol"?C.gold:s==="Annule"?C.danger:C.slate;
-  const sIc=s=>s==="Termine"?"✓":s==="En vol"?"✈":s==="Annule"?"✗":"○";
   const getSecEvents=(num,date)=>(safetyData||[]).filter(e=>e.num===num&&(!date||e.date===date));
 
   // Period cutoff for Ops filter
@@ -4448,15 +4603,15 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
     const orig = origStatus;
     const next = edit.status;
     if(orig==="Planifie" && next!=="En vol" && next!=="Annule"){
-      alert("Transition invalide : un vol planifié ne peut passer qu'à « En vol » ou « Annulé ».");
+      uiAlert("Transition invalide : un vol planifié ne peut passer qu'à « En vol » ou « Annulé ».");
       return;
     }
     if(orig==="En vol" && next!=="Termine"){
-      alert("Transition invalide : un vol en cours ne peut passer qu'à « Terminé ».");
+      uiAlert("Transition invalide : un vol en cours ne peut passer qu'à « Terminé ».");
       return;
     }
     if((orig==="Termine"||orig==="Annule") && next!==orig){
-      alert("Ce vol est dans un état final ("+orig+") et ne peut plus être modifié.");
+      uiAlert("Ce vol est dans un état final ("+orig+") et ne peut plus être modifié.");
       return;
     }
 
@@ -4474,7 +4629,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
           return expDate < today;
         });
         if(expired.length>0){
-          alert("⛔ Vol non autorisé — MEL expiré sur "+ac.immat+" :\n"+expired.map(m=>"• Cat."+m.sev+" — "+m.sys+" ("+m.mel+", exp. "+m.exp+")").join("\n")+"\n\nRésolvez ou étendez ce MEL avant de mettre l'avion En vol.");
+          uiAlert("⛔ Vol non autorisé — MEL expiré sur "+ac.immat+" :\n"+expired.map(m=>"• Cat."+m.sev+" — "+m.sys+" ("+m.mel+", exp. "+m.exp+")").join("\n")+"\n\nRésolvez ou étendez ce MEL avant de mettre l'avion En vol.");
           return;
         }
       }
@@ -4488,7 +4643,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
         if(echus.length) inaptes.push("• "+n+" : "+echus.map(e=>e.label).join(", "));
       });
       if(inaptes.length){
-        alert("⛔ Vol non autorisé — titre équipage échu :\n"+inaptes.join("\n")
+        uiAlert("⛔ Vol non autorisé — titre équipage échu :\n"+inaptes.join("\n")
           +"\n\nMettez à jour les échéances dans Formulaires → Équipage, ou modifiez l'équipage de ce vol avant de le mettre En vol.");
         return;
       }
@@ -4499,20 +4654,27 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
       const toMin=t=>{ if(!t||!t.includes(":"))return null; const[h,m]=t.split(":").map(Number); return h*60+m; };
       const diffOk=(a,b)=>{ const ma=toMin(a),mb=toMin(b); if(ma===null||mb===null)return true; let d=mb-ma; if(d<0)d+=1440; return d>0&&d<720; };
       const ob=edit.depReal, to=edit.takeOff, ld=edit.landing, onb=edit.arrReal;
-      if(ob&&to&&!diffOk(ob,to)){ alert("⚠️ Take Off Time doit être après Off Block Time."); return; }
-      if(to&&ld&&!diffOk(to,ld)){ alert("⚠️ Landing Time doit être après Take Off Time."); return; }
-      if(ld&&onb&&!diffOk(ld,onb)){ alert("⚠️ On Block Time doit être après Landing Time."); return; }
-      if(ob&&onb&&!diffOk(ob,onb)){ alert("⚠️ On Block Time doit être après Off Block Time."); return; }
+      if(ob&&to&&!diffOk(ob,to)){ uiAlert("⚠️ Take Off Time doit être après Off Block Time."); return; }
+      if(to&&ld&&!diffOk(to,ld)){ uiAlert("⚠️ Landing Time doit être après Take Off Time."); return; }
+      if(ld&&onb&&!diffOk(ld,onb)){ uiAlert("⚠️ On Block Time doit être après Landing Time."); return; }
+      if(ob&&onb&&!diffOk(ob,onb)){ uiAlert("⚠️ On Block Time doit être après Off Block Time."); return; }
     }
 
     // Vérification fuel arrivée > fuel départ
     if(edit.carbDep>0 && edit.carbArr>0 && edit.carbArr>edit.carbDep){
-      alert("⚠️ Fuel arrivée ("+edit.carbArr+" kg) ne peut pas être supérieur au fuel départ ("+edit.carbDep+" kg). Vérifiez vos valeurs.");
+      uiAlert("⚠️ Fuel arrivée ("+edit.carbArr+" kg) ne peut pas être supérieur au fuel départ ("+edit.carbDep+" kg). Vérifiez vos valeurs.");
       return;
     }
+    // Bornes par appareil : carburant et passagers
+    const acVol=(aircraft||[]).find(a=>a.id===edit.acId);
+    const capaVol=acVol&&acVol.capa>0?acVol.capa:null, siegesVol=acVol&&acVol.sieges>0?acVol.sieges:18;
+    if(capaVol && edit.carbDep>capaVol){ uiAlert("⚠️ Fuel départ ("+edit.carbDep+" kg) supérieur à la capacité de "+acVol.immat+" ("+capaVol+" kg)."); return; }
+    if(Number(edit.carbDep)<0||Number(edit.carbArr)<0){ uiAlert("⚠️ Une quantité de carburant ne peut pas être négative."); return; }
+    if(Number(edit.pax)>siegesVol){ uiAlert("⚠️ "+edit.pax+" passagers pour "+siegesVol+" sièges sur "+(acVol?acVol.immat:"cet appareil")+"."); return; }
 
     const c=calcEdit(edit);
-    onUpdateFlight({...edit,load:Math.round(edit.pax/18*100),...c});
+    // Taux de remplissage sur le nombre de sièges réel de l'appareil (CN-KTB : 8)
+    onUpdateFlight({...edit,load:Math.round((Number(edit.pax)||0)/siegesVol*100),...c});
 
     // Mise à jour automatique du TTAF et A/B/C-Check avec le Flight Time (Take Off → Landing)
     if(edit.status==="Termine" && c.flightMin>0 && edit.acId){
@@ -4564,7 +4726,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
                   :origStatus==="En vol"?["Termine"]
                   :[origStatus]).map(s=>(
                   <button key={s} onClick={()=>setEdit({...edit,status:s})}
-                    style={{width:140,padding:"9px 4px",borderRadius:9,border:"1.5px solid",fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",borderColor:edit.status===s?sTx(s):C.border,background:edit.status===s?sBg(s):"white",color:edit.status===s?sTx(s):C.slate}}>
+                    style={{width:140,padding:"9px 4px",borderRadius:9,border:"1.5px solid",fontSize:11,fontWeight:700,...TAP,borderColor:edit.status===s?sTx(s):C.border,background:edit.status===s?sBg(s):"white",color:edit.status===s?sTx(s):C.slate}}>
                     {sIc(s)} {s==="Termine"?"Vol terminé":s==="Annule"?"Vol annulé":s}
                   </button>
                 ))}
@@ -4683,9 +4845,19 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
               );
             })()}
             <div style={{display:"flex",gap:10,justifyContent:"flex-start"}}>
-              <button onClick={()=>setEdit(null)} style={{width:120,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Annuler</button>
-              <button onClick={doUpdate} style={{width:160,height:48,background:opsSaved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.3s"}}>{opsSaved?"✅ Enregistré":"Enregistrer"}</button>
+              <button onClick={()=>setEdit(null)} style={{width:120,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,...TAP}}>Annuler</button>
+              <button onClick={doUpdate} style={{width:160,height:48,background:opsSaved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,...TAP,transition:"background 0.3s"}}>{opsSaved?"✅ Enregistré":"Enregistrer"}</button>
             </div>
+            {isAdmin&&onDeleteFlight&&(
+              <button onClick={async()=>{
+                  const d=(edit.date||"").split("-").reverse().join("/");
+                  if(!(await uiConfirm("⛔ "+"Supprimer définitivement le vol "+edit.num+" du "+d+" ("+edit.from+"→"+edit.to+") ?\n\nCette action est irréversible. Utilisez « Annulé » pour conserver la trace d'un vol qui n'a pas eu lieu."))) return;
+                  onDeleteFlight(edit); setEdit(null);
+                }}
+                style={{marginTop:10,width:"100%",height:40,background:"white",border:"1.5px solid #DC2626",borderRadius:10,color:"#DC2626",fontSize:12,fontWeight:700,...TAP}}>
+                🗑 Supprimer ce vol — saisie erronée
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -4704,7 +4876,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
           <div style={{color:"white",fontWeight:800,fontSize:15}}>{enVol[0].num} — {enVol[0].from} vers {enVol[0].to}</div>
           <div style={{color:"#94A3B8",fontSize:11,marginTop:3}}>{enVol[0].dep} - {enVol[0].arr} · {enVol[0].pax} pax</div>
           <button onClick={()=>{setEdit({...enVol[0]});setOrigStatus(enVol[0].status);}}
-            style={{marginTop:10,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,padding:"8px 16px",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",display:canEdit===false?"none":"inline-block"}}>
+            style={{marginTop:10,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,padding:"8px 16px",color:"white",fontSize:12,fontWeight:700,...TAP,display:canEdit===false?"none":"inline-block"}}>
             Mettre a jour
           </button>
         </div>
@@ -4720,7 +4892,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {["Tous","Planifie","En vol","Termine","Annule"].map(s=>(
             <button key={s} onClick={()=>setFilterStatus(s)}
-              style={{padding:"4px 10px",borderRadius:8,border:"1.5px solid "+(filterStatus===s?C.navy:C.border),background:filterStatus===s?C.navy:"white",color:filterStatus===s?"white":C.slate,fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              style={{padding:"4px 10px",borderRadius:8,border:"1.5px solid "+(filterStatus===s?C.navy:C.border),background:filterStatus===s?C.navy:"white",color:filterStatus===s?"white":C.slate,fontSize:11,fontWeight:700,...TAP}}>
               {s}
             </button>
           ))}
@@ -4728,7 +4900,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {["7j","30j","Tout"].map(p=>(
             <button key={p} onClick={()=>setFilterPeriodOps(p)}
-              style={{padding:"4px 10px",borderRadius:8,border:"1.5px solid "+(filterPeriodOps===p?C.navy:C.border),background:filterPeriodOps===p?C.navy:"white",color:filterPeriodOps===p?"white":C.slate,fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              style={{padding:"4px 10px",borderRadius:8,border:"1.5px solid "+(filterPeriodOps===p?C.navy:C.border),background:filterPeriodOps===p?C.navy:"white",color:filterPeriodOps===p?"white":C.slate,fontSize:11,fontWeight:700,...TAP}}>
               {p}
             </button>
           ))}
@@ -4745,51 +4917,13 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
           <span style={{color:C.navy}}>{filtered.length}/{flights.length}</span>
         </div>
         {filtered.length===0&&<div style={{padding:20,textAlign:"center",color:C.slateL,fontSize:13}}>Aucun vol trouvé</div>}
-        {filtered.map((f,i)=>{
-          const secEvts=getSecEvents(f.num,f.date);
-          const hasSecu=secEvts.length>0;
-          const compromis=f.status==="Planifie" ? volCompromis(f, crew, aircraft) : [];
-          return (
-          <div key={i} onClick={()=>{if(canEdit!==false){setEdit({...f});setOrigStatus(f.status);}}}
-            style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<filtered.length-1?"1px solid "+C.border:"none",cursor:canEdit!==false?"pointer":"default",WebkitTapHighlightColor:"transparent"}}>
-            <div style={{width:34,height:34,borderRadius:9,background:sBg(f.status),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{fontWeight:800,fontSize:14,color:sTx(f.status)}}>{sIc(f.status)}</span>
-            </div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:700,fontSize:13,color:C.text,display:"flex",alignItems:"center",gap:6}}>
-                {f.num} · {f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--"} · {f.from}→{f.to}
-                {(()=>{const t=f.flightType||"Commercial";const c=t==="Ferry"?"#0369A1":t==="Positioning"?"#D97706":"#00936A";const code=t==="Ferry"?"FRY":t==="Positioning"?"POS":"COM";return <span style={{background:c,color:"white",borderRadius:6,padding:"1px 5px",fontSize:9,fontWeight:800,flexShrink:0}}>{code}</span>;})()}
-                {hasSecu&&<span style={{background:"#FEE2E2",color:"#DC2626",borderRadius:6,padding:"1px 5px",fontSize:9,fontWeight:800}}>🛡 {secEvts.length}</span>}
-                {compromis.length>0&&<span title={compromis.map(p=>p.label).join(" · ")} style={{background:"#DC2626",color:"white",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800,flexShrink:0}}>⛔ COMPROMIS</span>}
-              </div>
-              {compromis.length>0&&(
-                <div style={{fontSize:10,color:"#DC2626",marginTop:2,lineHeight:1.35}}>
-                  {compromis.map((p,k)=><div key={k}>• {p.label}</div>)}
-                </div>
-              )}
-              <div style={{fontSize:11,color:C.textSub}}>
-                {f.dep} - {f.arr} · {f.pax} pax · {f.load}%
-                {(()=>{if(f.dureeMin>0)return<span style={{color:C.emerald,fontWeight:700}}> · {Math.floor(f.dureeMin/60)}h{String(f.dureeMin%60).padStart(2,"0")}</span>;return null;})()}
-              </div>
-              {(f.cm1||f.cm2||f.cc||f.clientId)&&<div style={{fontSize:10,color:C.slateL,marginTop:1,fontStyle:"italic"}}>
-                {[f.cm1,f.cm2,f.cc].filter(Boolean).join(" · ")}
-                {f.clientId&&clients&&(()=>{const c=clients.find(x=>x.id===f.clientId);return c?<span style={{color:"#0891B2",fontWeight:600}}> · 🏢 {c.nom}</span>:null;})()}
-              </div>}
-            </div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-              <span style={{fontSize:10,fontWeight:700,color:sTx(f.status),background:sBg(f.status),padding:"2px 8px",borderRadius:8}}>{f.status}</span>
-              {f.status==="Termine"&&(
-                <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:8,
-                  background:f.delayMin<=0?"#D1FAE5":f.delayMin<=15?"#D1FAE5":f.delayMin<=30?"#FEF3C7":"#FEE2E2",
-                  color:f.delayMin<=0?"#065F46":f.delayMin<=15?"#065F46":f.delayMin<=30?"#92400E":"#991B1B"}}>
-                  {f.delayMin<=0?"Ponctuel":"+"+f.delayMin+" min"}
-                </span>
-              )}
-              <span style={{fontSize:10,color:C.slateL}}>✏</span>
-            </div>
-          </div>
-          );
-        })}
+        {filtered.map((f,i)=>(
+          <FlightRow key={i} f={f} isLast={i===filtered.length-1} canEdit={canEdit}
+            onOpen={v=>{setEdit({...v});setOrigStatus(v.status);}}
+            secEvts={getSecEvents(f.num,f.date)}
+            compromis={f.status==="Planifie" ? [...volCompromis(f, crew, aircraft), ...chevauchements(f, flights)] : []}
+            clients={clients}/>
+        ))}
       </div>
     </div>
   );
@@ -4852,7 +4986,7 @@ function ScreenAlertes({ kpis, flights, dismissed, setDismissed, maintData, aler
               <button key={f} onClick={()=>setMelFilter(f)}
                 style={{padding:"3px 10px",borderRadius:8,border:"1px solid "+C.border,
                   background:melFilter===f?C.navy:"white",color:melFilter===f?"white":C.slate,
-                  fontSize:11,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  fontSize:11,fontWeight:700,...TAP}}>
                 {f}
               </button>
             ))}
@@ -5033,7 +5167,7 @@ function ScreenSecu({ safetyData, flights }) {
     <button onClick={onClick}
       style={{padding:"3px 9px",borderRadius:8,border:"1px solid "+C.border,
         background:active?C.navy:"white",color:active?"white":C.slate,
-        fontSize:10,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+        fontSize:10,fontWeight:700,...TAP}}>
       {val}
     </button>
   );
@@ -5844,7 +5978,7 @@ function CustomSelect({ value, onChange, options, placeholder, icon, searchable,
   return (
     <div style={{position:"relative"}}>
       <button onClick={()=>{setOpen(o=>!o);setSearch("");}}
-        style={{width:"100%",minHeight:52,background:"white",border:"1.5px solid "+(value?C.navy:C.border),borderRadius:10,padding:"0 14px",fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",WebkitTapHighlightColor:"transparent",textAlign:"left"}}>
+        style={{width:"100%",minHeight:52,background:"white",border:"1.5px solid "+(value?C.navy:C.border),borderRadius:10,padding:"0 14px",fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",...TAP,textAlign:"left"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:1}}>
           {icon&&<span style={{fontSize:18,flexShrink:0}}>{icon}</span>}
           <div style={{minWidth:0,flex:1}}>
@@ -5926,7 +6060,7 @@ function ProfileSelectScreen({ onSelect }) {
           <button key={p.id} onClick={()=>onSelect(p.id)}
             style={{background:p.color,border:"none",borderRadius:14,padding:"18px 12px",cursor:"pointer",
               display:"flex",flexDirection:"column",alignItems:"center",gap:8,
-              boxShadow:"0 4px 12px rgba(0,0,0,.3)",WebkitTapHighlightColor:"transparent",
+              boxShadow:"0 4px 12px rgba(0,0,0,.3)",...NOTAP,
               width:"calc(50% - 6px)"}}>
             <div style={{fontSize:28}}>{p.icon}</div>
             <div style={{fontWeight:700,fontSize:13,color:"white"}}>{p.label}</div>
@@ -5953,7 +6087,7 @@ function LoginGate({ onAuth }) {
     if(!await checkPassword(pwd, profileId)){ setErr("Mot de passe incorrect"); return; }
     if(!TOTP_REQUIRED.includes(profileId)){
       // Pas de TOTP pour ce département (mode test)
-      try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){}
+      try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){ logSilent(_e); }
       setOk(true);
       setTimeout(()=>onAuth(profileId),400);
       return;
@@ -5969,14 +6103,14 @@ function LoginGate({ onAuth }) {
   };
 
   const handleTotpVerified=async()=>{
-    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){}
+    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){ logSilent(_e); }
     setOk(true);
     setTimeout(()=>onAuth(profileId),400);
   };
 
   const handleTotpSetupVerified=async()=>{
     await sbSet(TOTP_KEY+"_"+profileId,[totpSecret]);
-    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){}
+    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){ logSilent(_e); }
     setOk(true);
     setTimeout(()=>onAuth(profileId),400);
   };
@@ -6067,7 +6201,68 @@ function ResetPasswordCheck({ onConfirm, onCancel }) {
   );
 }
 
-function App() {
+
+// ── Boîtes de dialogue maison ─────────────────────────────────────────────────
+// Remplacent alert(), confirm() et prompt() du navigateur : même comportement,
+// mais cohérentes avec l'interface et utilisables sur iOS comme sur Android.
+// API par promesses : uiAlert(msg), await uiConfirm(msg), await uiPrompt(msg, défaut).
+const DLG = { queue:[], listener:null };
+function dlgPush(item){ return new Promise(res=>{ DLG.queue.push({...item,res}); if(DLG.listener) DLG.listener(); }); }
+function uiAlert(message){ return dlgPush({kind:"alert", message:String(message)}); }
+function uiConfirm(message){ return dlgPush({kind:"confirm", message:String(message)}); }
+function uiPrompt(message, def){ return dlgPush({kind:"prompt", message:String(message), def:def==null?"":String(def)}); }
+
+function DialogHost(){
+  const [cur,setCur]=useState(null);
+  const [val,setVal]=useState("");
+  const inputRef=useRef(null);
+  useEffect(()=>{
+    const next=()=>{ setCur(c=>{ if(c) return c; const it=DLG.queue.shift()||null; if(it&&it.kind==="prompt") setVal(it.def); return it; }); };
+    DLG.listener=next; next();
+    return ()=>{ DLG.listener=null; };
+  },[]);
+  useEffect(()=>{ if(cur&&cur.kind==="prompt"&&inputRef.current) inputRef.current.focus(); },[cur]);
+  if(!cur) return null;
+  const close=(result)=>{
+    const it=cur; setCur(null);
+    it.res(result);
+    setTimeout(()=>{ if(DLG.listener) DLG.listener(); },0);
+  };
+  // Un message commençant par ⛔ ou ❌ est un refus, par ⚠️ un avertissement.
+  const m=cur.message;
+  // Une action destructrice (suppression, effacement) reçoit un bouton rouge.
+  const destructive = cur.kind==="confirm" && /supprim|effac|irréversible|définitivement/i.test(m);
+  const tone = (/^[⛔❌]/.test(m)||destructive) ? {c:"#DC2626",bg:"#FEF2F2"} : /^⚠/.test(m) ? {c:"#D97706",bg:"#FFFBEB"} : {c:C.navy,bg:"#F4F7FB"};
+  const btn={flex:1,height:46,borderRadius:10,fontSize:14,fontWeight:700,...TAP,fontFamily:"inherit"};
+  return (
+    <div onClick={()=>{ if(cur.kind==="alert") close(); }}
+      style={{position:"fixed",inset:0,background:"rgba(15,31,61,0.55)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
+      <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true"
+        style={{width:"100%",maxWidth:400,background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 20px 50px rgba(0,0,0,0.3)"}}>
+        <div style={{background:tone.bg,borderTop:"4px solid "+tone.c,padding:"18px 18px 14px",maxHeight:"60vh",overflowY:"auto"}}>
+          <div style={{fontSize:13.5,lineHeight:1.55,color:C.text,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{m}</div>
+          {cur.kind==="prompt"&&(
+            <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter") close(val); }}
+              style={{marginTop:12,width:"100%",height:44,boxSizing:"border-box",border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:14,fontFamily:"inherit",outline:"none"}}/>
+          )}
+        </div>
+        <div style={{display:"flex",gap:10,padding:14}}>
+          {cur.kind!=="alert"&&(
+            <button onClick={()=>close(cur.kind==="prompt"?null:false)}
+              style={{...btn,background:C.bg,border:"1.5px solid "+C.border,color:C.slate}}>Annuler</button>
+          )}
+          <button onClick={()=>close(cur.kind==="prompt"?val:cur.kind==="confirm"?true:undefined)}
+            style={{...btn,background:tone.c,border:"none",color:"white"}}>{cur.kind==="alert"?"OK":"Confirmer"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App(){ return (<><AppInner/><DialogHost/></>); }
+
+function AppInner() {
   const [authed,setAuthed] = useState(()=>{
     try{
       const p=sessionStorage.getItem(PFX+"active_profile");
@@ -6077,16 +6272,90 @@ function App() {
   const [loggedOut,setLoggedOut] = useState(false);
   if(loggedOut) return <LoggedOutScreen onReturnToLogin={()=>setLoggedOut(false)}/>;
   if(!authed) return <LoginGate onAuth={(profileId)=>{
-    try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){}
+    try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){ logSilent(_e); }
     setAuthed(profileId);
   }}/>;
   return <ErrorBoundary><AppMain profileId={authed} onLogout={()=>{
-    try{ sessionStorage.removeItem(PFX+"authed_"+authed); sessionStorage.removeItem(PFX+"active_profile"); }catch(_e){}
+    try{ sessionStorage.removeItem(PFX+"authed_"+authed); sessionStorage.removeItem(PFX+"active_profile"); }catch(_e){ logSilent(_e); }
     setAuthed(null);
     setLoggedOut(true);
   }}/></ErrorBoundary>;
 }
 
+
+// Modal de restauration : choix entre la sauvegarde cloud et un fichier local.
+// Extrait d'AppMain ; ne dépend que de ses trois props.
+function RestoreModal({ onClose, setRestoreProgress, onImport }){
+  const rSleep=(ms)=>new Promise(r=>setTimeout(r,ms));   // courte pause entre les étapes affichées
+  return (
+        <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
+            <div style={{fontSize:32,textAlign:"center",marginBottom:12}}>📦</div>
+            <div style={{fontWeight:800,fontSize:16,color:C.navy,textAlign:"center",marginBottom:8}}>Restaurer les données</div>
+            <div style={{fontSize:13,color:C.slate,textAlign:"center",lineHeight:1.6,marginBottom:20}}>Choisissez la source de restauration.</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <button onClick={async()=>{
+                onClose();
+                const steps=["Récupération depuis Supabase","Restauration des données","Finalisation"];
+                setRestoreProgress({title:"Restauration en cours",icon:"📦",steps,currentStep:0,pct:15});
+                const data=await sbGet(PFX+"lastBackupData");
+                if(!data){setRestoreProgress(null);uiAlert("Aucun backup trouvé dans le cloud.");return;}
+                setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
+                const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
+                if(await uiConfirm("Backup Supabase du "+dateStr+".\n\nConfirmer la restauration ?")){
+                  if(onImport){onImport(data);}
+                  setRestoreProgress(p=>({...p,currentStep:2,pct:85}));
+                  await rSleep(400);
+                  setRestoreProgress(p=>({...p,currentStep:3,pct:100}));
+                  await rSleep(600);
+                  setRestoreProgress(null);
+                } else {
+                  setRestoreProgress(null);
+                }
+              }} style={{height:48,background:"#EFF6FF",border:"1.5px solid #0369A1",borderRadius:10,color:"#0369A1",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                ☁️ Depuis Supabase (cloud)
+              </button>
+              <button onClick={()=>{
+                onClose();
+                const input=document.createElement("input");
+                input.type="file"; input.accept=".json";
+                input.onchange=async(e)=>{
+                  const file=e.target.files[0]; if(!file) return;
+                  const reader=new FileReader();
+                  reader.onload=async(ev)=>{
+                    try{
+                      const steps=["Lecture du fichier","Restauration des données","Finalisation"];
+                      setRestoreProgress({title:"Restauration en cours",icon:"📂",steps,currentStep:0,pct:20});
+                      const data=JSON.parse(ev.target.result);
+                      setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
+                      const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
+                      if(await uiConfirm("Fichier local du "+dateStr+".\n\nConfirmer la restauration ?")){
+                        if(onImport){onImport(data);}
+                        setRestoreProgress(p=>({...p,currentStep:2,pct:85}));
+                        await rSleep(400);
+                        setRestoreProgress(p=>({...p,currentStep:3,pct:100}));
+                        await rSleep(600);
+                        setRestoreProgress(null);
+                      } else {
+                        setRestoreProgress(null);
+                      }
+                    }catch(_e){setRestoreProgress(null);uiAlert("❌ Fichier JSON invalide.");}
+                  };
+                  reader.readAsText(file);
+                };
+                input.click();
+              }} style={{height:48,background:"#F0FDF4",border:"1.5px solid #00936A",borderRadius:10,color:"#00936A",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                📂 Depuis fichier local (JSON)
+              </button>
+              <button onClick={()=>onClose()}
+                style={{height:44,background:"#F1F5F9",border:"1.5px solid #CBD5E1",borderRadius:10,color:"#64748B",fontSize:13,fontWeight:600,cursor:"pointer"}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+  );
+}
 
 function AppMain({ onLogout, profileId }) {
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
@@ -6097,7 +6366,7 @@ function AppMain({ onLogout, profileId }) {
     try { return sessionStorage.getItem(PFX+"tab") || "forms"; } catch(_e) { return "forms"; }
   });
   useEffect(() => {
-    try { sessionStorage.setItem(PFX+"tab", tab); } catch(_e) {}
+    try { sessionStorage.setItem(PFX+"tab", tab); } catch(_e){ logSilent(_e); }
   }, [tab]);
   const [flights,setFlights] = usePersist("flights",INIT_FLIGHTS);
   // Auto-upgrade: if demo data is old (fewer than 8 flights), reload with new demo
@@ -6120,6 +6389,33 @@ function AppMain({ onLogout, profileId }) {
   const [icao24,setIcao24]   = usePersist("icao24","CN-KTA");
   const [lastBackup,setLastBackup] = usePersist("lastBackup",null);
   const [ndsArchive,setNdsArchive]=usePersist(NDS_ARCHIVE_PERSIST_KEY, []);   // archives du générateur
+  const sync=useSyncStatus();   // indicateur bandeau : hors ligne, écritures en attente
+
+  // ── Sauvegarde automatique ──
+  // Toutes les 30 minutes, et quand l'application passe en arrière-plan :
+  // copie complète vers Supabase et vers le stockage local. Sans fichier
+  // téléchargé, qui resterait intrusif — l'Export manuel s'en charge.
+  const AUTO_BACKUP_MS = 30*60*1000;
+  const stateRef = useRef({});
+  stateRef.current = { flights, maintData, crew, finData, kpis, dismissed, safetyData, clients, ndsArchive };
+  const buildBackup = () => ({ version:"1.0", exportDate:new Date().toISOString(), auto:true, ...stateRef.current });
+  const lastAutoRef = useRef(0);
+  const autoBackup = async (reason) => {
+    // Pas plus d'une sauvegarde par 5 minutes, quelle qu'en soit la cause
+    if (Date.now()-lastAutoRef.current < 5*60*1000) return;
+    lastAutoRef.current = Date.now();
+    const data = buildBackup();
+    try { lsSet(PFX+"autoBackup", JSON.stringify(data)); } catch(_e){ logSilent(_e); }
+    const ok = await sbSet(PFX+"lastBackupData", data);
+    if (ok) setLastBackup(data.exportDate);
+  };
+  useEffect(() => {
+    const id = setInterval(() => autoBackup("interval"), AUTO_BACKUP_MS);
+    const onHide = () => { if (document.visibilityState==="hidden") autoBackup("hidden"); };
+    document.addEventListener("visibilitychange", onHide);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onHide); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [ac,setAc]           = useState(null);
   const [mTraffic,setMTraff] = useState([]);
   const [loading,setLoading] = useState(false);
@@ -6143,7 +6439,6 @@ function AppMain({ onLogout, profileId }) {
   };
 const [showRestoreModal,setShowRestoreModal] = useState(false);
   const [restoreProgress,setRestoreProgress] = useState(null);
-  const rSleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   const [report,setReport]   = useState(null);
 
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),30000);return()=>clearInterval(t);},[]);
@@ -6235,6 +6530,16 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
             <div style={{width:7,height:7,borderRadius:"50%",background:ac&&!ac.simulated?C.emerald:ac?C.warn:C.border,flexShrink:0}}/>
             <span style={{fontSize:11,color:C.slate,fontWeight:600}}>{ac&&!ac.simulated?"LIVE":"SIM"}</span>
           </div>
+          {(()=>{
+            const s=sync;
+            if(s.offline) return <span title="Sans réseau — les saisies sont conservées et seront envoyées au retour de la connexion"
+              style={{fontSize:9.5,fontWeight:800,color:"white",background:"#DC2626",borderRadius:6,padding:"2px 6px",whiteSpace:"nowrap"}}>HORS LIGNE{s.pending?" · "+s.pending:""}</span>;
+            if(s.lastError) return <span title="Une écriture vers le cloud a échoué — nouvelle tentative automatique"
+              style={{fontSize:9.5,fontWeight:800,color:"#92400E",background:"#FEF3C7",borderRadius:6,padding:"2px 6px",whiteSpace:"nowrap"}}>⚠ SYNC</span>;
+            if(s.pending) return <span title="Envoi vers le cloud en cours"
+              style={{fontSize:9.5,fontWeight:800,color:C.slate,background:C.bg,borderRadius:6,padding:"2px 6px",whiteSpace:"nowrap"}}>⟳ {s.pending}</span>;
+            return null;
+          })()}
           <span style={{fontSize:12,fontWeight:700,color:C.navy}}>{timeStr}</span>
         </div>
       </div>
@@ -6268,7 +6573,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
         {tab==="alertes" && <ScreenAlertes kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew}/>}
-        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew}/>}
+        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
@@ -6279,74 +6584,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 
       {/* RESTORE MODAL */}
       {restoreProgress&&<ProgressModal title={restoreProgress.title} icon={restoreProgress.icon} steps={restoreProgress.steps} currentStep={restoreProgress.currentStep} pct={restoreProgress.pct}/>}
-      {showRestoreModal&&(
-        <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
-            <div style={{fontSize:32,textAlign:"center",marginBottom:12}}>📦</div>
-            <div style={{fontWeight:800,fontSize:16,color:C.navy,textAlign:"center",marginBottom:8}}>Restaurer les données</div>
-            <div style={{fontSize:13,color:C.slate,textAlign:"center",lineHeight:1.6,marginBottom:20}}>Choisissez la source de restauration.</div>
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <button onClick={async()=>{
-                setShowRestoreModal(false);
-                const steps=["Récupération depuis Supabase","Restauration des données","Finalisation"];
-                setRestoreProgress({title:"Restauration en cours",icon:"📦",steps,currentStep:0,pct:15});
-                const data=await sbGet(PFX+"lastBackupData");
-                if(!data){setRestoreProgress(null);alert("Aucun backup trouvé dans le cloud.");return;}
-                setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
-                const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
-                if(window.confirm("Backup Supabase du "+dateStr+".\n\nConfirmer la restauration ?")){
-                  if(onImport){onImport(data);}
-                  setRestoreProgress(p=>({...p,currentStep:2,pct:85}));
-                  await rSleep(400);
-                  setRestoreProgress(p=>({...p,currentStep:3,pct:100}));
-                  await rSleep(600);
-                  setRestoreProgress(null);
-                } else {
-                  setRestoreProgress(null);
-                }
-              }} style={{height:48,background:"#EFF6FF",border:"1.5px solid #0369A1",borderRadius:10,color:"#0369A1",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                ☁️ Depuis Supabase (cloud)
-              </button>
-              <button onClick={()=>{
-                setShowRestoreModal(false);
-                const input=document.createElement("input");
-                input.type="file"; input.accept=".json";
-                input.onchange=async(e)=>{
-                  const file=e.target.files[0]; if(!file) return;
-                  const reader=new FileReader();
-                  reader.onload=async(ev)=>{
-                    try{
-                      const steps=["Lecture du fichier","Restauration des données","Finalisation"];
-                      setRestoreProgress({title:"Restauration en cours",icon:"📂",steps,currentStep:0,pct:20});
-                      const data=JSON.parse(ev.target.result);
-                      setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
-                      const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
-                      if(window.confirm("Fichier local du "+dateStr+".\n\nConfirmer la restauration ?")){
-                        if(onImport){onImport(data);}
-                        setRestoreProgress(p=>({...p,currentStep:2,pct:85}));
-                        await rSleep(400);
-                        setRestoreProgress(p=>({...p,currentStep:3,pct:100}));
-                        await rSleep(600);
-                        setRestoreProgress(null);
-                      } else {
-                        setRestoreProgress(null);
-                      }
-                    }catch(_e){setRestoreProgress(null);alert("❌ Fichier JSON invalide.");}
-                  };
-                  reader.readAsText(file);
-                };
-                input.click();
-              }} style={{height:48,background:"#F0FDF4",border:"1.5px solid #00936A",borderRadius:10,color:"#00936A",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                📂 Depuis fichier local (JSON)
-              </button>
-              <button onClick={()=>setShowRestoreModal(false)}
-                style={{height:44,background:"#F1F5F9",border:"1.5px solid #CBD5E1",borderRadius:10,color:"#64748B",fontSize:13,fontWeight:600,cursor:"pointer"}}>
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showRestoreModal&&<RestoreModal onClose={()=>setShowRestoreModal(false)} setRestoreProgress={setRestoreProgress} onImport={onImport}/>}
 
       {/* RESET MODAL */}
       {showReset&&(
@@ -6369,7 +6607,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
               <div style={{color:"#A0720A",fontSize:10}}>Afrijet Sahara</div>
             </div>
             <button onClick={()=>setReport(null)}
-              style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"8px 16px",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,padding:"8px 16px",color:"white",fontSize:13,fontWeight:700,...TAP}}>
               Fermer
             </button>
           </div>
@@ -6377,7 +6615,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           {/* PDF Export */}
           <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0}}>
             <button onClick={()=>{
-              if(!window.jspdf){alert("jsPDF non charge. Verifiez votre connexion.");return;}
+              if(!window.jspdf){uiAlert("jsPDF non charge. Verifiez votre connexion.");return;}
               try {
                 const { jsPDF } = window.jspdf;
                 // Compute chart data from flights grouped by week
@@ -6871,10 +7109,10 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 
                 doc.save("Rapport_KPI_Afrijet_"+now.toISOString().slice(0,10)+".pdf");
               } catch(e) {
-                alert("Erreur PDF: "+e.message);
+                uiAlert("Erreur PDF: "+e.message);
               }
             }}
-              style={{width:"100%",height:46,background:"linear-gradient(135deg,#7C3AED,#5B21B6)",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center",gap:8,letterSpacing:"0.05em"}}>
+              style={{width:"100%",height:46,background:"linear-gradient(135deg,#7C3AED,#5B21B6)",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,...TAP,display:"flex",alignItems:"center",justifyContent:"center",gap:8,letterSpacing:"0.05em"}}>
               <span style={{fontSize:20}}>📄</span> Telecharger le rapport PDF
             </button>
           </div>
@@ -6893,7 +7131,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           const isRO=readOnly(t.id);
           return (
             <button key={t.id} onClick={()=>setTab(t.id)}
-              style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:"6px 2px",position:"relative",WebkitTapHighlightColor:"transparent",borderTop:active?"2.5px solid "+C.gold:"2.5px solid transparent"}}>
+              style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:"6px 2px",position:"relative",...NOTAP,borderTop:active?"2.5px solid "+C.gold:"2.5px solid transparent"}}>
               <span style={{fontSize:17,lineHeight:1}}>{t.icon}</span>
               <span style={{fontSize:8,fontWeight:active?700:500,color:active?C.gold:C.slate}}>{t.label}</span>
               {isRO&&<span style={{fontSize:7,color:C.slateL}}>👁</span>}
