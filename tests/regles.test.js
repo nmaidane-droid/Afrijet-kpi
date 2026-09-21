@@ -24,7 +24,7 @@ function extract(name){
     else if(!fm&&depth===0&&(ch===';'||ch==='\n')) return code.slice(i,k+1);
   }
 }
-const names=['sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -112,6 +112,15 @@ console.log('\nExport des comptes rendus : sélection');
   const ev=[{date:d(5),bird:true},{date:d(200),cgoProc:true},{date:d(400),unruly:true}];
   test('période : 3 mois / 12 mois / tout', ()=>attendu(T.sgsFiltreEvenements(ev,'3m','all').length===1&&T.sgsFiltreEvenements(ev,'12m','all').length===2&&T.sgsFiltreEvenements(ev,'all','all').length===3,'filtre de période faux'));
   test('service : Fret, Sûreté, Maintenance', ()=>attendu(T.sgsFiltreEvenements(ev,'all','CGO').length===1&&T.sgsFiltreEvenements(ev,'all','SEC').length===1&&T.sgsFiltreEvenements(ev,'all','MNT').length===1,'filtre de service faux')); }
+
+console.log('\nRegistres SGS (lots A à C)');
+test('FRAT : score = somme des points cochés', ()=>attendu(T.sgsFratScore({cdbXp:true,meteo:true})===7&&T.sgsFratScore({})===0,'score faux'));
+test('FRAT : vert < 11 ≤ jaune < 21 ≤ rouge', ()=>attendu(T.sgsFratCouleur(10)==='vert'&&T.sgsFratCouleur(11)==='jaune'&&T.sgsFratCouleur(20)==='jaune'&&T.sgsFratCouleur(21)==='rouge','seuils faux'));
+test('Changement : en étude → évalué → approuvé', ()=>{ const c={eis:[{P:3,G:'C'}],conclusion:''};
+  const a=T.sgsChgStatut(c).k, b=T.sgsChgStatut({...c,conclusion:'ok'}).k, d=T.sgsChgStatut({...c,conclusion:'ok',approuve:'oui'}).k;
+  attendu(a==='etude'&&b==='evalue'&&d==='approuve'&&T.sgsChgAnalyse({...c,conclusion:'ok'}),'statuts faux '+[a,b,d]); });
+test('Analyse : ancienne fiche relue (date → dateReunion)', ()=>attendu(T.sgsAnaNorm({date:'2026-09-15'}).dateReunion==='2026-09-15','compatibilité perdue'));
+test('Analyse : résumé masqué pour un confidentiel', ()=>{ const r=T.sgsAnaResume({dateReunion:'2026-09-15',causes:'secret'},{},true); attendu(/Réunion du 15\/09\/2026/.test(r)&&!/secret/.test(r),'masquage faux'); });
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
