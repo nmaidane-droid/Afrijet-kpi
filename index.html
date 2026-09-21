@@ -6908,7 +6908,8 @@ function DialogHost(){
 //  - pendant l'utilisation : simple bandeau, pour ne jamais perdre une saisie.
 // Référence : meta app-build + version.json produits par build.js. À défaut
 // (page servie sans construction), l'en-tête ETag de la page fait foi.
-const UPD_INTERVAL_MS = 5*60*1000;
+const UPD_INTERVAL_MS = 60*1000;          // vérification légère (~60 octets)
+const UPD_IDLE_MS     = 20*1000;          // inactivité requise pour recharger en cours d'utilisation
 function currentBuild(){
   const m=document.querySelector('meta[name="app-build"]');
   return m ? m.getAttribute('content') : null;
@@ -6928,6 +6929,14 @@ function UpdateWatcher(){
   const [avail,setAvail]=useState(false);
   const baseRef=useRef(currentBuild());      // version affichée
   const busyRef=useRef(false);
+  const lastTouchRef=useRef(Date.now());
+  // Aucune saisie en cours : pas de champ actif, pas de dialogue ouvert, pas de toucher récent
+  const idle=()=>{
+    const a=document.activeElement, tag=a&&a.tagName;
+    const editing=tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||(a&&a.isContentEditable);
+    const dialog=!!document.querySelector('[role="dialog"]');
+    return !editing && !dialog && Date.now()-lastTouchRef.current>=UPD_IDLE_MS;
+  };
   const reloadNow=()=>{
     try{ SYNC.flushAll(); }catch(e){ logSilent(e); }   // envoyer ce qui est en attente
     setTimeout(()=>location.reload(),400);
@@ -6942,7 +6951,8 @@ function UpdateWatcher(){
       // Garde-fou : un seul rechargement automatique par version, pour ne jamais
       // boucler si un cache servait encore l'ancienne page.
       const tried=sessionStorage.getItem('afrijet_reload_for');
-      if(auto && tried!==remote){ sessionStorage.setItem('afrijet_reload_for',remote); reloadNow(); }
+      // Retour sur l'application, ou utilisation sans saisie en cours → rechargement automatique
+      if((auto||idle()) && tried!==remote){ sessionStorage.setItem('afrijet_reload_for',remote); reloadNow(); }
       else setAvail(true);
     } finally { busyRef.current=false; }
   };
@@ -6953,7 +6963,11 @@ function UpdateWatcher(){
     document.addEventListener("visibilitychange",onVis);
     window.addEventListener("focus",onVis);
     const id=setInterval(()=>{ if(document.visibilityState==="visible") check(false); },UPD_INTERVAL_MS);
-    return ()=>{ document.removeEventListener("visibilitychange",onVis); window.removeEventListener("focus",onVis); clearInterval(id); };
+    const touch=()=>{ lastTouchRef.current=Date.now(); };
+    const EV=["pointerdown","keydown","input","wheel","touchmove"];
+    EV.forEach(e=>document.addEventListener(e,touch,{capture:true,passive:true}));
+    return ()=>{ document.removeEventListener("visibilitychange",onVis); window.removeEventListener("focus",onVis); clearInterval(id);
+      EV.forEach(e=>document.removeEventListener(e,touch,{capture:true})); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   if(!avail) return null;
@@ -7870,14 +7884,11 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           return (
             <button key={t.id} onClick={()=>{ if(!interdit) setTab(t.id); }} aria-disabled={interdit}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:"6px 2px",position:"relative",...NOTAP,borderTop:active?"2.5px solid "+C.gold:"2.5px solid transparent"}}>
-              <span style={{fontSize:17,lineHeight:1}}>{t.icon}</span>
+              <span style={{fontSize:17,lineHeight:1,opacity:interdit?.35:1,filter:interdit?"grayscale(1)":"none"}}>{t.icon}</span>
               <span style={{fontSize:8,fontWeight:active?700:500,color:active?C.gold:C.slate}}>{t.label}</span>
-              {/* Emplacement de l'œil : case fixe et centrée, tous les libellés restent alignés.
-                  Le trait est centré sur la case, pas sur l'émoji, dont la largeur varie selon le téléphone. */}
-              <span style={{width:12,height:9,position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}
-                aria-label={interdit?"Accès non autorisé":undefined}>
-                {(isRO||interdit)&&<span style={{fontSize:7,lineHeight:1,color:C.slateL}}>👁</span>}
-                {interdit&&<span style={{position:"absolute",left:2.5,right:2.5,top:4,height:1.2,background:"#64748B",transform:"rotate(-35deg)",borderRadius:1}}/>}
+              {/* Emplacement de l'œil : hauteur fixe, tous les libellés restent alignés */}
+              <span style={{width:12,height:9,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {isRO&&!interdit&&<span style={{fontSize:7,lineHeight:1,color:C.slateL}}>👁</span>}
               </span>
               {badge&&(
                 <div style={{position:"absolute",top:4,right:"50%",transform:"translateX(10px)",background:C.danger,color:"white",borderRadius:10,minWidth:16,height:16,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>
