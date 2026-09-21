@@ -5367,7 +5367,7 @@ function ActionBar({ isAdmin, doExport, onRestore, onReset, onLogout }){
 
 function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
   const isAdmin = profileId === "rdoa";
-  const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="comm"?"clients":profileId==="sgs"?"sgs":null;
+  const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="comm"?"clients":null;   // Qualité / SGS : arrive sur la grille des tuiles
   const [active,setActive]=useState(defaultForm);
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
