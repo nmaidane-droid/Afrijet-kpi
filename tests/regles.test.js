@@ -8,21 +8,23 @@ const code=src.match(/<script id="app-code"[^>]*>([\s\S]*?)<\/script>/)[1];
 
 // Extrait une définition de premier niveau (function ou const) par son nom
 function extract(name){
-  let m=new RegExp('^(?:async\\s+)?function\\s+'+name+'\\s*\\(','m').exec(code)
-     || new RegExp('^const\\s+'+name+'\\s*=','m').exec(code);
+  const fm=new RegExp('^(?:async\\s+)?function\\s+'+name+'\\s*\\(','m').exec(code);
+  const m=fm || new RegExp('^const\\s+'+name+'\\s*=','m').exec(code);
   if(!m) throw new Error('introuvable : '+name);
-  let i=m.index, depth=0, seen=false, q=null;
+  // Parenthèses, crochets et accolades sont tous comptés : une fonction se termine
+  // à son accolade finale, une constante au « ; » ou à la fin de ligne de niveau 0.
+  let i=m.index, depth=0, q=null;
   for(let k=i;k<code.length;k++){
     const ch=code[k];
     if(q){ if(ch==='\\'){k++;continue;} if(ch===q) q=null; continue; }
     if(ch==='"'||ch==="'"||ch==='`'){ q=ch; continue; }
-    if(ch==='{'||ch==='['){ depth++; seen=true; }
-    else if(ch==='}'||ch===']'){ depth--; if(seen&&depth===0){
-      let e=k+1; if(code[e]===';') e++; return code.slice(i,e); } }
-    else if(ch===';'&&depth===0&&seen===false) return code.slice(i,k+1);
+    if(ch==='{'||ch==='['||ch==='(') depth++;
+    else if(ch==='}'||ch===']'||ch===')'){ depth--;
+      if(fm&&ch==='}'&&depth===0) return code.slice(i,k+1); }
+    else if(!fm&&depth===0&&(ch===';'||ch==='\n')) return code.slice(i,k+1);
   }
 }
-const names=['SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -89,6 +91,17 @@ test('QRF et QRP définis',                 ()=>attendu(['qrf','qrp'].every(k=>T
 test('clés historiques conservées',        ()=>attendu(['approche','tcas','gpws','hardLanding','safa'].every(k=>T.SAFETY_EVENTS.some(e=>e.k===k)),'clé perdue'));
 test('clés uniques',                       ()=>attendu(new Set(T.SAFETY_EVENTS.map(e=>e.k)).size===T.SAFETY_EVENTS.length,'doublon'));
 test('passager indiscipliné : 3 suites',   ()=>attendu(T.SAFETY_EVENTS.find(e=>e.k==='unruly').sub.length===3,'précisions manquantes'));
+
+console.log('\nMatrice de risques — conformité au Manuel SGS 02-02');
+const couleur=c=>T.sgsRisque(Number(c[0]),c[1]).niv;
+test('6 cases rouges du manuel',        ()=>attendu(['5A','5B','5C','4A','4B','3A'].every(c=>couleur(c)==='intolerable'),'case rouge mal classée'));
+test('7 cases vertes du manuel',        ()=>attendu(['3E','2D','2E','1B','1C','1D','1E'].every(c=>couleur(c)==='acceptable'),'case verte mal classée'));
+test('12 cases jaunes',                 ()=>{ let n=0; [1,2,3,4,5].forEach(p=>'ABCDE'.split('').forEach(g=>{ if(couleur(p+g)==='tolerable') n++; })); attendu(n===12,'trouvé '+n); });
+test('1A tolérable, 5D tolérable',      ()=>attendu(couleur('1A')==='tolerable'&&couleur('5D')==='tolerable','bord de matrice faux'));
+test('rouge : action immédiate',        ()=>attendu(T.SGS_NIVEAUX.intolerable.delai===0,'délai faux'));
+test('jaune : actions sous 30 jours',   ()=>attendu(T.SGS_NIVEAUX.tolerable.delai===30,'délai faux'));
+test('risque résiduel prioritaire',     ()=>attendu(T.sgsRisqueCourant({P:5,G:'A',P2:2,G2:'D'}).cell==='2D','résiduel ignoré'));
+test('chaque indicateur a un seuil',    ()=>attendu(T.SAFETY_EVENTS.filter(e=>e.manuel).every(e=>T.SGS_SPI[e.k]),'seuil manquant'));
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
