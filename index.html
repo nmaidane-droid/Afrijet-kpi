@@ -101,7 +101,7 @@ const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813
 const PROFILES = [
   {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
    pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
-   forms:["avion","crew","vol","secu","docavion","regl","sat"],
+   forms:["avion","crew","vol","docavion","regl","sat"],
    tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes"] },
   {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
    pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
@@ -7834,13 +7834,14 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           return (
             <button key={t.id} onClick={()=>{ if(!interdit) setTab(t.id); }} aria-disabled={interdit}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:"6px 2px",position:"relative",...NOTAP,borderTop:active?"2.5px solid "+C.gold:"2.5px solid transparent"}}>
-              <span style={{fontSize:17,lineHeight:1,opacity:interdit?.35:1,filter:interdit?"grayscale(1)":"none"}}>{t.icon}</span>
-              <span style={{fontSize:8,fontWeight:active?700:500,color:interdit?"#CBD5E1":active?C.gold:C.slate}}>{t.label}</span>
-              {isRO&&!interdit&&<span style={{fontSize:7,color:C.slateL}}>👁</span>}
-              {interdit&&<svg width="11" height="9" viewBox="0 0 24 18" aria-label="Accès non autorisé" style={{display:"block"}}>
-                <path d="M1 9s4-7 11-7 11 7 11 7-4 7-11 7S1 9 1 9z" fill="none" stroke="#94A3B8" strokeWidth="2"/>
-                <circle cx="12" cy="9" r="3" fill="none" stroke="#94A3B8" strokeWidth="2"/>
-                <line x1="3" y1="17" x2="21" y2="1" stroke="#94A3B8" strokeWidth="2.2" strokeLinecap="round"/></svg>}
+              <span style={{fontSize:17,lineHeight:1}}>{t.icon}</span>
+              <span style={{fontSize:8,fontWeight:active?700:500,color:active?C.gold:C.slate}}>{t.label}</span>
+              {/* Emplacement de l'œil, de hauteur fixe : tous les libellés restent alignés */}
+              <span style={{height:9,fontSize:7,lineHeight:"9px",color:C.slateL,position:"relative",display:"inline-block"}}
+                aria-label={interdit?"Accès non autorisé":undefined}>
+                {(isRO||interdit)&&"👁"}
+                {interdit&&<span style={{position:"absolute",left:"50%",top:"50%",width:11,height:1.2,marginLeft:-5.5,marginTop:-0.6,background:"#64748B",transform:"rotate(-35deg)",borderRadius:1}}/>}
+              </span>
               {badge&&(
                 <div style={{position:"absolute",top:4,right:"50%",transform:"translateX(10px)",background:C.danger,color:"white",borderRadius:10,minWidth:16,height:16,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>
                   {badge}
