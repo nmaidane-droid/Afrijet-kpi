@@ -2182,98 +2182,188 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   );
 }
 
-function FormSafety({ onSubmit, flights, saved }) {
+function FormSafety({ onSubmit, flights, aircraft, saved }) {
   const now=new Date();
+  const today=now.toISOString().slice(0,10);
 
+  // Rattachement : à un vol, à un appareil seul, ou hors vol (sol, fret…)
+  const [mode,setMode]=useState("vol");
   const [volNum,setVolNum]=useState("");
-  const [approche,setApproche]=useState(false);
-  const [tcas,setTcas]=useState(false);
-  const [gpws,setGpws]=useState(false);
-  const [hardLanding,setHardLanding]=useState(false);
-  const [safa,setSafa]=useState(false);
+  const [acId,setAcId]=useState("");
+  const [dateEv,setDateEv]=useState(today);
   const [secuPeriod,setSecuPeriod]=useState("30j");
   const [secuSearch,setSecuSearch]=useState("");
+  // Événements cochés, précision passager, description, confidentialité
+  const [sel,setSel]=useState({});
+  const [unrulyType,setUnrulyType]=useState("");
+  const [desc,setDesc]=useState("");
+  const [conf,setConf]=useState(false);
+  const [anon,setAnon]=useState(false);
+  const [open,setOpen]=useState({FLT:true});
 
-  const reset=()=>{setVolNum("");setApproche(false);setTcas(false);setGpws(false);setHardLanding(false);setSafa(false);};
+  const reset=()=>{ setVolNum(""); setAcId(""); setDateEv(today); setSel({}); setUnrulyType(""); setDesc(""); setConf(false); setAnon(false); };
+  const toggle=k=>setSel(s=>({...s,[k]:!s[k]}));
+  const nbSel=Object.values(sel).filter(Boolean).length;
 
   const submit=()=>{
-    if(!volNum){ uiAlert("⚠️ Sélectionnez le vol concerné."); return; }
-    // Un événement sans indicateur fausserait l'analyse de sécurité
-    if(!(approche||tcas||gpws||hardLanding||safa)){ uiAlert("⚠️ Cochez au moins un indicateur pour enregistrer l'événement."); return; }
-    const parts=volNum.split("|");
-    const f=flights.find(f=>f.num===parts[0]&&f.date===parts[1])||flights.find(f=>f.num===parts[0]);
+    if(mode==="vol" && !volNum){ uiAlert("⚠️ Sélectionnez le vol concerné."); return; }
+    if(mode==="appareil" && !acId){ uiAlert("⚠️ Sélectionnez l'appareil concerné."); return; }
+    if(mode!=="vol" && !dateEv){ uiAlert("⚠️ Indiquez la date de l'événement."); return; }
+    if(mode!=="vol" && dateEv>today){ uiAlert("⚠️ La date de l'événement ne peut pas être dans le futur."); return; }
+    if(!nbSel){ uiAlert("⚠️ Cochez au moins un événement."); return; }
+    if(sel.unruly && !unrulyType){ uiAlert("⚠️ Précisez la suite donnée au passager indiscipliné."); return; }
+    let base;
+    if(mode==="vol"){
+      const parts=volNum.split("|");
+      const f=flights.find(x=>x.num===parts[0]&&x.date===parts[1])||flights.find(x=>x.num===parts[0]);
+      base={num:parts[0], date:f?.date||today, from:f?.from||"", to:f?.to||""};
+    } else if(mode==="appareil"){
+      const ac=(aircraft||[]).find(a=>a.id===acId);
+      base={num:ac?ac.immat:"", acId, date:dateEv, from:"", to:""};
+    } else {
+      base={num:"", date:dateEv, from:"", to:""};
+    }
+    const flags={}; SAFETY_EVENTS.forEach(x=>{ if(sel[x.k]) flags[x.k]=true; });
     onSubmit({
-      num:parts[0], date:f?.date||new Date().toISOString().slice(0,10),
-      from:f?.from||"", to:f?.to||"",
-      approche,tcas,gpws,hardLanding,safa,
+      ...base, ...flags, rattachement:mode,
+      ...(sel.unruly?{unrulyType}:{}),
+      description:desc.trim(), confidentiel:conf, anonyme:anon,
       timestamp:new Date().toISOString()
     });
     reset();
   };
 
-  // Filter flights by period and search
+  // Vols terminés proposés, filtrés par période et recherche
   const cutoff=new Date(now);
   if(secuPeriod==="7j") cutoff.setDate(cutoff.getDate()-7);
   else if(secuPeriod==="30j") cutoff.setDate(cutoff.getDate()-30);
   else cutoff.setFullYear(2000);
   cutoff.setHours(0,0,0,0);
-
   const filteredSecuFlights = flights
     .filter(f=>f.status==="Termine"&&f.date&&new Date(f.date)>=cutoff)
     .filter(f=>{
       const q=secuSearch.trim().toUpperCase();
       if(!q) return true;
       const dateFull=f.date?f.date.slice(8)+"/"+f.date.slice(5,7)+"/"+f.date.slice(0,4):"";
-      const terms=q.split(/\s+/);
-      return terms.every(t=>(f.num||"").toUpperCase().includes(t)||dateFull.includes(t));
+      return q.split(/\s+/).every(t=>(f.num||"").toUpperCase().includes(t)||dateFull.includes(t));
     })
     .sort((a,b)=>b.date.localeCompare(a.date));
 
-  const Check=({label,value,onChange,color="#DC2626"})=>(
-    <div onClick={()=>onChange(!value)}
-      style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:value?color+"15":"white",
-        border:"1.5px solid "+(value?color:C.border),borderRadius:10,...TAP}}>
-      <div style={{width:22,height:22,borderRadius:6,border:"2px solid "+(value?color:C.border),
-        background:value?color:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-        {value&&<span style={{color:"white",fontSize:14,fontWeight:800}}>✓</span>}
+  const Seg=({v,l})=>(
+    <button onClick={()=>setMode(v)}
+      style={{flex:1,height:38,borderRadius:9,fontSize:12,fontWeight:700,...TAP,
+        border:"1.5px solid "+(mode===v?C.navy:C.border),background:mode===v?C.navy:"white",color:mode===v?"white":C.slate}}>{l}</button>
+  );
+  const Box=({on,color,onClick,children})=>(
+    <div onClick={onClick}
+      style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",background:on?color+"12":"white",
+        border:"1.5px solid "+(on?color:C.border),borderRadius:10,...TAP}}>
+      <div style={{width:20,height:20,marginTop:1,borderRadius:5,border:"2px solid "+(on?color:C.border),background:on?color:"white",
+        display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        {on&&<span style={{color:"white",fontSize:13,fontWeight:800}}>✓</span>}
       </div>
-      <span style={{fontSize:13,fontWeight:600,color:value?color:C.text}}>{label}</span>
+      <div style={{flex:1,minWidth:0}}>{children}</div>
     </div>
   );
 
   return (
     <Card accent="#DC2626">
-      <FHeader icon="🛡" title="Événements Sécurité" subtitle="Rapport post-vol" color="#DC2626"/>
+      <FHeader icon="🛡" title="Compte rendu d'événement" subtitle="Événements de sécurité — Manuel SGS § 05-01" color="#DC2626"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        <FSection title="Sélection du vol" color="#DC2626"/>
 
-        <div style={{display:"flex",gap:6,marginBottom:4}}>
-          {["7j","30j","Tout"].map(p=>(
-            <button key={p} onClick={()=>{setSecuPeriod(p);setVolNum("");}}
-              style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+C.border,fontSize:11,fontWeight:600,cursor:"pointer",
-                background:secuPeriod===p?C.navy:"white",color:secuPeriod===p?"white":C.slate}}>
-              {p}
-            </button>
-          ))}
+        <FSection title="Rattachement" color="#DC2626"/>
+        <div style={{display:"flex",gap:6}}>
+          <Seg v="vol" l="Vol"/><Seg v="appareil" l="Appareil"/><Seg v="hors" l="Hors vol"/>
         </div>
 
-        <input value={secuSearch} onChange={e=>setSecuSearch(e.target.value)} placeholder="🔍  CN-KTA  /  30/06/2026  /  CN-KTA 30/06/2026"
-          style={{width:"100%",height:42,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 14px",fontSize:13,outline:"none",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+        {mode==="vol"&&(<>
+          <div style={{display:"flex",gap:6}}>
+            {["7j","30j","Tout"].map(p=>(
+              <button key={p} onClick={()=>{setSecuPeriod(p);setVolNum("");}}
+                style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+C.border,fontSize:11,fontWeight:600,cursor:"pointer",
+                  background:secuPeriod===p?C.navy:"white",color:secuPeriod===p?"white":C.slate}}>{p}</button>
+            ))}
+          </div>
+          <input value={secuSearch} onChange={e=>setSecuSearch(e.target.value)} placeholder="🔍  CN-KTA  /  30/06/2026"
+            style={{width:"100%",height:42,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 14px",fontSize:13,outline:"none",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+          <CustomSelect value={volNum} onChange={setVolNum} placeholder={'-- Sélectionner un vol ('+filteredSecuFlights.length+') --'} icon='✈️' searchable
+            options={filteredSecuFlights.map(f=>({value:f.num+'|'+f.date,label:f.num+' · '+f.from+'→'+f.to,sub:f.date?.slice(8)+'/'+f.date?.slice(5,7)+'/'+f.date?.slice(0,4)}))}/>
+          {filteredSecuFlights.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12}}>Aucun vol terminé sur cette période</div>}
+        </>)}
 
-        <CustomSelect value={volNum} onChange={setVolNum} placeholder={'-- Sélectionner un vol ('+filteredSecuFlights.length+') --'} icon='✈️' searchable
-          options={filteredSecuFlights.map((f,i)=>({value:f.num+'|'+f.date,label:f.num+' · '+f.from+'→'+f.to,sub:f.date?.slice(8)+'/'+f.date?.slice(5,7)+'/'+f.date?.slice(0,4)}))}/>
-        {filteredSecuFlights.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12}}>Aucun vol terminé sur cette période</div>}
+        {mode==="appareil"&&(
+          <CustomSelect value={acId} onChange={setAcId} placeholder="-- Sélectionner l'appareil --" icon="🛩" required
+            options={(aircraft||[]).map(a=>({value:a.id,label:a.immat,sub:a.type}))}/>
+        )}
+        {mode!=="vol"&&(
+          <div>
+            <FLabel>Date de l'événement</FLabel>
+            <input type="date" value={dateEv} max={today} onChange={e=>setDateEv(e.target.value)}
+              style={{width:"100%",height:44,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:14,outline:"none"}}/>
+          </div>
+        )}
 
-        <FSection title="Événements" color="#DC2626"/>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          <Check label="Approche instable" value={approche} onChange={setApproche}/>
-          <Check label="TCAS RA" value={tcas} onChange={setTcas}/>
-          <Check label="GPWS Warning" value={gpws} onChange={setGpws}/>
-          <Check label="Hard Landing" value={hardLanding} onChange={setHardLanding}/>
-          <Check label="Inspection SAFA" value={safa} onChange={setSafa} color="#7C3AED"/>
-        </div>
+        <FSection title={"Événements"+(nbSel?" · "+nbSel+" sélectionné"+(nbSel>1?"s":""):"")} color="#DC2626"/>
+        {SAFETY_SERVICES.map(s=>{
+          const evs=SAFETY_EVENTS.filter(x=>x.svc[0]===s.k);
+          if(!evs.length) return null;
+          const n=evs.filter(x=>sel[x.k]).length, isOpen=open[s.k]||n>0;
+          return (
+            <div key={s.k} style={{border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
+              <div onClick={()=>setOpen(o=>({...o,[s.k]:!isOpen}))}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",background:s.color+"0D",borderLeft:"4px solid "+s.color,...TAP}}>
+                <span style={{fontSize:10,fontWeight:800,color:"white",background:s.color,borderRadius:5,padding:"2px 6px",letterSpacing:".04em"}}>{s.k}</span>
+                <span style={{flex:1,fontWeight:700,fontSize:13,color:C.navy}}>{s.l}</span>
+                {n>0&&<span style={{fontSize:11,fontWeight:800,color:s.color}}>{n}</span>}
+                <span style={{fontSize:11,color:C.slateL}}>{isOpen?"▲":"▼"}</span>
+              </div>
+              {isOpen&&(
+                <div style={{display:"flex",flexDirection:"column",gap:7,padding:10}}>
+                  {evs.map(x=>(
+                    <div key={x.k}>
+                      <Box on={!!sel[x.k]} color={s.color} onClick={()=>toggle(x.k)}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:sel[x.k]?s.color:C.text,lineHeight:1.3}}>
+                          {x.l}{x.def&&<span style={{fontWeight:500,color:C.slate}}> — {x.def.toLowerCase()}</span>}
+                        </div>
+                        <div style={{fontSize:10,color:C.slateL,marginTop:3}}>
+                          {x.manuel
+                            ? <>Cible {x.cible} · analyse {x.seuil}{x.svc.length>1&&<> · {x.svc.join(" · ")}</>}</>
+                            : <>Hors tableau du manuel SGS</>}
+                        </div>
+                      </Box>
+                      {x.sub&&sel[x.k]&&(
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap",margin:"7px 0 2px 30px"}}>
+                          {x.sub.map(o=>(
+                            <button key={o} onClick={()=>setUnrulyType(o)}
+                              style={{padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:700,...TAP,
+                                border:"1.5px solid "+(unrulyType===o?s.color:C.border),background:unrulyType===o?s.color:"white",color:unrulyType===o?"white":C.slate}}>{o}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
-        <FSubmit label="Enregistrer événements" onClick={submit} saved={saved}/>
+        <FSection title="Description des faits" color="#DC2626"/>
+        <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={4}
+          placeholder="Circonstances, déroulé, mesures immédiates prises…"
+          style={{width:"100%",boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",resize:"vertical"}}/>
+
+        <FSection title="Diffusion" color="#DC2626"/>
+        <Box on={conf} color="#475569" onClick={()=>setConf(v=>!v)}>
+          <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Confidentiel</div>
+          <div style={{fontSize:10,color:C.slateL,marginTop:2}}>La description n'est consultable que par le responsable Qualité / SGS.</div>
+        </Box>
+        <Box on={anon} color="#475569" onClick={()=>setAnon(v=>!v)}>
+          <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Anonyme</div>
+          <div style={{fontSize:10,color:C.slateL,marginTop:2}}>Aucune demande de précision ni retour d'information ne sera possible (Manuel SGS 02-01 § 1.1).</div>
+        </Box>
+
+        <FSubmit label="Enregistrer le compte rendu" onClick={submit} saved={saved}/>
       </div>
     </Card>
   );
@@ -2534,16 +2624,72 @@ const AS_SECTIONS = [
 const RE_PHASES = ['Stationnement','Roulage','Décollage','Montée','Croisière',
   'Descente','Approche','Atterrissage','Après atterrissage','Au sol — maintenance'];
 
-// Libellés des indicateurs enregistrés dans le formulaire Sécurité
-const SAFETY_FLAGS = [
-  {k:'approche',    l:'Approche non stabilisée'},
-  {k:'tcas',        l:'TCAS RA'},
-  {k:'gpws',        l:'Alerte GPWS / EGPWS'},
-  {k:'hardLanding', l:'Atterrissage dur'},
-  {k:'safa',        l:'Constat SAFA'},
+// ── Registre des événements de sécurité ──────────────────────────────────────
+// Aligné sur le Manuel SGS Afrijet Sahara V03, SGS 05-01 § 1.7 (indicateurs de
+// sécurité) : service concerné, valeur cible et seuil de déclenchement d'analyse
+// repris tels qu'au manuel. Les événements marqués « manuel:false » ne figurent
+// pas au tableau du manuel mais sont conservés (données historiques, analyses).
+// Les clés existantes (approche, tcas, gpws, hardLanding, safa) sont inchangées :
+// les événements déjà enregistrés restent lisibles.
+const SAFETY_SERVICES = [
+  {k:'FLT', l:'Vol',              color:'#0369A1'},
+  {k:'CAB', l:'Cabine',           color:'#BE185D'},
+  {k:'GRH', l:'Assistance sol',   color:'#B45309'},
+  {k:'CGO', l:'Fret',             color:'#047857'},
+  {k:'MNT', l:'Maintenance',      color:'#475569'},
+  {k:'SEC', l:'Sûreté',           color:'#6D28D9'},
 ];
+const SAFETY_EVENTS = [
+  // Vol
+  {k:'cfg',         svc:['FLT'],             l:'Anomalie de configuration décollage / atterrissage', cible:'2 / mois',  seuil:'dès le 3ᵉ',   manuel:true},
+  {k:'atc',         svc:['FLT'],             l:'Incident ATC',                                        cible:'1 / an',    seuil:'dès le 2ᵉ',   manuel:true},
+  {k:'hardLanding', svc:['FLT'],             l:'Atterrissage dur',                                    cible:'0',         seuil:'dès le 1ᵉʳ',  manuel:true},
+  {k:'tailstrike',  svc:['FLT'],             l:'Tailstrike',                                          cible:'0',         seuil:'dès le 1ᵉʳ',  manuel:true},
+  {k:'bird',        svc:['FLT','MNT'],       l:'Collision aviaire',                                   cible:'2 / mois',  seuil:'au-delà du 2ᵉ', manuel:true},
+  {k:'qrf',         svc:['FLT','MNT'],       l:'QRF',  def:'Retour au terrain après décollage',        cible:'6 / mois',  seuil:'au-delà de 6, même motif', manuel:true},
+  {k:'qrp',         svc:['FLT','MNT'],       l:'QRP',  def:'Retour au parking avant décollage',        cible:'6 / mois',  seuil:'au-delà de 6, même motif', manuel:true},
+  {k:'tsv',         svc:['FLT','CAB'],       l:'Dépassement de TSV',                                  cible:'1 / mois',  seuil:'dès 2 en 30 jours', manuel:true},
+  {k:'fuel',        svc:['FLT','GRH','MNT'], l:'Anomalie carburant (pollution)',                      cible:'2 / an',    seuil:'dès le 3ᵉ',   manuel:true},
+  {k:'approche',    svc:['FLT'],             l:'Approche non stabilisée',  manuel:false},
+  {k:'tcas',        svc:['FLT'],             l:'TCAS RA',                  manuel:false},
+  {k:'gpws',        svc:['FLT'],             l:'Alerte GPWS / EGPWS',      manuel:false},
+  {k:'safa',        svc:['FLT'],             l:'Constat SAFA',             manuel:false},
+  // Cabine
+  {k:'peqIncap',    svc:['CAB','FLT'],       l:'Incapacité PEQ',                                      cible:'1 / an',    seuil:'dès le 2ᵉ',   manuel:true},
+  {k:'peqInjury',   svc:['CAB','FLT'],       l:'Blessure PEQ',                                        cible:'1 / an',    seuil:'dès le 2ᵉ',   manuel:true},
+  {k:'unruly',      svc:['CAB','GRH','SEC'], l:'Passager indiscipliné',                               cible:'2 / an',    seuil:'dès le 3ᵉ',   manuel:true,
+     sub:['Non admis','Débarqué','Signalé à la gendarmerie']},
+  // Assistance sol
+  {k:'loadsheet',   svc:['GRH','FLT'],       l:'Non-conformité loadsheet / chargement',               cible:'100 % conforme', seuil:'dès diminution', manuel:true},
+  {k:'groundInjury',svc:['GRH'],             l:'Blessure du personnel au sol',                        cible:'0',         seuil:'dès le 1ᵉʳ',  manuel:true},
+  // Fret
+  {k:'cgoProc',     svc:['CGO'],             l:'Non-respect procédure dépôt / livraison fret',        cible:'0',         seuil:'dès le 1ᵉʳ',  manuel:true},
+  {k:'dg',          svc:['CGO','GRH','SEC'], l:'Marchandises dangereuses non déclarées (CRI MD)',     cible:'0',         seuil:"dès l'émission", manuel:true},
+  // Maintenance
+  {k:'aog',         svc:['MNT'],             l:"Panne avec plus d'une heure d'immobilisation",        cible:'25 / trimestre', seuil:'au-delà', manuel:true},
+];
+const SAFETY_BY_KEY = Object.fromEntries(SAFETY_EVENTS.map(e=>[e.k,e]));
+const svcColor = k => (SAFETY_SERVICES.find(s=>s.k===k)||{}).color || '#64748B';
+// Compatibilité : les générateurs et analyses lisent SAFETY_FLAGS {k,l}
+const SAFETY_FLAGS = SAFETY_EVENTS.map(e=>({k:e.k, l:e.def?`${e.l} (${e.def.toLowerCase()})`:e.l}));
 function safetyLabels(e){
   return SAFETY_FLAGS.filter(f=>e && e[f.k]).map(f=>f.l);
+}
+// Pastilles colorées d'un événement, dans l'ordre du registre
+function safetyChips(e){
+  return SAFETY_EVENTS.filter(x=>e && e[x.k]).map(x=>({
+    k:x.k, l:x.k==='unruly'&&e.unrulyType ? x.l+' — '+e.unrulyType.toLowerCase() : x.l,
+    color:svcColor(x.svc[0])
+  }));
+}
+function SafetyChips({ e, size=10 }){
+  return (
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+      {safetyChips(e).map(ch=>(
+        <span key={ch.k} style={{background:ch.color+"18",color:ch.color,padding:"2px 8px",borderRadius:8,fontSize:size,fontWeight:600}}>{ch.l}</span>
+      ))}
+    </div>
+  );
 }
 
 const NDS_DIFFUSION = [
@@ -3398,7 +3544,7 @@ Les recommandations doivent être concrètes et proportionnées au volume consta
 NOMBRE TOTAL D'ÉVÉNEMENTS ENREGISTRÉS : ${evs.length}
 
 COMPTE PAR INDICATEUR :
-${SAFETY_FLAGS.map(f=>`${f.l} : ${compte[f.l]}`).join('\n')}
+${SAFETY_EVENTS.map(x=>{const f=SAFETY_FLAGS.find(y=>y.k===x.k); return `${f.l} : ${compte[f.l]}`+(x.manuel?` (valeur cible ${x.cible}, seuil d'analyse ${x.seuil})`:' (hors tableau du manuel SGS)');}).join('\n')}
 
 RÉPARTITION PAR APPAREIL :
 ${Object.entries(parAppareil).map(([k,v])=>`${k} : ${v}`).join('\n')||'—'}
@@ -4444,7 +4590,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)} flights={flights}/>}
       {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
       {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
-      {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} saved={saved}/>}
+      {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {effectiveActive==="regl"     && <FormReglementation/>}
       {effectiveActive==="docavion" && <FormDocAvion/>}
@@ -4852,11 +4998,7 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
                   <div style={{fontWeight:700,fontSize:12,color:"#DC2626",marginBottom:8}}>🛡 Événements sécurité associés</div>
                   {evts.map((e,i)=>(
                     <div key={i} style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:i<evts.length-1?6:0}}>
-                      {e.approche&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Approche instable</span>}
-                      {e.tcas&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>TCAS RA</span>}
-                      {e.gpws&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>GPWS Warning</span>}
-                      {e.hardLanding&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Hard Landing</span>}
-                      {e.safa&&<span style={{background:"#EDE9FE",color:"#7C3AED",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>SAFA</span>}
+                      {safetyChips(e).map(ch=>(<span key={ch.k} style={{background:ch.color+"18",color:ch.color,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>{ch.l}</span>))}
                     </div>
                   ))}
                 </div>
@@ -5129,62 +5271,35 @@ function ScreenSecu({ safetyData, flights }) {
   const [filterType,setFilterType]=React.useState("Tous");
   const [histFilter,setHistFilter]=React.useState("Tout");
 
-  // Filter safetyData by period and type
+  // Un événement relève d'un service si l'un de ses types cochés le concerne
+  const svcOfEvent=e=>{ const set=new Set(); SAFETY_EVENTS.forEach(x=>{ if(e[x.k]) x.svc.forEach(v=>set.add(v)); }); return set; };
   const days=filterPeriod==="7j"?7:filterPeriod==="30j"?30:36500;
   const filtered=safetyData.filter(e=>{
     const d=new Date(e.date);
     const inPeriod=(now-d)/(1000*60*60*24)<=days;
-    const inType=filterType==="Tous"||(
-      filterType==="Approche"&&e.approche||
-      filterType==="TCAS"&&e.tcas||
-      filterType==="GPWS"&&e.gpws||
-      filterType==="Hard Landing"&&e.hardLanding||
-      filterType==="SAFA"&&e.safa
-    );
+    const inType=filterType==="Tous"||svcOfEvent(e).has(filterType);
     return inPeriod&&inType;
   });
 
-  // Group by week for charts
+  // Regroupement hebdomadaire, par service
   const byWeek={};
   filtered.forEach(e=>{
     const d=new Date(e.date);
     const mon=new Date(d);const wd=d.getDay()||7;mon.setDate(d.getDate()-wd+1);
     const wk=mon.toISOString().slice(5,10);
-    if(!byWeek[wk])byWeek[wk]={date:wk,approche:0,tcas:0,gpws:0,hardLanding:0,safa:0,total:0};
-    if(e.approche)byWeek[wk].approche++;
-    if(e.tcas)byWeek[wk].tcas++;
-    if(e.gpws)byWeek[wk].gpws++;
-    if(e.hardLanding)byWeek[wk].hardLanding++;
-    if(e.safa)byWeek[wk].safa++;
+    if(!byWeek[wk]){ byWeek[wk]={date:wk,total:0}; SAFETY_SERVICES.forEach(s=>byWeek[wk][s.k]=0); }
+    svcOfEvent(e).forEach(k=>byWeek[wk][k]++);
     byWeek[wk].total++;
   });
   const weeks=Object.values(byWeek).sort((a,b)=>a.date.localeCompare(b.date));
   const volsDone=flights.filter(f=>f.status==="Termine").length||1;
+  const parService=SAFETY_SERVICES.map(s=>({...s,n:filtered.filter(e=>svcOfEvent(e).has(s.k)).length}));
+  const parType=SAFETY_EVENTS.map(x=>({...x,n:filtered.filter(e=>e[x.k]).length})).filter(x=>x.n>0).sort((p,q)=>q.n-p.n);
 
-  const totals={
-    approche:filtered.filter(e=>e.approche).length,
-    tcas:filtered.filter(e=>e.tcas).length,
-    gpws:filtered.filter(e=>e.gpws).length,
-    hardLanding:filtered.filter(e=>e.hardLanding).length,
-    safa:filtered.filter(e=>e.safa).length,
-  };
-
-  const SecuTile=({label,count,icon,color})=>{
-    const pct=Math.round(count/volsDone*100*10)/10;
-    return (
-      <div style={{background:"white",borderRadius:12,border:"1.5px solid "+(count>0?color:C.border),padding:"12px",textAlign:"center"}}>
-        <div style={{fontSize:20,marginBottom:4}}>{icon}</div>
-        <div style={{fontSize:22,fontWeight:800,color:count>0?color:C.emerald}}>{count}</div>
-        <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase",marginTop:2}}>{label}</div>
-        <div style={{fontSize:10,color:C.slateL,marginTop:2}}>{pct}% des vols</div>
-      </div>
-    );
-  };
-
-  const FilterBtn=({val,active,onClick})=>(
+  const FilterBtn=({val,active,onClick,color})=>(
     <button onClick={onClick}
-      style={{padding:"3px 9px",borderRadius:8,border:"1px solid "+C.border,
-        background:active?C.navy:"white",color:active?"white":C.slate,
+      style={{padding:"3px 9px",borderRadius:8,border:"1px solid "+(active?(color||C.navy):C.border),
+        background:active?(color||C.navy):"white",color:active?"white":C.slate,
         fontSize:10,fontWeight:700,...TAP}}>
       {val}
     </button>
@@ -5193,48 +5308,59 @@ function ScreenSecu({ safetyData, flights }) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
 
-      {/* Filtres période */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
         <span style={{fontSize:10,fontWeight:700,color:C.slate}}>Période :</span>
         {["7j","30j","Tout"].map(f=>(
           <FilterBtn key={f} val={f} active={filterPeriod===f} onClick={()=>setFilterPeriod(f)}/>
         ))}
       </div>
-
-      {/* Filtres type */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:10,fontWeight:700,color:C.slate}}>Type :</span>
-        {["Tous","Approche","TCAS","GPWS","Hard Landing","SAFA"].map(f=>(
-          <FilterBtn key={f} val={f} active={filterType===f} onClick={()=>setFilterType(f)}/>
+        <span style={{fontSize:10,fontWeight:700,color:C.slate}}>Service :</span>
+        <FilterBtn val="Tous" active={filterType==="Tous"} onClick={()=>setFilterType("Tous")}/>
+        {SAFETY_SERVICES.map(s=>(
+          <FilterBtn key={s.k} val={s.l} color={s.color} active={filterType===s.k} onClick={()=>setFilterType(s.k)}/>
         ))}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <SecuTile label="Approche instable" count={totals.approche} icon="⚠️" color="#DC2626"/>
-        <SecuTile label="TCAS RA" count={totals.tcas} icon="📡" color="#DC2626"/>
-        <SecuTile label="GPWS Warning" count={totals.gpws} icon="🔔" color="#D97706"/>
-        <SecuTile label="Hard Landing" count={totals.hardLanding} icon="✈️" color="#D97706"/>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
-        <SecuTile label="Inspection SAFA" count={totals.safa} icon="🛡" color="#7C3AED"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        {parService.map(s=>(
+          <div key={s.k} style={{background:"white",borderRadius:12,border:"1.5px solid "+(s.n>0?s.color:C.border),padding:"10px 6px",textAlign:"center"}}>
+            <div style={{fontSize:9,fontWeight:800,color:"white",background:s.color,borderRadius:4,padding:"1px 5px",display:"inline-block"}}>{s.k}</div>
+            <div style={{fontSize:20,fontWeight:800,color:s.n>0?s.color:C.emerald,marginTop:4}}>{s.n}</div>
+            <div style={{fontSize:9,color:C.slate,fontWeight:700,textTransform:"uppercase"}}>{s.l}</div>
+          </div>
+        ))}
       </div>
 
       {filtered.length===0&&(
         <Card><div style={{textAlign:"center",color:C.slateL,fontSize:13,padding:16}}>Aucun événement sur cette période</div></Card>
       )}
 
+      {parType.length>0&&(
+        <Card>
+          <SectionTitle>Par type d'événement</SectionTitle>
+          {parType.map((x,i)=>(
+            <div key={x.k} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<parType.length-1?"1px solid "+C.border:"none"}}>
+              <span style={{width:4,alignSelf:"stretch",borderRadius:2,background:svcColor(x.svc[0])}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,color:C.text}}>{x.l}{x.def&&<span style={{color:C.slate,fontWeight:500}}> — {x.def.toLowerCase()}</span>}</div>
+                <div style={{fontSize:10,color:C.slateL}}>{x.manuel?("Cible "+x.cible+" · analyse "+x.seuil):"Hors tableau du manuel SGS"}</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:16,fontWeight:800,color:svcColor(x.svc[0])}}>{x.n}</div>
+                <div style={{fontSize:9,color:C.slateL}}>{Math.round(x.n/volsDone*1000)/10}% des vols</div>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
       {weeks.length>=2&&(
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          {[
-            {key:"approche",label:"Approches instables",color:C.danger},
-            {key:"tcas",label:"TCAS RA",color:C.danger},
-            {key:"gpws",label:"GPWS Warnings",color:C.warn},
-            {key:"hardLanding",label:"Hard Landings",color:C.warn},
-            {key:"safa",label:"Inspections SAFA",color:"#7C3AED"},
-          ].filter(({key})=>weeks.some(w=>w[key]>0)).map(({key,label,color})=>(
-            <ChartCard key={key} title={label} icon="🛡"
-              data={weeks.map(w=>({label:w.date,val:w[key]}))}
-              color={color} minVal={0} unit="" showTotal={true}/>
+          {SAFETY_SERVICES.filter(s=>weeks.some(w=>w[s.k]>0)).map(s=>(
+            <ChartCard key={s.k} title={"Événements — "+s.l} icon="🛡"
+              data={weeks.map(w=>({label:w.date,val:w[s.k]}))}
+              color={s.color} minVal={0} unit="" showTotal={true}/>
           ))}
         </div>
       )}
@@ -5266,11 +5392,7 @@ function ScreenSecu({ safetyData, flights }) {
                   <span style={{fontSize:10,color:C.slateL,marginLeft:"auto"}}>{e.date?.slice(8)}/{e.date?.slice(5,7)}/{e.date?.slice(2,4)}</span>
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {e.approche&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Approche instable</span>}
-                  {e.tcas&&<span style={{background:"#FEE2E2",color:"#DC2626",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>TCAS RA</span>}
-                  {e.gpws&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>GPWS Warning</span>}
-                  {e.hardLanding&&<span style={{background:"#FEF3C7",color:"#D97706",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>Hard Landing</span>}
-                  {e.safa&&<span style={{background:"#EDE9FE",color:"#7C3AED",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>SAFA</span>}
+                  {safetyChips(e).map(ch=>(<span key={ch.k} style={{background:ch.color+"18",color:ch.color,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>{ch.l}</span>))}
                 </div>
               </div>
             ));
@@ -5814,15 +5936,13 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
     )+
     (()=>{
       const sd=safetyData||[];
-      const tot={approche:sd.filter(e=>e.approche).length,tcas:sd.filter(e=>e.tcas).length,gpws:sd.filter(e=>e.gpws).length,hardLanding:sd.filter(e=>e.hardLanding).length,safa:sd.filter(e=>e.safa).length};
+      // Tous les types du registre survenus, du plus fréquent au moins fréquent
+      const types=SAFETY_EVENTS.map(x=>({l:SAFETY_FLAGS.find(f=>f.k===x.k).l,n:sd.filter(e=>e[x.k]).length,color:svcColor(x.svc[0])})).filter(x=>x.n>0).sort((p,q)=>q.n-p.n);
       const vd=flights.filter(f=>f.status==="Termine").length||1;
       const secRow=(label,count,color)=>"<div style='display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #EEF2F8'><div style='flex:1;font-size:12px;color:#475569'>"+label+"</div><div style='font-weight:800;font-size:13px;color:"+(count>0?color:"#00936A")+";min-width:28px;text-align:right;padding-right:12px'>"+count+"</div><span style='background:"+(count>0?"#FEE2E2":"#D1FAE5")+";color:"+(count>0?color:"#065F46")+";padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;min-width:52px;text-align:center;display:inline-block'>"+(Math.round(count/vd*1000)/10)+"%</span></div>";
       return card(sec("Sécurité Opérationnelle","#DC2626")+
-        secRow("Approches instables",tot.approche,"#DC2626")+
-        secRow("TCAS RA",tot.tcas,"#DC2626")+
-        secRow("GPWS Warnings",tot.gpws,"#D97706")+
-        secRow("Hard Landings",tot.hardLanding,"#D97706")+
-        secRow("Inspections SAFA",tot.safa,"#7C3AED")
+        (types.length ? types.map(x=>secRow(x.l,x.n,x.color)).join("")
+                      : "<div style='padding:10px 12px;font-size:12px;color:#00936A'>Aucun événement de sécurité enregistré</div>")
       );
     })()+
     (fd.length>0?card(sec("Finances Cumul "+now.getFullYear(),"#7C3AED")+
@@ -7057,13 +7177,10 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
                 const sd=safetyData||[];
                 drawSection("  SECURITE OPERATIONNELLE",220,38,38);
                 const vdP=flights.filter(f=>f.status==="Termine").length||1;
-                const secItems=[
-                  ["Approches instables",sd.filter(e=>e.approche).length],
-                  ["TCAS RA",sd.filter(e=>e.tcas).length],
-                  ["GPWS Warnings",sd.filter(e=>e.gpws).length],
-                  ["Hard Landings",sd.filter(e=>e.hardLanding).length],
-                  ["Inspections SAFA",sd.filter(e=>e.safa).length]
-];
+                // Tous les types du registre survenus ; une ligne neutre si aucun
+                const secItems=SAFETY_EVENTS.map(x=>[SAFETY_FLAGS.find(f=>f.k===x.k).l,sd.filter(e=>e[x.k]).length])
+                  .filter(([,n])=>n>0).sort((p,q)=>q[1]-p[1]);
+                if(!secItems.length) secItems.push(["Aucun événement de sécurité enregistré",0]);
                 secItems.forEach(([label,count],i)=>{
                   const pct=Math.round(count/vdP*1000)/10;
                   drawRow(label,count+" ("+pct+"%)",count===0,i===secItems.length-1);
