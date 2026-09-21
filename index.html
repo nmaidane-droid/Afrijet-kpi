@@ -4631,11 +4631,96 @@ Diffusion prévue : ${to||'Non précisée'}`;
 }
 
 
+// ── Visionneuse PDF intégrée (pdf.js, chargé à la première ouverture) ──
+// Chrome Android ne sait pas afficher un PDF : sans visionneuse, il le télécharge.
+const PDFJS_BASE = "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/";
+let _pdfjsPromise = null;
+function loadPdfJs(){
+  if (!_pdfjsPromise) {
+    // import() dynamique hors Babel (sinon transformé à la compilation)
+    const imp = new Function("u", "return import(u)");
+    _pdfjsPromise = imp(PDFJS_BASE + "pdf.min.mjs").then(m => {
+      m.GlobalWorkerOptions.workerSrc = PDFJS_BASE + "pdf.worker.min.mjs";
+      return m;
+    }).catch(e => { _pdfjsPromise = null; throw e; });
+  }
+  return _pdfjsPromise;
+}
+function dataUrlToBytes(u){
+  const b64 = String(u).slice(String(u).indexOf(",") + 1);
+  const bin = atob(b64), out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function PdfViewer({ name, dataUrl, canDownload, onClose }){
+  const boxRef = React.useRef(null);
+  const [pdf, setPdf] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  const [zoom, setZoom] = React.useState(1);
+  const [page, setPage] = React.useState(1);
+  React.useEffect(() => {
+    let alive = true, task = null;
+    loadPdfJs().then(lib => { task = lib.getDocument({ data: dataUrlToBytes(dataUrl) }); return task.promise; })
+      .then(d => { if (alive) setPdf(d); })
+      .catch(e => { logSilent(e); if (alive) setErr("Impossible d'afficher ce document. Vérifiez la connexion, puis réessayez."); });
+    return () => { alive = false; try { task && task.destroy(); } catch(_e){ logSilent(_e); } };
+  }, [dataUrl]);
+  // Rendu de toutes les pages à la largeur de l'écran × zoom
+  React.useEffect(() => {
+    if (!pdf || !boxRef.current) return;
+    let stop = false; const box = boxRef.current; box.innerHTML = "";
+    const width = box.clientWidth - 16, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    (async () => {
+      for (let i = 1; i <= pdf.numPages && !stop; i++) {
+        const p = await pdf.getPage(i);
+        const base = p.getViewport({ scale: 1 });
+        const scale = (width / base.width) * zoom;
+        const vp = p.getViewport({ scale: scale * dpr });
+        const cv = document.createElement("canvas");
+        cv.width = vp.width; cv.height = vp.height; cv.dataset.page = i;
+        cv.style.cssText = "display:block;margin:0 auto 8px;background:white;box-shadow:0 1px 4px rgba(0,0,0,.35);width:" + (vp.width / dpr) + "px;height:" + (vp.height / dpr) + "px";
+        box.appendChild(cv);
+        await p.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise;
+      }
+    })().catch(e => logSilent(e));
+    return () => { stop = true; };
+  }, [pdf, zoom]);
+  const onScroll = e => {
+    const el = e.currentTarget, cvs = el.querySelectorAll("canvas");
+    // Page visible à mi-hauteur ; en bas du document, la dernière page
+    const mid = el.scrollTop + el.clientHeight / 2;
+    let cur = 1; cvs.forEach(c => { if (c.offsetTop <= mid) cur = Number(c.dataset.page); });
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4 && cvs.length) cur = cvs.length;
+    setPage(cur);
+  };
+  const download = () => { const a = document.createElement("a"); a.href = dataUrl; a.download = name + ".pdf"; a.click(); };
+  const hb = { height: 34, minWidth: 34, borderRadius: 8, border: "1.5px solid " + C.border, background: "white", color: C.navy, fontSize: 15, fontWeight: 800, ...TAP };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#525659", display: "flex", flexDirection: "column" }}>
+      <div style={{ background: "white", padding: "10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top, 0px))", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px rgba(0,0,0,.25)" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.navy, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+          <div style={{ fontSize: 11, color: C.slate }}>{pdf ? "Page " + page + " / " + pdf.numPages : err ? "" : "Chargement…"}</div>
+        </div>
+        <button aria-label="Réduire" onClick={() => setZoom(z => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))} style={hb}>−</button>
+        <button aria-label="Agrandir" onClick={() => setZoom(z => Math.min(3, Math.round((z + 0.25) * 100) / 100))} style={hb}>+</button>
+        {canDownload && <button aria-label="Télécharger" onClick={download} style={hb}>⬇</button>}
+        <button aria-label="Fermer" onClick={onClose} style={{ ...hb, background: C.navy, color: "white", border: "none" }}>✕</button>
+      </div>
+      {err
+        ? <div style={{ color: "white", textAlign: "center", padding: 30, fontSize: 13.5 }}>{err}</div>
+        : <div ref={boxRef} onScroll={onScroll} style={{ flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch", padding: "8px 8px 24px", position: "relative" }}/>}
+    </div>
+  );
+}
+
 function FormDocStore({ storeKey, label, readOnly }) {  // readOnly : consultation seule
   const PFX_DOCS = PFX + storeKey + "_";
   const [docs, setDocs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [msg, setMsg] = React.useState("");
+  const [viewing, setViewing] = React.useState(null);   // { name, dataUrl }
 
   React.useEffect(() => {
     (async () => {
@@ -4701,13 +4786,13 @@ function FormDocStore({ storeKey, label, readOnly }) {  // readOnly : consultati
     if (!b64) b64 = await sbGet(PFX + "reglementation_" + doc.id);
     if (!b64) b64 = await sbGet(PFX + "docavion_" + doc.id);
     if (!b64) { setMsg("❌ Fichier introuvable. Veuillez le ré-importer."); return; }
-    const link = document.createElement("a");
-    link.href = b64; link.download = doc.name + ".pdf"; link.click();
+    setViewing({ name: doc.name, dataUrl: b64 });   // affichage dans l'application, sans téléchargement
     setMsg("");
   };
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {viewing && <PdfViewer name={viewing.name} dataUrl={viewing.dataUrl} canDownload={!readOnly} onClose={()=>setViewing(null)}/>}
       {msg && <div style={{background:"#F0FDF4",border:"1px solid #86EFAC",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#166534"}}>{msg}</div>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
         <div style={{fontSize:13,fontWeight:700,color:C.navy}}>{docs.length} document(s) {label}</div>
@@ -4975,6 +5060,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
           <div style={{flex:1}}>
             <div style={{fontWeight:800,fontSize:15,color:C.navy}}>Formulaires de saisie</div>
             <div style={{fontSize:11,color:C.slate}}>Saisie par departement</div>
+            <UpdateStatusLine/>
           </div>
         </div>
         <ActionBar isAdmin={isAdmin} doExport={doExport} onRestore={onRestore} onReset={onReset} onLogout={onLogout}/>
@@ -7088,16 +7174,36 @@ function currentBuild(){
   const m=document.querySelector('meta[name="app-build"]');
   return m ? m.getAttribute('content') : null;
 }
+// État de la détection de version, affiché par la ligne de diagnostic
+const UPD_STATUS={ remote:null, at:null, error:null };
+function updSet(p){ Object.assign(UPD_STATUS,p,{at:new Date()}); try{ window.dispatchEvent(new Event('afrijet-upd')); }catch(e){ logSilent(e); } }
 async function fetchRemoteBuild(){
   try{
     if(currentBuild()){
       const r=await fetch('/version.json?t='+Date.now(),{cache:'no-store'});
-      if(r.ok){ const j=await r.json(); return j&&j.build ? String(j.build) : null; }
-      return null;
+      if(!r.ok){ updSet({remote:null,error:'version.json : HTTP '+r.status}); return null; }
+      let j=null; try{ j=await r.json(); }catch(_e){ updSet({remote:null,error:'version.json illisible'}); return null; }
+      if(!j||!j.build){ updSet({remote:null,error:'version.json sans identifiant'}); return null; }
+      updSet({remote:String(j.build),error:null}); return String(j.build);
     }
     const r=await fetch('/?t='+Date.now(),{method:'HEAD',cache:'no-store'});
-    return r.headers.get('etag')||r.headers.get('last-modified')||null;
-  }catch(e){ logSilent(e); return null; }
+    const v=r.headers.get('etag')||r.headers.get('last-modified')||null;
+    updSet({remote:v,error:v?null:'aucun identifiant de version (page sans balise app-build)'}); return v;
+  }catch(e){ logSilent(e); updSet({remote:null,error:'réseau indisponible'}); return null; }
+}
+// Ligne de diagnostic : version affichée, heure de la dernière vérification.
+// Un toucher force une vérification immédiate (et recharge si une version plus récente existe).
+function UpdateStatusLine(){
+  const [,tick]=useState(0);
+  useEffect(()=>{ const f=()=>tick(n=>n+1); window.addEventListener('afrijet-upd',f); return ()=>window.removeEventListener('afrijet-upd',f); },[]);
+  const cur=currentBuild(), s=UPD_STATUS;
+  const h=s.at?s.at.toLocaleTimeString('fr-FR'):null;
+  const nouvelle=s.remote&&cur&&s.remote!==cur;
+  const txt='Version '+(cur||'?')+(s.error?' · vérification échouée'+(h?' à '+h:'')+' : '+s.error
+    :nouvelle?' · nouvelle version '+s.remote+' disponible'
+    :h?' · vérifiée à '+h:' · vérification en attente');
+  return <div onClick={()=>{ if(window.__afrijetCheckUpdate) window.__afrijetCheckUpdate(true); }}
+    style={{fontSize:9.5,color:s.error?"#B45309":nouvelle?"#DC2626":C.slateL,marginTop:3,...TAP}}>{txt}</div>;
 }
 function UpdateWatcher(){
   const [avail,setAvail]=useState(false);
