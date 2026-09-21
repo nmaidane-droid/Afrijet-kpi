@@ -6278,7 +6278,75 @@ function DialogHost(){
   );
 }
 
-function App(){ return (<><AppInner/><DialogHost/></>); }
+
+// ── Détection des nouvelles versions ─────────────────────────────────────────
+// Sur mobile, revenir sur l'application ne la recharge pas : Chrome reprend la
+// page gardée en mémoire. L'application vérifie donc elle-même, au retour au
+// premier plan et toutes les 5 minutes, si une version plus récente est en ligne.
+//  - au retour sur l'application : rechargement automatique (rien en cours) ;
+//  - pendant l'utilisation : simple bandeau, pour ne jamais perdre une saisie.
+// Référence : meta app-build + version.json produits par build.js. À défaut
+// (page servie sans construction), l'en-tête ETag de la page fait foi.
+const UPD_INTERVAL_MS = 5*60*1000;
+function currentBuild(){
+  const m=document.querySelector('meta[name="app-build"]');
+  return m ? m.getAttribute('content') : null;
+}
+async function fetchRemoteBuild(){
+  try{
+    if(currentBuild()){
+      const r=await fetch('/version.json?t='+Date.now(),{cache:'no-store'});
+      if(r.ok){ const j=await r.json(); return j&&j.build ? String(j.build) : null; }
+      return null;
+    }
+    const r=await fetch('/?t='+Date.now(),{method:'HEAD',cache:'no-store'});
+    return r.headers.get('etag')||r.headers.get('last-modified')||null;
+  }catch(e){ logSilent(e); return null; }
+}
+function UpdateWatcher(){
+  const [avail,setAvail]=useState(false);
+  const baseRef=useRef(currentBuild());      // version affichée
+  const busyRef=useRef(false);
+  const reloadNow=()=>{
+    try{ SYNC.flushAll(); }catch(e){ logSilent(e); }   // envoyer ce qui est en attente
+    setTimeout(()=>location.reload(),400);
+  };
+  const check=async(auto)=>{
+    if(busyRef.current) return; busyRef.current=true;
+    try{
+      const remote=await fetchRemoteBuild();
+      if(!remote) return;
+      if(!baseRef.current){ baseRef.current=remote; return; }   // première mesure (mode ETag)
+      if(remote===baseRef.current) return;
+      // Garde-fou : un seul rechargement automatique par version, pour ne jamais
+      // boucler si un cache servait encore l'ancienne page.
+      const tried=sessionStorage.getItem('afrijet_reload_for');
+      if(auto && tried!==remote){ sessionStorage.setItem('afrijet_reload_for',remote); reloadNow(); }
+      else setAvail(true);
+    } finally { busyRef.current=false; }
+  };
+  useEffect(()=>{
+    window.__afrijetCheckUpdate=check;   // utilisé par les tests
+    check(false);
+    const onVis=()=>{ if(document.visibilityState==="visible") check(true); };
+    document.addEventListener("visibilitychange",onVis);
+    window.addEventListener("focus",onVis);
+    const id=setInterval(()=>{ if(document.visibilityState==="visible") check(false); },UPD_INTERVAL_MS);
+    return ()=>{ document.removeEventListener("visibilitychange",onVis); window.removeEventListener("focus",onVis); clearInterval(id); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+  if(!avail) return null;
+  return (
+    <div style={{position:"fixed",left:12,right:12,bottom:BOT+10,zIndex:960,background:C.navy,color:"white",
+      borderRadius:12,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 8px 24px rgba(0,0,0,.3)"}}>
+      <span style={{fontSize:18}}>🔄</span>
+      <div style={{flex:1,fontSize:12.5,lineHeight:1.35}}><b>Nouvelle version disponible.</b><br/>Enregistrez votre saisie en cours, puis rechargez.</div>
+      <button onClick={reloadNow} style={{height:36,padding:"0 14px",background:"white",color:C.navy,border:"none",borderRadius:9,fontSize:12.5,fontWeight:800,...TAP}}>Recharger</button>
+    </div>
+  );
+}
+
+function App(){ return (<><AppInner/><DialogHost/><UpdateWatcher/></>); }
 
 function AppInner() {
   const [authed,setAuthed] = useState(()=>{

@@ -4,7 +4,7 @@
 // il reste la source, déposable et fonctionnel tel quel.
 // Si quoi que ce soit échoue, le script s'arrête en erreur : Vercel annule le
 // déploiement et laisse la version précédente en ligne.
-const fs = require('fs'), path = require('path');
+const fs = require('fs'), path = require('path'), crypto = require('crypto');
 
 const Babel = require(process.env.BABEL_PATH || '@babel/standalone');
 const SRC = path.join(__dirname, 'index.html');
@@ -25,9 +25,17 @@ const babelTag = /\s*<script src="[^"]*babel-standalone[^"]*"><\/script>/;
 if (!babelTag.test(out)) { console.error('Balise Babel introuvable'); process.exit(1); }
 out = out.replace(babelTag, '');
 
+// Identifiant de version : date de construction + empreinte du source.
+// Inscrit dans la page et publié dans version.json ; l'application compare
+// les deux pour savoir qu'une nouvelle version est en ligne.
+const BUILD = Date.now().toString(36) + '-' + crypto.createHash('sha1').update(html).digest('hex').slice(0, 8);
+if (!/<head>/.test(out)) { console.error('Balise <head> introuvable'); process.exit(1); }
+out = out.replace('<head>', `<head>\n  <meta name="app-build" content="${BUILD}">`);
+
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'index.html'), out);
+fs.writeFileSync(path.join(OUT, 'version.json'), JSON.stringify({ build: BUILD, at: new Date().toISOString() }));
 
 // Fichiers statiques servis tels quels
 const exclus = new Set(['index.html','build.js','package.json','package-lock.json','vercel.json',
@@ -38,5 +46,5 @@ for (const f of fs.readdirSync(__dirname)) {
   if (fs.statSync(s).isFile()) fs.copyFileSync(s, path.join(OUT, f));
 }
 const k = n => Math.round(n / 1024) + ' Ko';
-console.log(`Compilation : ${Date.now() - t0} ms · source ${k(html.length)} → page ${k(out.length)}`);
+console.log(`Version ${BUILD} · compilation : ${Date.now() - t0} ms · source ${k(html.length)} → page ${k(out.length)}`);
 console.log('Copiés : ' + fs.readdirSync(OUT).join(', '));
