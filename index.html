@@ -2713,6 +2713,83 @@ function sgsExportEvenements(events, { periode, svc, inclureConf, nom, evStatus,
   doc.save(ref+'.pdf'); return ref;
 }
 
+// Icônes au trait (style Tabler), dessinées en SVG pour un rendu identique partout
+const SGS_ICON_PATHS={
+  bord:['M4 4h6v8H4z','M14 4h6v5h-6z','M4 16h6v4H4z','M14 13h6v7h-6z'],
+  ev:['M4 13h3l3 3h4l3-3h3','M4 13V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z'],
+  dg:['M12 9v4','M12 17h.01','M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'],
+  ac:['M9 11l3 3l8-8','M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9'],
+  spi:['M4 19h16','M4 15l4-6l4 2l4-5l4 4'],
+  sm:['M9 11a3 3 0 1 0 0-6a3 3 0 0 0 0 6z','M3 20v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1','M16 5.1a3 3 0 0 1 0 5.8','M21 20v-1a5 5 0 0 0-3-4.6'],
+  exp:['M12 4v11','M8 11l4 4l4-4','M5 20h14'],
+  back:['M15 6l-6 6l6 6'],
+  chev:['M9 6l6 6l-6 6'],
+};
+function SgsIcon({ n, size=20, color="currentColor", sw=1.8 }){
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{display:"block",flex:"0 0 auto"}}>
+    {(SGS_ICON_PATHS[n]||[]).map((d,i)=><path key={i} d={d}/>)}</svg>;
+}
+// Largeur d'écran : tablette paysage et PC à partir de 900 px
+function useSgsWide(){
+  const [w,setW]=useState(()=>typeof window!=="undefined"&&window.innerWidth>=900);
+  useEffect(()=>{ const f=()=>setW(window.innerWidth>=900); window.addEventListener('resize',f); return ()=>window.removeEventListener('resize',f); },[]);
+  return w;
+}
+
+// Frise de statut : étapes reliées, les étapes franchies en couleur ; touchable si onPick est fourni
+function SgsStepper({ steps, value, onPick, color="#0F766E", compact }){
+  const idx=Math.max(0,steps.findIndex(s=>s.k===value));
+  return <div style={{display:"flex",gap:4}}>{steps.map((s,i)=>{ const done=i<=idx, cur=i===idx;
+    return <div key={s.k} role={onPick?"button":undefined} onClick={onPick?()=>onPick(s.k):undefined} style={{flex:1,minWidth:0,...(onPick?TAP:{})}}>
+      <div style={{height:compact?4:5,borderRadius:3,background:done?color:"#D5DDE7"}}/>
+      <div style={{fontSize:compact?10:11,marginTop:4,textAlign:"center",color:cur?color:C.slate,fontWeight:cur?800:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.l}</div></div>; })}</div>;
+}
+// Date relative : « aujourd'hui », « hier », « il y a 5 jours », « dans 3 jours »
+function sgsRel(d){
+  if(!d) return '';
+  const n=Math.round((new Date(String(d).slice(0,10)+'T12:00:00').getTime()-new Date(new Date().toISOString().slice(0,10)+'T12:00:00').getTime())/86400000);
+  if(n===0) return "aujourd'hui"; if(n===-1) return 'hier'; if(n===1) return 'demain';
+  return n<0?'il y a '+(-n)+' jours':'dans '+n+' jours';
+}
+
+// ── Bandeau de confirmation discret, avec « Annuler » (remplace les fenêtres OK) ──
+function sgsToast(msg, undo){ try{ window.dispatchEvent(new CustomEvent('sgs-toast',{detail:{msg,undo,id:Date.now()}})); }catch(e){ logSilent(e); } }
+function SgsToastHost(){
+  const [t,setT]=useState(null);
+  useEffect(()=>{ const f=e=>setT(e.detail); window.addEventListener('sgs-toast',f); return ()=>window.removeEventListener('sgs-toast',f); },[]);
+  useEffect(()=>{ if(!t) return; const id=setTimeout(()=>setT(null),6000); return ()=>clearTimeout(id); },[t]);
+  if(!t) return null;
+  return <div role="status" style={{position:"fixed",left:"50%",bottom:"calc(18px + env(safe-area-inset-bottom,0px))",transform:"translateX(-50%)",zIndex:450,
+    background:"#1a1a2e",color:"white",borderRadius:10,padding:"11px 14px",display:"flex",alignItems:"center",gap:14,fontSize:13,boxShadow:"0 6px 20px rgba(0,0,0,.25)",maxWidth:"92vw"}}>
+    <span style={{color:"#9FE1CB",fontWeight:800}}>✓</span><span style={{flex:1}}>{t.msg}</span>
+    {t.undo&&<button onClick={()=>{ t.undo(); setT(null); }} style={{border:"none",background:"none",color:"#9FE1CB",fontWeight:800,fontSize:13,padding:0,...TAP}}>Annuler</button>}
+  </div>;
+}
+// ── Indicateur : barre vers le seuil et mini-courbe sur 12 mois ──
+function SgsSpiBar({ s, safety, taux }){
+  const thr=(SGS_SPI[s.k]||{}).n||1, pct=Math.min(100,Math.round(s.n/thr*100));
+  const col=s.alerte?"#DC2626":(s.n>0&&s.n>=thr-1)?"#B45309":"#1D9E75";
+  const mois=[...Array(12)].map((_,i)=>{ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-11+i); return d.toISOString().slice(0,7); });
+  const serie=mois.map(m=>(safety||[]).filter(e=>e[s.k]&&String(e.date).slice(0,7)===m).length), mx=Math.max(1,...serie);
+  const fen=s.fenetre<=31?"30 derniers jours":s.fenetre<=92?"dernier trimestre":"12 derniers mois";
+  return <div style={{padding:"9px 0",borderTop:"1px solid "+C.border}}>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.3}}>{s.l}{s.def?<span style={{fontWeight:400,color:C.slate}}> — {s.def.toLowerCase()}</span>:null}</div>
+        <div style={{fontSize:10.5,color:C.slate,marginTop:1}}>{fen} · cible {s.cible} · analyse {s.seuil}</div></div>
+      <svg width="54" height="20" viewBox="0 0 54 20" aria-label="Tendance sur 12 mois" style={{flex:"0 0 auto"}}>
+        <polyline fill="none" stroke="#94A3B8" strokeWidth="1.5" strokeLinejoin="round" points={serie.map((v,i)=>(i*54/11).toFixed(1)+','+(18-v/mx*16).toFixed(1)).join(' ')}/></svg>
+      <div style={{textAlign:"right",minWidth:46}}><div style={{fontSize:16,fontWeight:800,color:col,lineHeight:1.1}}>{s.k==='loadsheet'?taux+' %':s.n}</div>
+        <div style={{fontSize:10,color:C.slate}}>{s.k==='loadsheet'?'conformité':'seuil '+thr}</div></div>
+    </div>
+    <div style={{height:6,borderRadius:3,background:"#EEF2F6",marginTop:7,overflow:"hidden"}}><div style={{height:"100%",width:Math.max(s.n?4:0,pct)+"%",background:col,borderRadius:3}}/></div>
+  </div>;
+}
+// Mise en évidence des mentions « [à compléter] »
+function sgsMarkTodo(txt){
+  const parts=String(txt||'').split('[à compléter]');
+  return parts.map((p,i)=><React.Fragment key={i}>{p}{i<parts.length-1&&<span style={{background:"#FAEEDA",color:"#633806",fontWeight:700,borderRadius:4,padding:"0 3px"}}>[à compléter]</span>}</React.Fragment>);
+}
+
 function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, onBack }){
   const nomResp=(responsable||'').trim()||SGS_RESP_DEFAUT;
   const [nomEdit,setNomEdit]=useState(nomResp);
@@ -2720,6 +2797,9 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   // Enregistré à la sortie du champ ; vide → nom par défaut
   const commitNom=()=>{ const v=nomEdit.trim()||SGS_RESP_DEFAUT; setNomEdit(v); if(v!==nomResp&&setResponsable) setResponsable(v); };
   const [tab,setTab]=useState('bord');
+  const wide=useSgsWide();
+  const [expMenu,setExpMenu]=useState(false);
+  const [view,setView]=useState(null);   // fiche en lecture : {kind:'hazard'|'action', id}
   const [edit,setEdit]=useState(null);        // { kind:'hazard'|'action', data }
   const [evFilter,setEvFilter]=useState('todo');
   const [qE,setQE]=useState('');                          // recherche événements
@@ -2748,7 +2828,13 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const bullAuto=(ndsArchive||[]).filter(r=>/^NS-SEC-/.test(r.ref||'')).map(r=>({date:(String(r.ref).match(/-(\d{4})(\d{2})(\d{2})-/)||[]).slice(1).join('-'),titre:r.objet||r.ref,auto:true}));
   const bulls=[...bullAuto,...(M.bulletins||[])].filter(b=>b.date&&sgsJours(b.date)<=365);
   const dernierBull=bulls.map(b=>b.date).sort().pop();
-  const spiAlertes=spi.filter(s=>s.alerte).length+(tauxAnalyse<100?1:0)+(crmN>=6?1:0)+(butees.length?1:0)+(!dernierBull||sgsJours(dernierBull)>30?1:0);
+  // Liste unique des indicateurs en alerte : même source pour la pastille et pour le Bord
+  const spiAlertNoms=[...spi.filter(s=>s.alerte).map(s=>s.l),
+    ...(tauxAnalyse<100?['Analyses de risque avant changement']:[]),
+    ...(crmN>=6?['Anomalies de remplissage des CRM']:[]),
+    ...(butees.length?['Dépassement de butée des visites']:[]),
+    ...(!dernierBull||sgsJours(dernierBull)>30?['Bulletin de sécurité (aucun depuis 30 jours)']:[])];
+  const spiAlertes=spiAlertNoms.length;
 
   // ── Registres filtrés ──
   const nivOf=h=>(sgsRisqueCourant(h)||{}).niv;
@@ -2757,7 +2843,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const aStOk=a=>fAst==='all'||(fAst==='ouvertes'?sgsActionOuverte(a):fAst==='retard'?(sgsActionOuverte(a)&&a.echeance&&a.echeance<today):a.statut===fAst);
   const Af=A.filter(a=>{ const h=H.find(x=>x.id===a.hazardId);
     return aStOk(a)&&(fAty==='all'||(a.type||'corrective')===fAty)&&sgsMatch(qA,a.ref,a.titre,a.responsable,h&&h.ref,h&&h.titre); });
-  const exporter=()=>{ try{ const r=sgsExportRegistre(H,A,nomResp); uiAlert("Registre exporté — "+r); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
+  const exporter=()=>{ try{ const r=sgsExportRegistre(H,A,nomResp); sgsToast("Registre exporté · "+r); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
 
   // ── Enregistrement ──
   const saveHazard=h=>{
@@ -2800,36 +2886,57 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
     <div style={{fontSize:22,fontWeight:800,color:n?c:C.emerald}}>{n}</div><div style={{fontSize:9.5,fontWeight:700,color:C.slate,textTransform:"uppercase",lineHeight:1.25}}>{l}</div></div>);
 
   // ══ Éditeur de danger ══
+  let editorView=null;
   if(edit&&edit.kind==='hazard'){
-    const h=edit.data, up=p=>setEdit({kind:'hazard',data:{...h,...p}});
+    // Création ou modification guidée en quatre étapes
+    const h=edit.data, step=edit.step||1, up=p=>setEdit({...edit,data:{...h,...p}}), goStep=s=>setEdit({...edit,data:h,step:s});
     const r1=sgsRisque(h.P,h.G), r2=sgsRisque(h.P2,h.G2);
-    return (
+    const STEPS=[{k:1,l:'Description'},{k:2,l:'Évaluation'},{k:3,l:'Atténuation'},{k:4,l:'Résiduel'}];
+    const check=s=>{ if(s>=1&&!(h.titre||'').trim()){ uiAlert("⚠️ Donnez un intitulé au danger."); return false; }
+      if(s>=2&&(!h.P||!h.G)){ uiAlert("⚠️ Touchez une case de la matrice pour évaluer le risque initial."); return false; } return true; };
+    const next=()=>{ if(check(step)) goStep(step+1); };
+    const save=()=>{ if(!check(2)) return; if(saveHazard(h)){ setEdit(null); if(h.id){ setTab('dg'); setView({kind:'hazard',id:h.id}); } else { setTab('dg'); setView(null); } } };
+    const btn=(l,f,prim)=><button onClick={f} style={{flex:prim?2:1,height:46,borderRadius:10,fontWeight:700,fontSize:13.5,...TAP,
+      border:prim?"none":"1.5px solid "+C.border,background:prim?"#0F766E":C.bg,color:prim?"white":C.slate}}>{l}</button>;
+    editorView=(
       <Card accent="#0F766E">
-        <FHeader icon="⚠️" title={h.id?"Danger "+h.ref:"Nouveau danger"} subtitle="Registre des dangers — SGS 02-02" color="#0F766E"/>
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <SgsField label="Intitulé du danger"><input value={h.titre||''} onChange={e=>up({titre:e.target.value})} style={sgsInput} placeholder="Ex. : ingestion de sable au roulage à Dakhla"/></SgsField>
-          <SgsField label="Origine"><SgsPills value={h.origine||'reactif'} onChange={v=>up({origine:v})} options={[{k:'reactif',l:'Réactive — événement'},{k:'proactif',l:'Proactive — identification'},{k:'changement',l:'Gestion du changement'}]}/></SgsField>
-          <SgsField label="Description et conséquence la plus raisonnablement pessimiste"><textarea rows={3} value={h.description||''} onChange={e=>up({description:e.target.value})} style={sgsInput}/></SgsField>
-          <FSection title="Risque initial" color="#0F766E"/>
-          <SgsMatrice P={h.P} G={h.G} onPick={(P,G)=>up({P,G})}/>
-          {r1&&<div style={{background:r1.bg,border:"1px solid "+r1.c,borderRadius:10,padding:"9px 11px",fontSize:11.5,color:C.text}}><b style={{color:r1.c}}>{r1.cell} — {r1.l}.</b> {r1.r}</div>}
-          <FSection title="Atténuation" color="#0F766E"/>
-          <SgsField label="Stratégie"><SgsPills value={h.strategie} onChange={v=>up({strategie:v})} options={SGS_STRATEGIES}/></SgsField>
-          <SgsField label="Mesures d'atténuation"><textarea rows={3} value={h.mesures||''} onChange={e=>up({mesures:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Risque résiduel après atténuation (ALARP)"><SgsMatrice P={h.P2} G={h.G2} onPick={(P2,G2)=>up({P2,G2})} small/></SgsField>
-          {r2&&<div style={{fontSize:11.5}}>Résiduel : <SgsBadge r={r2}/></div>}
-          <SgsField label="Statut"><SgsPills value={h.statut||'ouvert'} onChange={v=>up({statut:v})} options={SGS_H_STATUTS} color="#0F766E"/></SgsField>
-          <div style={{display:"flex",gap:10}}>
-            <button onClick={()=>setEdit(null)} style={{flex:1,height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontWeight:700,...TAP}}>Annuler</button>
-            <button onClick={()=>{ if(saveHazard(h)) setEdit(null); }} style={{flex:2,height:46,background:"#0F766E",border:"none",borderRadius:10,color:"white",fontWeight:700,...TAP}}>Enregistrer</button>
-          </div>
+        <FHeader icon="⚠️" title={h.id?"Modifier "+h.ref:"Nouveau danger"} subtitle={"Étape "+step+" sur 4 — "+STEPS[step-1].l} color="#0F766E"/>
+        <div style={{marginBottom:16}}><SgsStepper steps={STEPS} value={step} onPick={k=>{ if(k<step||h.id){ if(k<=step||check(Math.min(k-1,2))) goStep(k); } }}/></div>
+        <div style={{display:"flex",flexDirection:"column",gap:12,minHeight:220}}>
+          {step===1&&<>
+            <SgsField label="Intitulé du danger"><input value={h.titre||''} onChange={e=>up({titre:e.target.value})} style={sgsInput} placeholder="Décollage avec volets non sortis"/></SgsField>
+            <SgsField label="Origine"><SgsPills value={h.origine||'reactif'} onChange={v=>up({origine:v})} options={[{k:'reactif',l:'Réactive — événement'},{k:'proactif',l:'Proactive — identification'},{k:'changement',l:'Gestion du changement'}]}/></SgsField>
+            <SgsField label="Description et conséquence la plus raisonnablement pessimiste"><textarea rows={4} value={h.description||''} onChange={e=>up({description:e.target.value})} style={sgsInput}/></SgsField>
+          </>}
+          {step===2&&<>
+            <div style={{fontSize:12.5,color:C.text,lineHeight:1.5}}>Choisissez la <b>probabilité</b> (lignes, 1 à 5) et la <b>gravité</b> (colonnes, A à E) de la conséquence la plus pessimiste, puis touchez la case au croisement.</div>
+            <SgsMatrice P={h.P} G={h.G} onPick={(P,G)=>up({P,G})}/>
+            {r1?<div style={{background:r1.bg,border:"1px solid "+r1.c,borderRadius:10,padding:"9px 11px",fontSize:12,color:C.text}}><b style={{color:r1.c}}>{r1.cell} — {r1.l}.</b> {r1.r}</div>
+              :<div style={{fontSize:12,color:C.slate}}>Aucune case choisie.</div>}
+          </>}
+          {step===3&&<>
+            <SgsField label="Stratégie"><SgsPills value={h.strategie} onChange={v=>up({strategie:v})} options={SGS_STRATEGIES}/></SgsField>
+            <div style={{fontSize:11.5,color:C.slate,marginTop:-6}}>{(SGS_STRATEGIES.find(s=>s.k===h.strategie)||{}).d||'Évitement, réduction ou ségrégation.'}</div>
+            <SgsField label="Mesures d'atténuation"><textarea rows={4} value={h.mesures||''} onChange={e=>up({mesures:e.target.value})} style={sgsInput}/></SgsField>
+          </>}
+          {step===4&&<>
+            <div style={{fontSize:12.5,color:C.text,lineHeight:1.5}}>Le <b>risque résiduel</b> se mesure une fois les mesures en place. Si elles ne le sont pas encore, laissez la matrice vide : vous y reviendrez plus tard.</div>
+            <SgsMatrice P={h.P2} G={h.G2} onPick={(P2,G2)=>up({P2,G2})} small/>
+            {r2&&<div style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>Résiduel : <SgsBadge r={r2}/><span role="button" onClick={()=>up({P2:null,G2:null})} style={{color:C.slate,textDecoration:"underline",...TAP}}>effacer</span></div>}
+            <SgsField label="Statut"><SgsPills value={h.statut||'ouvert'} onChange={v=>up({statut:v})} options={SGS_H_STATUTS} color="#0F766E"/></SgsField>
+          </>}
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:18}}>
+          {btn(step>1?'Précédent':'Annuler',()=>step>1?goStep(step-1):setEdit(null))}
+          {step<4&&btn('Suivant',next,!h.id)}
+          {(step===4||h.id)&&btn('Enregistrer',save,true)}
         </div>
       </Card>);
   }
-  // ══ Éditeur d'action ══
+
   if(edit&&edit.kind==='action'){
     const a=edit.data, up=p=>setEdit({kind:'action',data:{...a,...p}});
-    return (
+    editorView=(
       <Card accent="#0F766E">
         <FHeader icon="🎯" title={a.id?"Action "+a.ref:"Nouvelle action"} subtitle="Actions correctives et préventives — SGS 03-03" color="#0F766E"/>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -2847,41 +2954,140 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
           <SgsField label="Preuve de réalisation et d'efficacité"><textarea rows={2} value={a.preuve||''} onChange={e=>up({preuve:e.target.value})} style={sgsInput}/></SgsField>
           <div style={{display:"flex",gap:10}}>
             <button onClick={()=>setEdit(null)} style={{flex:1,height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontWeight:700,...TAP}}>Annuler</button>
-            <button onClick={()=>{ if(saveAction(a)) setEdit(null); }} style={{flex:2,height:46,background:"#0F766E",border:"none",borderRadius:10,color:"white",fontWeight:700,...TAP}}>Enregistrer</button>
+            <button onClick={()=>{ if(saveAction(a)){ setEdit(null); if(a.id){ setTab('ac'); setView({kind:'action',id:a.id}); } } }} style={{flex:2,height:46,background:"#0F766E",border:"none",borderRadius:10,color:"white",fontWeight:700,...TAP}}>Enregistrer</button>
           </div>
         </div>
       </Card>);
   }
 
-  return (
-    <Card accent="#0F766E">
-      <FHeader icon="🛡" title="Système de Gestion de la Sécurité" subtitle="Manuel SGS V03 — Qualité / SGS" color="#0F766E"/>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:14}}>
-        {TABS.map(t=>(<button key={t.k} onClick={()=>setTab(t.k)} style={{height:38,borderRadius:9,fontSize:11.5,fontWeight:700,...TAP,
-          border:"1.5px solid "+(tab===t.k?"#0F766E":C.border),background:tab===t.k?"#0F766E":"white",color:tab===t.k?"white":C.slate}}>{t.l}</button>))}
+  // ── Nouveau Bord (phase 1) ──
+  const SGS_TABLBL={bord:'Bord',ev:'Événements',dg:'Dangers',ac:'Actions',spi:'Indicateurs',sm:'Safety Meeting'};
+  const recus=events.filter(e=>statutEv(e)==='recu');
+  const aOuv=A.filter(sgsActionOuverte);
+  const heatN={}; hOuverts.forEach(h=>{ const r=sgsRisqueCourant(h); if(r) heatN[r.cell]=(heatN[r.cell]||0)+1; });
+  const mois12=[...Array(12)].map((_,i)=>{ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-11+i); return d.toISOString().slice(0,7); });
+  const parMois=mois12.map(m=>(safety||[]).filter(e=>String(e.date).slice(0,7)===m).length);
+  const maxMois=Math.max(1,...parMois);
+  const MOISC=['janv','févr','mars','avr','mai','juin','juil','août','sept','oct','nov','déc'];
+  const go=(t,f)=>{ setEdit(null); setView(null); setTab(t); if(f) f(); };
+  const ouvrirExportCR=()=>{ setExpMenu(false); go('ev',()=>setExpEv({periode:'3m',svc:'all',conf:false})); };
+  const ilya=d=>{ const n=sgsJours(d); return n<=0?"aujourd'hui":n===1?'hier':'il y a '+n+' jours'; };
+  const prio=[
+    ...hRouges.map(h=>({c:'#DC2626',t:h.ref+' · '+h.titre,s:(sgsRisqueCourant(h)||{}).cell+' intolérable · mesures immédiates',b:'Ouvrir',f:()=>openHazard(h.id)})),
+    ...aRetard.map(a=>({c:'#DC2626',t:a.ref+' · '+a.titre,s:'En retard de '+Math.max(1,sgsJours(a.echeance))+' jour(s) · '+a.responsable,b:'Ouvrir',f:()=>openAction(a.id)})),
+    ...recus.slice(0,4).map(e=>{ const late=sgsJours(e.date)>20; return {c:late?'#B45309':'#0F766E',t:safetyLabels(e).join(', '),
+      s:(late?'Non analysé depuis '+sgsJours(e.date)+' jours (délai : 20)':'Reçu · '+ilya(e.date))+(e.num?' · '+e.num:''),b:'Analyser',
+      f:()=>go('ev',()=>{ setEvFilter('todo'); setQE(String(e.description||'').slice(0,30)); })}; }),
+    // Indicateurs en alerte regroupés sur une seule ligne, pour ne pas noyer les priorités
+    ...(spiAlertes?[{c:'#DC2626',t:spiAlertes===1?'Indicateur en alerte : '+spiAlertNoms[0]:spiAlertes+' indicateurs en alerte',
+        s:spiAlertNoms.slice(0,3).join(' · ')+(spiAlertes>3?' · …':''),b:'Voir',f:()=>go('spi')}]:[]),
+  ];
+  const card={background:"white",border:"1px solid "+C.border,borderRadius:12,padding:"12px 14px"};
+  const h3={fontSize:12,fontWeight:700,color:C.slate,margin:"0 0 8px",textTransform:"uppercase",letterSpacing:".04em"};
+  const KpiB=({n,l,tone,onClick})=>{ const T={r:["#FCEBEB","#791F1F"],a:["#FAEEDA","#633806"],n:["white",C.text]}[n?tone:'n'];
+    return <div onClick={onClick} role="button" style={{background:T[0],border:"1px solid "+(n&&tone!=='n'?"transparent":C.border),borderRadius:10,padding:"10px 12px",...TAP}}>
+      <div style={{fontSize:24,fontWeight:800,color:T[1],lineHeight:1.1}}>{n}</div>
+      <div style={{fontSize:11.5,color:T[1],display:"flex",alignItems:"center",gap:2,marginTop:2}}>{l}<SgsIcon n="chev" size={12} color={T[1]}/></div></div>; };
+  const bordView=()=>{
+    const kpis=<div style={{display:"grid",gridTemplateColumns:wide?"repeat(4,1fr)":"1fr 1fr",gap:8}}>
+      <KpiB n={hRouges.length} l="Risque(s) intolérable(s)" tone="r" onClick={()=>go('dg',()=>{setFDst('actifs');setFDniv('intolerable');})}/>
+      <KpiB n={aRetard.length} l="Action(s) en retard" tone="r" onClick={()=>go('ac',()=>setFAst('retard'))}/>
+      <KpiB n={evRetard.length} l="Analyse(s) de plus de 20 j" tone="a" onClick={()=>go('ev',()=>setEvFilter('todo'))}/>
+      <KpiB n={aOuv.length} l="Action(s) ouverte(s)" tone="n" onClick={()=>go('ac',()=>setFAst('ouvertes'))}/>
+    </div>;
+    const prioC=<div style={card}><div style={h3}>À traiter aujourd'hui</div>
+      {prio.length?prio.slice(0,8).map((p,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<Math.min(prio.length,8)-1?"1px solid "+C.border:"none"}}>
+        <span style={{width:4,alignSelf:"stretch",borderRadius:2,background:p.c}}/>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3}}>{p.t}</div><div style={{fontSize:11,color:C.slate,marginTop:2}}>{p.s}</div></div>
+        <button onClick={p.f} style={{border:"1px solid "+C.border,background:"white",borderRadius:8,padding:"6px 11px",fontSize:12,fontWeight:600,color:C.navy,...TAP}}>{p.b}</button></div>))
+      :<div style={{fontSize:12.5,color:C.emerald,padding:"8px 0"}}>Rien d'urgent. Les comptes rendus sont analysés et les actions sont dans les délais.</div>}</div>;
+    const heatC=<div style={card}><div style={h3}>Carte des risques ouverts</div>
+      <div style={{display:"grid",gridTemplateColumns:"16px repeat(5,1fr)",gap:3,alignItems:"center"}}>
+        {[5,4,3,2,1].map(p=>[<div key={'l'+p} style={{fontSize:11,color:C.slate}}>{p}</div>,...['A','B','C','D','E'].map(g=>{ const r=sgsRisque(p,g), v=heatN[p+g]||0;
+          return <div key={p+g} onClick={v?()=>go('dg',()=>{setFDst('actifs');setFDniv(r.niv);}):undefined} title={r.cell+' · '+r.l}
+            style={{height:wide?32:26,borderRadius:5,background:r.bg,color:r.c,opacity:v?1:.55,outline:v?"2px solid "+r.c:"none",outlineOffset:-2,
+            display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,...(v?TAP:{})}}>{v||''}</div>; })])}
+        <div/>{['A','B','C','D','E'].map(g=><div key={g} style={{fontSize:11,color:C.slate,textAlign:"center"}}>{g}</div>)}
       </div>
-
-      {tab==='bord'&&(<div style={{display:"flex",flexDirection:"column",gap:12}}>
-        <SgsField label="Responsable Qualité / SGS (signataire des rapports)">
-          <input value={nomEdit} onChange={e=>setNomEdit(e.target.value)} onBlur={commitNom}
-            onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); }} style={sgsInput}/>
-        </SgsField>
-        <button onClick={exporter} style={{height:44,borderRadius:10,border:"1.5px solid #0F766E",background:"white",color:"#0F766E",fontWeight:700,fontSize:13,...TAP}}>📄 Exporter le registre des dangers et actions (PDF)</button>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-          <Kpi n={hRouges.length} l="Risques intolérables" c="#DC2626"/>
-          <Kpi n={hJaunes.length} l="Risques tolérables" c="#B45309"/>
-          <Kpi n={aRetard.length} l="Actions en retard" c="#DC2626"/>
-          <Kpi n={evRetard.length} l="Analyses > 20 j" c="#B45309"/>
-          <Kpi n={spiAlertes} l="Indicateurs en alerte" c="#DC2626"/>
-          <Kpi n={A.filter(sgsActionOuverte).length} l="Actions ouvertes" c="#0F766E"/>
-        </div>
-        <SectionTitle>À traiter en priorité</SectionTitle>
-        {hRouges.map(h=><Row key={h.id} color="#DC2626" left={h.ref+' · '+h.titre} sub="Risque intolérable — mesures immédiates" right={<SgsBadge r={sgsRisqueCourant(h)}/>} onClick={()=>setEdit({kind:'hazard',data:h})}/>)}
-        {aRetard.map(a=><Row key={a.id} color="#DC2626" left={a.ref+' · '+a.titre} sub={"Échéance dépassée le "+sgsFr(a.echeance)+" · "+a.responsable} onClick={()=>setEdit({kind:'action',data:a})}/>)}
-        {evRetard.slice(0,5).map((e,i)=><Row key={i} color="#B45309" left={safetyLabels(e).join(', ')} sub={sgsFr(e.date)+" · analyse non engagée depuis "+sgsJours(e.date)+" jours (délai manuel : 20)"} onClick={()=>{setTab('ev');setEvFilter('todo');}}/>)}
-        {spi.filter(s=>s.alerte).map(s=><Row key={s.k} color="#DC2626" left={s.l} sub={s.n+" sur "+s.fenetre+" jours — seuil d'analyse "+s.seuil} onClick={()=>setTab('spi')}/>)}
-        {!hRouges.length&&!aRetard.length&&!evRetard.length&&!spi.some(s=>s.alerte)&&<div style={{textAlign:"center",fontSize:12.5,color:C.emerald,padding:12}}>Aucun point prioritaire.</div>}
-      </div>)}
+      <div style={{fontSize:10.5,color:C.slate,marginTop:6}}>Probabilité (1 à 5) × gravité (A à E). Touchez une case pour voir les dangers.</div></div>;
+    const chartC=<div style={card}><div style={h3}>Comptes rendus reçus sur 12 mois</div>
+      <div style={{display:"flex",alignItems:"flex-end",gap:wide?10:4,height:wide?110:80}}>
+        {parMois.map((v,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
+          {v>0&&<div style={{fontSize:10,color:C.slate}}>{v}</div>}
+          <div style={{width:"100%",height:Math.max(v?4:1,Math.round(v/maxMois*(wide?88:60))),background:i===11?"#0F766E":"#9FE1CB",borderRadius:3}}/></div>)}
+      </div>
+      <div style={{display:"flex",gap:wide?10:4,marginTop:4}}>{mois12.map((m,i)=><div key={m} style={{flex:1,textAlign:"center",fontSize:wide?11:9,color:C.slate}}>{MOISC[Number(m.slice(5))-1]}</div>)}</div></div>;
+    const signC=<div style={card}><div style={h3}>Signataire des rapports</div>
+      <input value={nomEdit} onChange={e=>setNomEdit(e.target.value)} onBlur={commitNom} onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); }} style={sgsInput} aria-label="Responsable Qualité / SGS (signataire des rapports)"/>
+      <div style={{fontSize:10.5,color:C.slate,marginTop:5}}>Responsable Qualité / SGS. Nom repris sur les registres et les comptes rendus de Safety Meeting.</div></div>;
+    return wide
+      ? <div style={{display:"flex",flexDirection:"column",gap:14}}>{kpis}
+          <div style={{display:"grid",gridTemplateColumns:"1.35fr 1fr",gap:14,alignItems:"start"}}>{prioC}<div style={{display:"flex",flexDirection:"column",gap:14}}>{heatC}{signC}</div></div>{chartC}</div>
+      : <div style={{display:"flex",flexDirection:"column",gap:12}}>{kpis}{prioC}{heatC}{chartC}{signC}</div>;
+  };
+  // ── Phase 2 : fiches de lecture ──
+  const ORIG={reactif:'Réactive — événement',proactif:'Proactive — identification',changement:'Gestion du changement'};
+  const cardS={background:"white",border:"1px solid "+C.border,borderRadius:12,padding:"14px 16px"};
+  const lblS={fontSize:11,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:".04em",margin:"14px 0 5px"};
+  const smallBtn={border:"1px solid "+C.border,background:"white",borderRadius:8,padding:"7px 12px",fontSize:12.5,fontWeight:700,color:C.navy,...TAP};
+  const openHazard=id=>{ setEdit(null); if(tab!=='dg') setTab('dg'); setView({kind:'hazard',id}); };
+  const openAction=id=>{ setEdit(null); if(tab!=='ac') setTab('ac'); setView({kind:'action',id}); };
+  const RiskBox=({lab,r,empty})=>r
+    ? <div style={{flex:1,background:r.bg,borderRadius:10,padding:"9px 6px",textAlign:"center"}}><div style={{fontSize:11,color:r.c}}>{lab}</div>
+        <div style={{fontSize:24,fontWeight:800,color:r.c,lineHeight:1.15}}>{r.cell}</div><div style={{fontSize:11,color:r.c,fontWeight:700}}>{r.l}</div></div>
+    : <div style={{flex:1,border:"1.5px dashed "+C.border,borderRadius:10,padding:"9px 6px",textAlign:"center",fontSize:11,color:C.slate}}>{lab}<div style={{marginTop:4}}>{empty}</div></div>;
+  const hazardDetail=h=>{ if(!h) return null;
+    const r1=sgsRisque(h.P,h.G), r2=sgsRisque(h.P2,h.G2), acts=A.filter(a=>a.hazardId===h.id), ev=h.eventKey&&(safety||[]).find(e=>sgsEventKey(e)===h.eventKey);
+    const setSt=k=>{ if(k==='clos'&&acts.some(sgsActionOuverte)){ uiAlert("⚠️ Des actions liées sont encore ouvertes. Clôturez-les avant de clore le danger."); return; }
+      const avant=h.statut||'ouvert'; setHazards(l=>(l||[]).map(x=>x.id===h.id?{...x,statut:k,updatedAt:new Date().toISOString()}:x));
+      sgsToast(h.ref+' : '+(SGS_H_STATUTS.find(x=>x.k===k)||{}).l.toLowerCase(),()=>setHazards(l=>(l||[]).map(x=>x.id===h.id?{...x,statut:avant}:x))); };
+    return (<div style={cardS}>
+      {!wide&&<button onClick={()=>setView(null)} style={{border:"none",background:"none",padding:0,color:C.slate,fontSize:12.5,display:"flex",alignItems:"center",gap:2,marginBottom:8,...TAP}}><SgsIcon n="back" size={16}/>Dangers</button>}
+      <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:800,color:"#0F766E"}}>{h.ref}</div><div style={{fontSize:17,fontWeight:800,color:C.text,lineHeight:1.25}}>{h.titre}</div></div>
+        <button onClick={()=>setEdit({kind:'hazard',data:h,step:1})} style={smallBtn}>Modifier</button></div>
+      <div style={{fontSize:12,color:C.slate,marginTop:5}}>{ORIG[h.origine]||'—'}{ev&&<> · <span role="button" onClick={()=>go('ev',()=>{setEvFilter('all');setQE(String(ev.description||'').slice(0,30));})} style={{color:"#0F766E",fontWeight:700,...TAP}}>compte rendu du {sgsFr(ev.date)}{ev.num?' · '+ev.num:''}</span></>}</div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12}}>
+        <RiskBox lab="Risque initial" r={r1}/><SgsIcon n="chev" size={18} color={C.slate}/><RiskBox lab="Risque résiduel" r={r2} empty="À évaluer une fois les mesures en place"/></div>
+      <div style={lblS}>Statut</div><SgsStepper steps={SGS_H_STATUTS} value={h.statut||'ouvert'} onPick={setSt}/>
+      <div style={wide?{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}:{}}>
+        <div><div style={lblS}>Description</div><div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{h.description||'—'}</div>
+          <div style={lblS}>Atténuation{h.strategie?' · '+((SGS_STRATEGIES.find(s=>s.k===h.strategie)||{}).l||'').toLowerCase():''}</div>
+          <div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{h.mesures||'Aucune mesure saisie.'}</div></div>
+        <div><div style={lblS}>Actions liées ({acts.length})</div>
+          {acts.map(a=>{ const late=sgsActionOuverte(a)&&a.echeance<today;
+            return <div key={a.id} role="button" onClick={()=>openAction(a.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+C.border,...TAP}}>
+              <span className="pill" style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 6px",background:late?"#FCEBEB":sgsActionOuverte(a)?"#E1F5EE":"#EAF3DE",color:late?"#791F1F":sgsActionOuverte(a)?"#085041":"#27500A",whiteSpace:"nowrap"}}>{late?'En retard':(SGS_A_STATUTS.find(s=>s.k===a.statut)||{}).l}</span>
+              <div style={{flex:1,minWidth:0,fontSize:12.5}}><b>{a.ref}</b> {a.titre}<div style={{fontSize:11,color:C.slate}}>{a.responsable} · {sgsActionOuverte(a)?'échéance '+sgsRel(a.echeance):'close'}</div></div>
+              <SgsIcon n="chev" size={16} color={C.slate}/></div>; })}
+          {!acts.length&&<div style={{fontSize:12.5,color:C.slate}}>Aucune action pour ce danger.</div>}
+          <button onClick={()=>setEdit({kind:'action',data:{type:'corrective',statut:'afaire',hazardId:h.id,echeance:echeanceDefaut(h.id)}})} style={{...smallBtn,marginTop:10,width:"100%",border:"1.5px dashed #0F766E",color:"#0F766E"}}>+ Action liée</button></div>
+      </div>
+      <button onClick={()=>delHazard(h)} style={{marginTop:16,border:"none",background:"none",padding:0,color:"#B91C1C",fontSize:12,...TAP}}>Supprimer ce danger</button>
+    </div>); };
+  const actionDetail=a=>{ if(!a) return null;
+    const h=H.find(x=>x.id===a.hazardId), late=sgsActionOuverte(a)&&a.echeance<today;
+    const setSt=k=>{ if(k===a.statut) return;
+      if(k==='efficace'&&!(a.preuve||'').trim()){ setEdit({kind:'action',data:{...a,statut:'efficace'}}); uiAlert("Indiquez la preuve de réalisation et d'efficacité, puis touchez Enregistrer."); return; }
+      if(saveAction({...a,statut:k})) sgsToast(a.ref+' : '+(SGS_A_STATUTS.find(x=>x.k===k)||{}).l.toLowerCase(),()=>saveAction(a)); };
+    const L=(t,v,col)=><div><div style={lblS}>{t}</div><div style={{fontSize:13,color:col||C.text,lineHeight:1.5}}>{v}</div></div>;
+    return (<div style={cardS}>
+      {!wide&&<button onClick={()=>setView(null)} style={{border:"none",background:"none",padding:0,color:C.slate,fontSize:12.5,display:"flex",alignItems:"center",gap:2,marginBottom:8,...TAP}}><SgsIcon n="back" size={16}/>Actions</button>}
+      <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:800,color:"#0F766E"}}>{a.ref} · {a.type==='preventive'?'Préventive':'Corrective'}</div><div style={{fontSize:17,fontWeight:800,color:C.text,lineHeight:1.25}}>{a.titre}</div></div>
+        <button onClick={()=>setEdit({kind:'action',data:a})} style={smallBtn}>Modifier</button></div>
+      <div style={lblS}>Avancement</div><SgsStepper steps={SGS_A_STATUTS} value={a.statut||'afaire'} onPick={setSt}/>
+      <div style={{display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",columnGap:18}}>
+        {L('Responsable',a.responsable||'—')}
+        {L('Échéance',sgsFr(a.echeance)+(sgsActionOuverte(a)?' · '+(late?'en retard de '+Math.max(1,sgsJours(a.echeance))+' jour(s)':sgsRel(a.echeance)):''),late?"#B91C1C":null)}
+        <div><div style={lblS}>Danger traité</div>{h?<div role="button" onClick={()=>openHazard(h.id)} style={{fontSize:13,color:"#0F766E",fontWeight:700,...TAP}}>{h.ref} · {h.titre}</div>:<div style={{fontSize:13}}>—</div>}</div>
+        {L("Critère d'efficacité",a.critere||'—')}
+      </div>
+      {L('Preuve de réalisation et d\'efficacité',a.preuve||'Pas encore de preuve.',a.preuve?null:C.slate)}
+      <button onClick={()=>delAction(a)} style={{marginTop:16,border:"none",background:"none",padding:0,color:"#B91C1C",fontSize:12,...TAP}}>Supprimer cette action</button>
+    </div>); };
+  const tabContent=(<>
+      {tab==='bord'&&bordView()}
 
       {tab==='ev'&&(<div>
         {!expEv
@@ -2897,7 +3103,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
               <div style={{fontSize:12,color:C.text}}><b>{sel.length}</b> compte(s) rendu(s) sélectionné(s){sel.filter(e=>e.confidentiel).length?', dont '+sel.filter(e=>e.confidentiel).length+' confidentiel(s)':''}.</div>
               <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>setExpEv(null)} style={{flex:1,height:42,borderRadius:10,border:"1.5px solid "+C.border,background:"white",color:C.slate,fontWeight:700,...TAP}}>Annuler</button>
-                <button onClick={()=>{ try{ const r=sgsExportEvenements(sel,{periode:expEv.periode,svc:expEv.svc,inclureConf:expEv.conf,nom:nomResp,evStatus:ES,hazards:H}); setExpEv(null); uiAlert("Comptes rendus exportés — "+r); }catch(err){ uiAlert("❌ Erreur PDF : "+(err.message||err)); } }}
+                <button onClick={()=>{ try{ const r=sgsExportEvenements(sel,{periode:expEv.periode,svc:expEv.svc,inclureConf:expEv.conf,nom:nomResp,evStatus:ES,hazards:H}); setExpEv(null); sgsToast("Comptes rendus exportés · "+r); }catch(err){ uiAlert("❌ Erreur PDF : "+(err.message||err)); } }}
                   style={{flex:2,height:42,borderRadius:10,border:"none",background:"#0F766E",color:"white",fontWeight:700,...TAP}}>4. Générer le PDF</button>
               </div>
             </div>); })()}
@@ -2908,7 +3114,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
           const st=statutEv(e), late=st==='recu'&&sgsJours(e.date)>20;
           return (<div key={sgsEventKey(e)+i} style={{padding:"11px 0",borderBottom:"1px solid "+C.border}}>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:5}}>
-              <b style={{fontSize:12,color:C.navy}}>{sgsFr(e.date)}</b>
+              <b style={{fontSize:12,color:C.navy}}>{sgsFr(e.date)}</b><span style={{fontSize:11,color:C.slate}}>({sgsRel(e.date)})</span>
               <span style={{fontSize:11,color:C.slate}}>{e.rattachement==='hors'?'Hors vol':e.rattachement==='appareil'?'Appareil '+e.num:e.num+' · '+(e.from||'?')+'→'+(e.to||'?')}</span>
               {e.confidentiel&&<span style={{fontSize:9,fontWeight:800,color:"white",background:"#475569",borderRadius:5,padding:"1px 5px"}}>CONFIDENTIEL</span>}
               {e.anonyme&&<span style={{fontSize:9,fontWeight:800,color:"#475569",border:"1px solid #475569",borderRadius:5,padding:"0 5px"}}>ANONYME</span>}
@@ -2916,64 +3122,131 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
             </div>
             <SafetyChips e={e}/>
             {e.description&&<div style={{fontSize:12,color:C.text,marginTop:6,lineHeight:1.45,background:C.bg,borderRadius:8,padding:"7px 9px"}}>{e.description}</div>}
-            <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
-              {SGS_EV_STATUTS.map(s=>(<button key={s.k} onClick={()=>setEvSt(e,s.k)} style={{padding:"5px 9px",borderRadius:8,fontSize:10.5,fontWeight:700,...TAP,
-                border:"1.5px solid "+(st===s.k?"#0F766E":C.border),background:st===s.k?"#0F766E":"white",color:st===s.k?"white":C.slate}}>{s.l}</button>))}
-              <button onClick={()=>{ setEvSt(e,'analyse'); setEdit({kind:'hazard',data:{titre:safetyLabels(e).join(', '),origine:'reactif',eventKey:sgsEventKey(e),statut:'ouvert'}}); }}
+            <div style={{display:"flex",gap:10,marginTop:10,flexWrap:"wrap",alignItems:"flex-start"}}>
+              <div style={{flex:1,minWidth:170}}><SgsStepper steps={SGS_EV_STATUTS} value={st} onPick={k=>{ if(k===st) return; setEvSt(e,k); sgsToast('Compte rendu : '+(SGS_EV_STATUTS.find(x=>x.k===k)||{}).l.toLowerCase(),()=>setEvSt(e,st)); }}/></div>
+              <button onClick={()=>{ setEvSt(e,'analyse'); setEdit({kind:'hazard',data:{titre:safetyLabels(e).join(', '),origine:'reactif',eventKey:sgsEventKey(e),statut:'ouvert'},step:1}); }}
                 style={{padding:"5px 9px",borderRadius:8,fontSize:10.5,fontWeight:700,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",...TAP}}>+ Danger</button>
             </div>
           </div>);})}
         </div>
       </div>)}
 
-      {tab==='dg'&&(<div>
-        <button onClick={()=>setEdit({kind:'hazard',data:{origine:'proactif',statut:'ouvert'}})} style={{width:"100%",height:44,borderRadius:10,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",fontWeight:700,...TAP}}>+ Nouveau danger</button>
+      {tab==='dg'&&(()=>{
+        const list=[...Hf].sort((a,b)=>{const o={intolerable:0,tolerable:1,acceptable:2}; return (a.statut==='clos')-(b.statut==='clos')||(o[(sgsRisqueCourant(a)||{}).niv]??3)-(o[(sgsRisqueCourant(b)||{}).niv]??3)||String(a.ref).localeCompare(String(b.ref));});
+        const selId=view&&view.kind==='hazard'?view.id:(list[0]&&list[0].id);
+        const listCol=<div>
+        <button onClick={()=>setEdit({kind:'hazard',data:{origine:'proactif',statut:'ouvert'},step:1})} style={{width:"100%",height:44,borderRadius:10,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",fontWeight:700,...TAP}}>+ Nouveau danger</button>
         <input value={qD} onChange={e=>setQD(e.target.value)} placeholder="🔍 Rechercher : référence, intitulé, mesures" style={{...sgsInput,marginTop:10}}/>
         <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}>
           <SgsPills value={fDst} onChange={setFDst} color="#0F766E" options={[{k:'actifs',l:'Ouverts et maîtrisés ('+H.filter(h=>h.statut!=='clos').length+')'},{k:'ouvert',l:'Ouverts ('+H.filter(h=>(h.statut||'ouvert')==='ouvert').length+')'},{k:'maitrise',l:'Maîtrisés ('+H.filter(h=>(h.statut||'ouvert')==='maitrise').length+')'},{k:'clos',l:'Clos ('+H.filter(h=>(h.statut||'ouvert')==='clos').length+')'},{k:'all',l:'Tous ('+H.length+')'}]}/>
           <SgsPills value={fDniv} onChange={setFDniv} color="#0F766E" options={[{k:'all',l:'Tous niveaux'},...['intolerable','tolerable','acceptable'].map(k=>({k,l:SGS_NIVEAUX[k].l+' ('+H.filter(h=>dStOk(h)&&nivOf(h)===k).length+')'}))]}/>
         </div>
-        <div style={{marginTop:10}}><SgsMatrice small P={null} G={null}/></div>
-        {[...Hf].sort((a,b)=>{const o={intolerable:0,tolerable:1,acceptable:2}; return (a.statut==='clos')-(b.statut==='clos')||o[(sgsRisqueCourant(a)||{}).niv]-o[(sgsRisqueCourant(b)||{}).niv];}).map(h=>{
-          const r=sgsRisqueCourant(h), r1=sgsRisque(h.P,h.G), na=A.filter(a=>a.hazardId===h.id);
-          return <Row key={h.id} color={r?r.c:C.border} onClick={()=>setEdit({kind:'hazard',data:h})}
-            left={<span style={{opacity:h.statut==='clos'?.55:1}}>{h.ref} · {h.titre}</span>}
-            sub={(SGS_H_STATUTS.find(s=>s.k===(h.statut||'ouvert'))||{}).l+(h.P2?' · initial '+r1.cell+' → résiduel '+r.cell:'')+' · '+na.length+' action'+(na.length>1?'s':'')}
-            right={<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}><SgsBadge r={r}/><span onClick={ev=>{ev.stopPropagation();delHazard(h);}} style={{fontSize:13,...TAP}}>🗑</span></div>}/>;
-        })}
-        {!Hf.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>{H.length?"Aucun danger ne correspond à la recherche.":"Aucun danger enregistré."}</div>}
-      </div>)}
+        <div style={{marginTop:8}}>{list.map(h=>{ const r=sgsRisqueCourant(h), na=A.filter(a=>a.hazardId===h.id), sel=wide&&h.id===selId;
+          return <div key={h.id} role="button" onClick={()=>setView({kind:'hazard',id:h.id})} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 8px",margin:"0 -8px",borderBottom:"1px solid "+C.border,borderRadius:sel?8:0,background:sel?"#E1F5EE":"transparent",...TAP}}>
+            <span style={{width:4,alignSelf:"stretch",borderRadius:2,background:r?r.c:C.border}}/>
+            <div style={{flex:1,minWidth:0,opacity:h.statut==='clos'?.55:1}}><div style={{fontSize:13,fontWeight:800,color:C.text}}>{h.ref} · {h.titre}</div>
+              <div style={{fontSize:11,color:C.slate,marginTop:2}}>{(SGS_H_STATUTS.find(s=>s.k===(h.statut||'ouvert'))||{}).l} · {na.length} action{na.length>1?'s':''}{h.P2?' · initial '+sgsRisque(h.P,h.G).cell:''}</div></div>
+            <SgsBadge r={r}/></div>; })}</div>
+        {!Hf.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>{H.length?"Aucun danger ne correspond à la recherche.":"Aucun danger enregistré. Ouvrez-en un depuis un compte rendu (onglet Événements) ou avec « + Nouveau danger »."}</div>}
+        </div>;
+        return wide
+          ? <div style={{display:"grid",gridTemplateColumns:"minmax(300px,380px) 1fr",gap:16,alignItems:"start"}}>{listCol}<div style={{position:"sticky",top:0}}>{hazardDetail(H.find(x=>x.id===selId))||<div style={{...cardS,color:C.slate,fontSize:13}}>Sélectionnez un danger.</div>}</div></div>
+          : listCol;
+      })()}
 
-      {tab==='ac'&&(<div>
+      {tab==='ac'&&(()=>{
+        const j7=sgsAddDays(7);
+        const grp=[['En retard',a=>sgsActionOuverte(a)&&a.echeance&&a.echeance<today,'#B91C1C'],['Cette semaine',a=>sgsActionOuverte(a)&&a.echeance>=today&&a.echeance<=j7,'#0F766E'],
+          ['Plus tard',a=>sgsActionOuverte(a)&&(!a.echeance||a.echeance>j7),C.slate],['Closes',a=>!sgsActionOuverte(a),C.slate]];
+        const sorted=[...Af].sort((a,b)=>String(a.echeance).localeCompare(String(b.echeance)));
+        const selId=view&&view.kind==='action'?view.id:(sorted[0]&&sorted[0].id);
+        const listCol=<div>
         <button onClick={()=>setEdit({kind:'action',data:{type:'corrective',statut:'afaire',echeance:sgsAddDays(30)}})} style={{width:"100%",height:44,borderRadius:10,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",fontWeight:700,...TAP}}>+ Nouvelle action</button>
         <input value={qA} onChange={e=>setQA(e.target.value)} placeholder="🔍 Rechercher : référence, action, responsable, danger" style={{...sgsInput,marginTop:10}}/>
         <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}>
           <SgsPills value={fAst} onChange={setFAst} color="#0F766E" options={[{k:'ouvertes',l:'Ouvertes ('+A.filter(sgsActionOuverte).length+')'},{k:'retard',l:'En retard ('+aRetard.length+')'},{k:'realisee',l:'Réalisées'},{k:'efficace',l:'Efficaces'},{k:'all',l:'Toutes ('+A.length+')'}]}/>
           <SgsPills value={fAty} onChange={setFAty} color="#0F766E" options={[{k:'all',l:'Tous types'},{k:'corrective',l:'Corrective'},{k:'preventive',l:'Préventive'}]}/>
         </div>
-        {[...Af].sort((a,b)=>(!sgsActionOuverte(a))-(!sgsActionOuverte(b))||String(a.echeance).localeCompare(String(b.echeance))).map(a=>{
-          const late=sgsActionOuverte(a)&&a.echeance<today, h=H.find(x=>x.id===a.hazardId);
-          return <Row key={a.id} color={late?"#DC2626":sgsActionOuverte(a)?"#0F766E":C.emerald} onClick={()=>setEdit({kind:'action',data:a})}
-            left={<span style={{opacity:sgsActionOuverte(a)?1:.55}}>{a.ref} · {a.titre}</span>}
-            sub={(SGS_A_STATUTS.find(s=>s.k===a.statut)||{}).l+' · '+a.responsable+' · échéance '+sgsFr(a.echeance)+(h?' · '+h.ref:'')}
-            right={<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>{late&&<span style={{fontSize:9,fontWeight:800,color:"white",background:"#DC2626",borderRadius:5,padding:"1px 5px"}}>RETARD</span>}<span onClick={ev=>{ev.stopPropagation();delAction(a);}} style={{fontSize:13,...TAP}}>🗑</span></div>}/>;
-        })}
-        {!Af.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>{A.length?"Aucune action ne correspond à la recherche.":"Aucune action enregistrée."}</div>}
-      </div>)}
+        {grp.map(([t,f,col])=>{ const items=sorted.filter(f); if(!items.length) return null;
+          return <div key={t} style={{marginTop:12}}><div style={{fontSize:11,fontWeight:800,color:col,textTransform:"uppercase",letterSpacing:".04em",marginBottom:2}}>{t} · {items.length}</div>
+            {items.map(a=>{ const h=H.find(x=>x.id===a.hazardId), late=t==='En retard', sel=wide&&a.id===selId;
+              return <div key={a.id} role="button" onClick={()=>setView({kind:'action',id:a.id})} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 8px",margin:"0 -8px",borderBottom:"1px solid "+C.border,borderRadius:sel?8:0,background:sel?"#E1F5EE":"transparent",...TAP}}>
+                <span style={{width:4,alignSelf:"stretch",borderRadius:2,background:late?"#DC2626":t==='Closes'?"#1D9E75":"#0F766E"}}/>
+                <div style={{flex:1,minWidth:0,opacity:t==='Closes'?.6:1}}><div style={{fontSize:13,fontWeight:800,color:C.text}}>{a.ref} · {a.titre}</div>
+                  <div style={{fontSize:11,color:late?"#B91C1C":C.slate,marginTop:2}}>{a.responsable}{h?' · '+h.ref:''} · {t==='Closes'?(SGS_A_STATUTS.find(s=>s.k===a.statut)||{}).l:late?'en retard de '+Math.max(1,sgsJours(a.echeance))+' jour(s)':'échéance '+sgsRel(a.echeance)}</div>
+                  {t!=='Closes'&&<div style={{marginTop:6}}><SgsStepper steps={SGS_A_STATUTS} value={a.statut||'afaire'} compact/></div>}</div>
+                <SgsIcon n="chev" size={16} color={C.slate}/></div>; })}</div>; })}
+        {!Af.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>{A.length?"Aucune action ne correspond à la recherche.":"Aucune action enregistrée. Créez-en une depuis la fiche d'un danger."}</div>}
+        </div>;
+        return wide
+          ? <div style={{display:"grid",gridTemplateColumns:"minmax(300px,380px) 1fr",gap:16,alignItems:"start"}}>{listCol}<div style={{position:"sticky",top:0}}>{actionDetail(A.find(x=>x.id===selId))||<div style={{...cardS,color:C.slate,fontSize:13}}>Sélectionnez une action.</div>}</div></div>
+          : listCol;
+      })()}
 
-      {tab==='spi'&&<SgsIndicateursView spi={spi} tauxLoadsheet={tauxLoadsheet} vols30={vols30} butees={butees} tauxAnalyse={tauxAnalyse} ch365={ch365}
+      {tab==='spi'&&<SgsIndicateursView safety={safety} spi={spi} tauxLoadsheet={tauxLoadsheet} vols30={vols30} butees={butees} tauxAnalyse={tauxAnalyse} ch365={ch365}
         crmN={crmN} crmMois={crmMois} bulls={bulls} dernierBull={dernierBull} M={M} setManual={setManual}/>}
 
       {tab==='sm'&&<SgsMeeting safety={safety} spi={spi} H={H} A={A} meetings={MT} setMeetings={setMeetings} nomResp={nomResp}
         extra={{tauxLoadsheet,butees,tauxAnalyse,crmN,nbBull:bulls.length}}/>}
 
-      <button onClick={onBack} style={{width:"100%",height:46,marginTop:14,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,...TAP}}>← Retour</button>
-    </Card>
-  );
+    </>);
+  return (() => {
+    const NAV=[['bord','Bord',0],['ev','Événements',recus.length],['dg','Dangers',hRouges.length],['ac','Actions',aRetard.length],['spi','Indicateurs',spiAlertes],['sm','Meeting',0]];
+    const TEAL="#0F766E";
+    const expBtns=(big)=>[
+      <button key="cr" onClick={ouvrirExportCR} style={{border:"1px solid "+C.border,background:"white",borderRadius:8,padding:big?"8px 12px":"11px 14px",fontSize:12.5,fontWeight:600,color:C.navy,textAlign:"left",...TAP}}>Exporter les comptes rendus</button>,
+      <button key="rg" onClick={()=>{ setExpMenu(false); exporter(); }} style={{border:"none",background:TEAL,borderRadius:8,padding:big?"8px 12px":"11px 14px",fontSize:12.5,fontWeight:700,color:"white",textAlign:"left",...TAP}}>Exporter le registre des dangers et actions</button>];
+    const inline=wide&&view&&((view.kind==='hazard'&&tab==='dg')||(view.kind==='action'&&tab==='ac'));
+    const detailFull=view&&!inline?(view.kind==='hazard'?hazardDetail(H.find(x=>x.id===view.id)):actionDetail(A.find(x=>x.id===view.id))):null;
+    const body=editorView||detailFull||tabContent;
+    if(wide) return (
+      <div style={{position:"fixed",inset:0,zIndex:400,background:C.bg,display:"flex"}}>
+        <div style={{width:236,background:"white",borderRight:"1px solid "+C.border,display:"flex",flexDirection:"column",paddingTop:"env(safe-area-inset-top,0px)"}}>
+          <div style={{padding:"16px 16px 14px",borderBottom:"1px solid "+C.border}}>
+            <div style={{fontSize:14.5,fontWeight:800,color:TEAL,lineHeight:1.25}}>Système de gestion de la sécurité</div>
+            <div style={{fontSize:11,color:C.slate,marginTop:3}}>Manuel SGS V03 · Afrijet Sahara</div></div>
+          <nav style={{paddingTop:6}}>{NAV.map(([k,l,n])=>{ const on=tab===k&&!editorView;
+            return <div key={k} role="button" onClick={()=>go(k)} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 16px",fontSize:13.5,...TAP,
+              color:on?"#085041":C.slate,fontWeight:on?800:500,background:on?"#E1F5EE":"transparent",borderLeft:"3px solid "+(on?TEAL:"transparent")}}>
+              <SgsIcon n={k} size={19}/>{k==='sm'?'Safety Meeting':l}
+              {n>0&&<span style={{marginLeft:"auto",fontSize:11,fontWeight:800,borderRadius:9,padding:"1px 7px",background:"#FCEBEB",color:"#791F1F"}}>{n}</span>}</div>; })}</nav>
+          <div style={{marginTop:"auto",padding:"14px 16px",borderTop:"1px solid "+C.border,fontSize:11.5,color:C.slate}}>
+            Signataire<div style={{fontWeight:800,color:C.text,fontSize:13}}>{nomResp}</div>
+            <button onClick={onBack} style={{marginTop:12,border:"none",background:"none",padding:0,color:C.slate,fontSize:12.5,display:"flex",alignItems:"center",gap:4,...TAP}}><SgsIcon n="back" size={16}/>Retour aux formulaires</button></div>
+        </div>
+        <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
+          <div style={{height:60,background:"white",borderBottom:"1px solid "+C.border,display:"flex",alignItems:"center",gap:10,padding:"0 22px",paddingTop:"env(safe-area-inset-top,0px)"}}>
+            <div style={{fontSize:19,fontWeight:800,color:C.text,flex:1}}>{editorView?(edit.kind==='hazard'?'Dangers':'Actions'):SGS_TABLBL[tab]}</div>
+            <span style={{fontSize:12,color:C.slate}}>{new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</span>
+            {expBtns(true)}</div>
+          <SgsToastHost/>
+          <div style={{flex:1,overflowY:"auto",padding:"18px 22px 40px"}}><div style={{maxWidth:(tab==='bord'||tab==='dg'||tab==='ac')&&!editorView?1180:860,margin:"0 auto"}}>{body}</div></div>
+        </div>
+      </div>);
+    return (
+      <div style={{position:"fixed",inset:0,zIndex:400,background:C.bg,display:"flex",flexDirection:"column"}}>
+        <div style={{background:TEAL,color:"white",padding:"10px 12px",paddingTop:"calc(10px + env(safe-area-inset-top,0px))",display:"flex",alignItems:"center",gap:10}}>
+          <button onClick={onBack} aria-label="Retour aux formulaires" style={{border:"none",background:"rgba(255,255,255,.15)",borderRadius:8,width:34,height:34,color:"white",display:"flex",alignItems:"center",justifyContent:"center",...TAP}}><SgsIcon n="back" size={20}/></button>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14.5,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Système de gestion de la sécurité</div>
+            <div style={{fontSize:11,opacity:.85}}>Signataire : {nomResp}</div></div>
+          <button onClick={()=>setExpMenu(m=>!m)} aria-label="Exporter" style={{border:"none",background:expMenu?"white":"rgba(255,255,255,.15)",color:expMenu?TEAL:"white",borderRadius:8,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",...TAP}}><SgsIcon n="exp" size={20}/></button>
+        </div>
+        {expMenu&&<div style={{background:"white",borderBottom:"1px solid "+C.border,padding:10,display:"flex",flexDirection:"column",gap:8}}>{expBtns(false)}</div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",background:"white",borderBottom:"1px solid "+C.border}}>
+          {NAV.map(([k,l,n])=>{ const on=tab===k&&!editorView;
+            return <div key={k} role="button" onClick={()=>go(k)} style={{position:"relative",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"8px 0 7px",...TAP,
+              color:on?TEAL:C.slate,borderBottom:"2.5px solid "+(on?TEAL:"transparent")}}>
+              <SgsIcon n={k} size={20}/><span style={{fontSize:9.5,fontWeight:on?800:600}}>{l}</span>
+              {n>0&&<span style={{position:"absolute",top:3,right:"calc(50% - 20px)",minWidth:15,height:15,borderRadius:8,background:"#DC2626",color:"white",fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{n}</span>}</div>; })}
+        </div>
+        <SgsToastHost/>
+        <div style={{flex:1,overflowY:"auto",padding:"12px 12px 40px"}}>{body}</div>
+      </div>);
+  })();
 }
 
 // ── Onglet Indicateurs (SGS 05-01 § 1.7) ──
-function SgsIndicateursView({ spi, tauxLoadsheet, vols30, butees, tauxAnalyse, ch365, crmN, crmMois, bulls, dernierBull, M, setManual }){
+function SgsIndicateursView({ safety, spi, tauxLoadsheet, vols30, butees, tauxAnalyse, ch365, crmN, crmMois, bulls, dernierBull, M, setManual }){
   const [nc,setNc]=useState({date:new Date().toISOString().slice(0,10),titre:'',analyse:true});
   const [nb,setNb]=useState({date:new Date().toISOString().slice(0,10),titre:''});
   const Etat=({ok})=>(<span style={{fontSize:9.5,fontWeight:800,borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap",
@@ -2986,9 +3259,15 @@ function SgsIndicateursView({ spi, tauxLoadsheet, vols30, butees, tauxAnalyse, c
   const fen=j=>j<=31?"30 derniers jours":j<=92?"dernier trimestre":"12 derniers mois";
   return (<div style={{display:"flex",flexDirection:"column",gap:6}}>
     <SectionTitle>Comptes rendus d'événements</SectionTitle>
-    {spi.map(s=> s.k==='loadsheet'
-      ? <Line key={s.k} l="Conformité loadsheet / chargement" c={svcColor(s.svc[0])} sub={s.n+" non-conformité(s) sur "+vols30+" vols · cible 100 % · analyse dès diminution"} v={tauxLoadsheet+" %"} ok={!s.alerte}/>
-      : <Line key={s.k} l={s.l+(s.def?" — "+s.def.toLowerCase():"")} c={svcColor(s.svc[0])} sub={fen(s.fenetre)+" · cible "+s.cible+" · analyse "+s.seuil} v={s.n} ok={!s.alerte}/>)}
+    {SAFETY_SERVICES.map(sv=>{ const items=spi.filter(s=>s.svc[0]===sv.k); if(!items.length) return null; const nA=items.filter(s=>s.alerte).length;
+      return <div key={sv.k} style={{background:"white",border:"1px solid "+C.border,borderRadius:12,padding:"10px 12px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+          <span style={{background:svcColor(sv.k),color:"white",fontSize:10,fontWeight:800,borderRadius:5,padding:"1px 6px"}}>{sv.k}</span>
+          <b style={{fontSize:13.5,color:C.text}}>{sv.l}</b>
+          <span style={{marginLeft:"auto",fontSize:11,fontWeight:800,color:nA?"#B91C1C":"#1D9E75"}}>{nA?nA+' en alerte':'Conforme'}</span></div>
+        {items.map(s=><SgsSpiBar key={s.k} s={s} safety={safety} taux={tauxLoadsheet}/>)}
+      </div>; })}
+    <div style={{fontSize:10.5,color:C.slate}}>Barre : valeur rapportée au seuil d'analyse du manuel — vert conforme, ambre proche du seuil, rouge seuil atteint. Courbe grise : tendance sur 12 mois.</div>
     <SectionTitle>Calculés par l'application</SectionTitle>
     <Line l="Dépassement de butée des visites de maintenance" sub={butees.length?butees.join(" · "):"Aucun dépassement · cible 0 %"} v={butees.length} ok={!butees.length} c="#475569"/>
     <SectionTitle>Suivis par le responsable SGS</SectionTitle>
@@ -3028,6 +3307,7 @@ function SgsMeeting({ safety, spi, H, A, meetings, setMeetings, extra, nomResp }
   const mois=[...Array(12)].map((_,i)=>{ const d=new Date(now.getFullYear(),now.getMonth()-i,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); });
   const [mSel,setMSel]=useState(mois[0]);
   const [note,setNote]=useState(null);
+  const [editK,setEditK]=useState(null);   // partie du compte rendu en cours de modification
   const [busy,setBusy]=useState(null);
   const moisFr=m=>{ const [y,mm]=m.split('-'); return SGS_MOIS[Number(mm)-1]+' '+y; };
   const generer=async()=>{
@@ -3060,23 +3340,44 @@ Sections dans cet ordre : "Participants", "Événements de sécurité du mois", 
     }catch(e){ uiAlert("❌ Génération impossible : "+(e.message||e)); }
     setBusy(null);
   };
-  const archiver=()=>{ setMeetings(l=>{ const r=(l||[]).filter(x=>x.ref!==note.ref); return [{...note,savedAt:new Date().toISOString()},...r]; }); uiAlert("Compte rendu archivé — "+note.ref); };
+  const archiver=()=>{ const avant=meetings||[]; setMeetings(l=>{ const r=(l||[]).filter(x=>x.ref!==note.ref); return [{...note,savedAt:new Date().toISOString()},...r]; }); sgsToast("Compte rendu archivé · "+note.ref,()=>setMeetings(avant)); };
   const pdf=n=>{ try{ ndsExportPDF(n); }catch(e){ uiAlert("❌ Erreur PDF : "+e.message); } };
   const ta={...sgsInput,resize:"vertical",lineHeight:1.45};
-  if(note) return (<div style={{display:"flex",flexDirection:"column",gap:10}}>
-    <div style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#DC2626"}}>{note.ref}</div>
-    <SgsField label="Objet"><input value={note.objet} onChange={e=>setNote({...note,objet:e.target.value})} style={sgsInput}/></SgsField>
-    <SgsField label="Introduction"><textarea rows={3} value={note.intro} onChange={e=>setNote({...note,intro:e.target.value})} style={ta}/></SgsField>
-    {note.sections.map((s,i)=>(<SgsField key={i} label={(i+1)+'. '+s.title}>
-      <textarea rows={Math.min(12,Math.max(3,Math.ceil((s.content||'').length/60)))} value={s.content}
-        onChange={e=>setNote({...note,sections:note.sections.map((x,k)=>k===i?{...x,content:e.target.value}:x)})} style={ta}/></SgsField>))}
-    <SgsField label="Conclusion"><textarea rows={2} value={note.closingText} onChange={e=>setNote({...note,closingText:e.target.value})} style={ta}/></SgsField>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-      <button onClick={()=>setNote(null)} style={{height:44,borderRadius:10,border:"1.5px solid "+C.border,background:C.bg,color:C.slate,fontWeight:700,...TAP}}>← Retour</button>
-      <button onClick={()=>pdf(note)} style={{height:44,borderRadius:10,border:"1.5px solid #0F766E",background:"white",color:"#0F766E",fontWeight:700,...TAP}}>📄 PDF</button>
-      <button onClick={archiver} style={{height:44,borderRadius:10,border:"none",background:"#0F766E",color:"white",fontWeight:700,...TAP}}>💾 Archiver</button>
-    </div>
-  </div>);
+  if(note){
+    // Aperçu présenté comme le document ; chaque partie se modifie avec le crayon
+    const todo=[note.objet,note.intro,...note.sections.map(s=>s.content),note.closingText].join(' ').split('[à compléter]').length-1;
+    const setPart=(k,v)=>setNote(typeof k==='number'?{...note,sections:note.sections.map((x,i)=>i===k?{...x,content:v}:x)}:{...note,[k]:v});
+    const getPart=k=>typeof k==='number'?note.sections[k].content:note[k];
+    const pencil=k=><button onClick={()=>setEditK(editK===k?null:k)} aria-label="Modifier" style={{border:"none",background:editK===k?"#E1F5EE":"none",borderRadius:6,padding:"3px 6px",color:"#0F766E",fontSize:12,fontWeight:700,...TAP}}>{editK===k?'Terminer':'✎ Modifier'}</button>;
+    const part=(k,title,rows)=>(<div key={String(k)} style={{marginTop:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,fontSize:12.5,fontWeight:800,color:"#8B0000",textTransform:"uppercase",letterSpacing:".03em"}}>{title}</div>{pencil(k)}</div>
+      {editK===k
+        ? <textarea autoFocus rows={rows||Math.min(12,Math.max(3,Math.ceil((getPart(k)||'').length/55)))} value={getPart(k)||''} onChange={e=>setPart(k,e.target.value)} style={{...ta,marginTop:6}}/>
+        : <div style={{fontSize:13,color:C.text,lineHeight:1.55,marginTop:4,whiteSpace:"pre-wrap"}}>{sgsMarkTodo(getPart(k))||<span style={{color:C.slate}}>—</span>}</div>}
+    </div>);
+    const imprimer=async()=>{ if(todo>0&&!(await uiConfirm("Il reste "+todo+" mention(s) « [à compléter] » dans le compte rendu. Imprimer quand même ?"))) return; pdf(note); };
+    return (<div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {todo>0&&<div style={{display:"flex",alignItems:"center",gap:8,background:"#FAEEDA",color:"#633806",borderRadius:10,padding:"9px 12px",fontSize:12.5,fontWeight:600}}>
+        <span style={{fontWeight:800}}>!</span>{todo} mention{todo>1?'s':''} « [à compléter] » avant impression — touchez ✎ Modifier sur la partie concernée.</div>}
+      <div style={{background:"white",border:"1px solid "+C.border,borderRadius:12,padding:"18px 18px 20px",boxShadow:"0 1px 4px rgba(0,0,0,.05)"}}>
+        <div style={{borderBottom:"3px solid #8B0000",paddingBottom:10}}>
+          <div style={{fontSize:11,fontWeight:800,color:"#8B0000",letterSpacing:".08em"}}>AFRIJET SAHARA · COMPTE RENDU SAFETY MEETING</div>
+          <div style={{display:"flex",gap:10,marginTop:6,fontSize:11.5,color:C.slate,flexWrap:"wrap"}}><span style={{fontFamily:"monospace",fontWeight:800,color:"#DC2626"}}>{note.ref}</span><span>{note.date}</span><span>{note.classification}</span></div>
+          <div style={{fontSize:11.5,color:C.slate,marginTop:4}}>De : {note.from}<br/>À : {note.to}</div>
+        </div>
+        {part('objet','Objet',2)}
+        {part('intro','Introduction')}
+        {note.sections.map((s,i)=>part(i,(i+1)+'. '+s.title))}
+        {part('closingText','Conclusion')}
+        <div style={{marginTop:18,textAlign:"right",fontSize:12,color:C.slate}}><b style={{color:C.text}}>{note.approbNom}</b><br/>{note.approbFonction}</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        <button onClick={()=>{ setEditK(null); setNote(null); }} style={{height:44,borderRadius:10,border:"1.5px solid "+C.border,background:C.bg,color:C.slate,fontWeight:700,...TAP}}>← Retour</button>
+        <button onClick={imprimer} style={{height:44,borderRadius:10,border:"1.5px solid #0F766E",background:"white",color:"#0F766E",fontWeight:700,...TAP}}>📄 PDF</button>
+        <button onClick={()=>{ setEditK(null); archiver(); }} style={{height:44,borderRadius:10,border:"none",background:"#0F766E",color:"white",fontWeight:700,...TAP}}>💾 Archiver</button>
+      </div>
+    </div>);
+  }
   return (<div style={{display:"flex",flexDirection:"column",gap:10}}>
     <div style={{fontSize:12,color:C.slate,lineHeight:1.5}}>Le compte rendu est rédigé par l'IA à partir des données du mois. Elle ne reçoit ni nom ni description d'événement : seulement des décomptes, les indicateurs, les dangers et les actions. Les participants et les décisions de séance sont à compléter.</div>
     <SgsField label="Mois"><CustomSelect value={mSel} onChange={setMSel} required options={mois.map(m=>({value:m,label:moisFr(m)}))}/></SgsField>
