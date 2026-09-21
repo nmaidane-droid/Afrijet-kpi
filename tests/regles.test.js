@@ -22,7 +22,7 @@ function extract(name){
     else if(ch===';'&&depth===0&&seen===false) return code.slice(i,k+1);
   }
 }
-const names=['NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -80,6 +80,15 @@ test('tri : ancien format par date',  ()=>attendu(T.ndsDateKey({ref:'NS-OPS-2026
 test('tri : référence ND reconnue',   ()=>attendu(T.ndsDateKey({ref:'ND-20261015-02'})===20261015,'ND ignoré'));
 test('quatre types de documents',     ()=>attendu(T.NDS_MODES.map(m=>m.id).join()==='nds,re,dgac,as','types inattendus'));
 test('notification DGAC sans analyse',()=>attendu(!T.DGAC_SECTIONS.some(s=>/analyse|risque|facteur/i.test(s)),'rubrique d\'analyse présente'));
+
+console.log('\nRegistre des événements — conformité au Manuel SGS § 05-01');
+const man=T.SAFETY_EVENTS.filter(e=>e.manuel);
+test('17 événements issus du manuel',      ()=>attendu(man.length===17,'trouvé '+man.length));
+test('chaque événement a cible et seuil',  ()=>attendu(man.every(e=>e.cible&&e.seuil),'cible ou seuil manquant'));
+test('QRF et QRP définis',                 ()=>attendu(['qrf','qrp'].every(k=>T.SAFETY_EVENTS.find(e=>e.k===k).def),'définition manquante'));
+test('clés historiques conservées',        ()=>attendu(['approche','tcas','gpws','hardLanding','safa'].every(k=>T.SAFETY_EVENTS.some(e=>e.k===k)),'clé perdue'));
+test('clés uniques',                       ()=>attendu(new Set(T.SAFETY_EVENTS.map(e=>e.k)).size===T.SAFETY_EVENTS.length,'doublon'));
+test('passager indiscipliné : 3 suites',   ()=>attendu(T.SAFETY_EVENTS.find(e=>e.k==='unruly').sub.length===3,'précisions manquantes'));
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
