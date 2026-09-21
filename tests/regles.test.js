@@ -24,7 +24,7 @@ function extract(name){
     else if(!fm&&depth===0&&(ch===';'||ch==='\n')) return code.slice(i,k+1);
   }
 }
-const names=['sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['sgsPlanAuto','sgsDureeMin','sgsCrtsvDac','sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -131,6 +131,20 @@ console.log('\nFormations SGS : résultat par participant (SGS 04-01)');
   test('personnes formées : A et B', ()=>attendu(T.sgsFormNoms(f).join()==='A,B','obtenu '+T.sgsFormNoms(f).join()));
   test('ancienne session convertie sans perte', ()=>{ const old={participants:'Nour MAIDANE — CDB\nMarie DUPONT'}; const p=T.sgsFormPers(old);
     attendu(p.length===2&&p[0].nom==='Nour MAIDANE'&&p[0].fonction==='CDB'&&p[1].present===true&&T.sgsFormNoms(old).length===2,'conversion fausse'); }); }
+
+console.log('\nCRTSV (SMS-17) : copie à la DAC au-delà d\'une heure');
+test('durées lues : 1:30, 2h, 0:45', ()=>attendu(T.sgsDureeMin('1:30')===90&&T.sgsDureeMin('2h')===120&&T.sgsDureeMin('0:45')===45,'lecture fausse'));
+test('copie DAC exigée au-delà d\'une heure seulement', ()=>attendu(T.sgsCrtsvDac({form:'SMS-17',fx:{duree:'1:10'}})&&!T.sgsCrtsvDac({form:'SMS-17',fx:{duree:'1:00'}})&&!T.sgsCrtsvDac({form:'SMS-19',fx:{duree:'3:00'}}),'règle fausse'));
+
+console.log('\nPlanning SGS (SMS-10) : pointage automatique');
+{ const A=T.sgsPlanAuto(2026,{meetings:[{mois:'2026-03'}],revues:[{kind:'cr',savedAt:'2026-06-20T10:00:00Z'},{kind:'fascicule',savedAt:'2026-05-10T10:00:00Z'}],
+    audits:[{type:'base',statut:'realise',date:'2026-10-02'},{type:'base',statut:'planifie',date:'2026-11-02'}],osv:[{date:'2026-04-15'}],
+    formations:[{date:'2026-02-10',pers:[{nom:'A',present:true}]},{date:'2026-07-10',pers:[{nom:'B',present:false}]}],bulletins:[{date:'2025-12-01'},{date:'2026-09-01'}]});
+  test('réunion de mars et revue de juin pointées', ()=>attendu(A.reun[3]&&A.revue[6]&&!(A.revue||{})[5],'faux'));
+  test('audit réalisé pointé, audit planifié ignoré', ()=>attendu(A.aBase[10]&&!A.aBase[11],'faux'));
+  test('contrôle OSV compté en contrôle des escales', ()=>attendu(A.aEsc[4],'faux'));
+  test('sensibilisation pointée seulement avec des présents', ()=>attendu(A.sensi[2]&&!A.sensi[7],'faux'));
+  test('bulletin d\'une autre année ignoré', ()=>attendu(A.bull[9]&&!A.bull[12],'faux')); }
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
