@@ -2408,7 +2408,7 @@ function ndsMaxSeqInArchive(base, stamp){
   const re = new RegExp('^'+base+'-'+stamp+'-(\\d+)$');
   let max = 0;
   try{
-    (JSON.parse(localStorage.getItem(NDS_ARCHIVE_KEY)||'[]')).forEach(r=>{
+    ndsReadPersisted().forEach(r=>{
       const m = re.exec(String(r.ref||'').trim());
       if(m){ const n=parseInt(m[1],10); if(n>max) max=n; }
     });
@@ -2466,28 +2466,44 @@ function ndsDateKey(r){
   return 0;
 }
 
-function ndsLoadArchive(){
+// Les archives du générateur vivent désormais dans la persistance partagée
+// (clé « ndsArchive » via usePersist) : synchronisées entre appareils par
+// Supabase, avec la fusion horodatée. L'ancienne clé locale « ns:archive »
+// n'est conservée que pour migrer les notes déjà enregistrées.
+const NDS_ARCHIVE_PERSIST_KEY = 'ndsArchive';
+
+// Attribue un identifiant unique à toute entrée qui n'en a pas ou qui en
+// partage un avec une autre : la suppression filtre par id.
+function ndsRepairIds(arch){
+  const seen = new Set(); let fixed = false;
+  (arch||[]).forEach((r,i)=>{
+    if(!r.id || seen.has(r.id)){
+      r.id = (r.ref||'NS')+'-'+Date.now()+'-'+i+'-'+Math.random().toString(36).slice(2,8);
+      fixed = true;
+    }
+    seen.add(r.id);
+  });
+  return fixed;
+}
+
+// Lecture synchrone de l'archive persistée (sert au calcul des références).
+function ndsReadPersisted(){
   try{
-    const arch = JSON.parse(localStorage.getItem(NDS_ARCHIVE_KEY) || '[]');
-    // Répare les archives dont l'identifiant est dupliqué ou absent : sans cela,
-    // supprimer une note en effacerait plusieurs (la suppression filtre par id).
-    const seen = new Set(); let fixed = false;
-    arch.forEach((r,i)=>{
-      if(!r.id || seen.has(r.id)){
-        r.id = (r.ref||'NS')+'-'+Date.now()+'-'+i+'-'+Math.random().toString(36).slice(2,8);
-        fixed = true;
-      }
-      seen.add(r.id);
-    });
-    if(fixed){ try{ localStorage.setItem(NDS_ARCHIVE_KEY, JSON.stringify(arch)); }catch(_e){} }
-    return arch;
-  }
-  catch(_e){ return []; }
+    const s = lsGet(PFX+NDS_ARCHIVE_PERSIST_KEY);
+    if(!s) return [];
+    const u = unwrapEnv(JSON.parse(s));
+    return Array.isArray(u.v) ? u.v : [];
+  }catch(_e){ return []; }
 }
-function ndsPersistArchive(archive){
-  try{ localStorage.setItem(NDS_ARCHIVE_KEY, JSON.stringify(archive)); return true; }
-  catch(_e){ alert('Stockage plein — supprimez d\u2019anciennes notes des archives.'); return false; }
+
+// Notes héritées de l'ancien stockage local, à reprendre une seule fois.
+function ndsLegacyArchive(){
+  try{
+    const a = JSON.parse(localStorage.getItem(NDS_ARCHIVE_KEY) || '[]');
+    return Array.isArray(a) ? a : [];
+  }catch(_e){ return []; }
 }
+function ndsClearLegacy(){ try{ localStorage.removeItem(NDS_ARCHIVE_KEY); }catch(_e){} }
 
 function ndsExportPDF(state, opts={}){
   // Build tag embedded in PDF metadata (Fichier > Propriétés côté lecteur PDF) —
@@ -2847,7 +2863,7 @@ function NdsEditable({ html, field, live, onCommit, style, tag }){
   });
 }
 
-function FormNDS({ onBack, safetyData, flights, aircraft }){
+function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive }){
   const [tab,setTab]=useState("editor");           // editor | archive
   const [cat,setCat]=useState(NDS_CATEGORIES[2]);
   const [ref,setRef]=useState(ndsNextRef('NS-OPS'));
@@ -2871,7 +2887,21 @@ function FormNDS({ onBack, safetyData, flights, aircraft }){
   const [progress,setProgress]=useState(null);   // {done,total} sections reçues
   const [err,setErr]=useState("");
   const [note,setNote]=useState(null);
-  const [archive,setArchive]=useState(()=>ndsLoadArchive());
+  // Migration unique : reprend les notes de l'ancien stockage local, puis
+  // répare les identifiants dupliqués s'il y en a.
+  useEffect(()=>{
+    const legacy=ndsLegacyArchive();
+    if(!legacy.length && !ndsRepairIds(archive)) return;
+    setArchive(prev=>{
+      const cur=Array.isArray(prev)?prev.slice():[];
+      const refs=new Set(cur.map(r=>r.ref));
+      legacy.forEach(r=>{ if(!refs.has(r.ref)) cur.push(r); });
+      ndsRepairIds(cur);
+      return cur;
+    });
+    if(legacy.length) ndsClearLegacy();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
   const live=useRef({});   // valeurs en cours de saisie (équivalent de l'objet state du PWA)
   const [search,setSearch]=useState("");
   const [toast,setToast]=useState("");
@@ -2934,7 +2964,7 @@ function FormNDS({ onBack, safetyData, flights, aircraft }){
     if(!note) return;
     const cur=syncNote(note);
     setNote(cur);
-    const arch=ndsLoadArchive();
+    const arch=(archive||[]).slice();
     const idx=arch.findIndex(r=>r.ref===cur.ref);
     const record={
       ...cur,
@@ -2944,15 +2974,14 @@ function FormNDS({ onBack, safetyData, flights, aircraft }){
       category: mode==="nds" ? (cat?cat.label:'') : (NDS_MODES.find(m=>m.id===mode)||{}).label || '',
       savedAt: new Date().toISOString()
     };
-    if(idx>=0){ arch[idx]=record; if(!ndsPersistArchive(arch))return; flash('Note mise à jour — '+record.ref); }
-    else { arch.unshift(record); if(!ndsPersistArchive(arch))return; ndsCommitRef(refBase()); setRef(ndsNextRef(refBase())); flash('Note enregistrée — '+record.ref); }
+    if(idx>=0){ arch[idx]=record; flash('Note mise à jour — '+record.ref); }
+    else { arch.unshift(record); ndsCommitRef(refBase()); setRef(ndsNextRef(refBase())); flash('Note enregistrée — '+record.ref); }
     setArchive(arch);
   };
 
   const deleteFromArchive=(id)=>{
     if(!window.confirm('Supprimer cette note des archives ?')) return;
-    const arch=ndsLoadArchive().filter(r=>r.id!==id);
-    ndsPersistArchive(arch); setArchive(arch);
+    setArchive(prev=>(prev||[]).filter(r=>r.id!==id));
   };
 
   const openFromArchive=(r)=>{
@@ -2973,7 +3002,7 @@ function FormNDS({ onBack, safetyData, flights, aircraft }){
       try{
         const parsed=JSON.parse(await file.text());
         const records=Array.isArray(parsed)?parsed:[parsed];
-        const arch=ndsLoadArchive();
+        const arch=(archive||[]).slice();
         let imported=0, replaced=0;
         records.forEach(rec=>{
           if(!rec||!rec.ref||!Array.isArray(rec.sections)) return;
@@ -3000,7 +3029,6 @@ function FormNDS({ onBack, safetyData, flights, aircraft }){
           imported++;
         });
         if(imported===0){ flash('Fichier non reconnu — format de note invalide.'); return; }
-        if(!ndsPersistArchive(arch)) return;
         setArchive(arch);
         flash(replaced===imported
           ? (imported>1?imported+' notes mises à jour.':'Note mise à jour dans les archives.')
@@ -3819,7 +3847,7 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
   );
 }
 
-function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients }) {
+function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
   const isAdmin = profileId === "rdoa";
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="comm"?"clients":null;
   const [active,setActive]=useState(defaultForm);
@@ -3844,6 +3872,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       dismissed,
       safetyData,
       clients,
+      ndsArchive,
     };
     setProgress(p=>({...p,currentStep:1,pct:40}));
     try{
@@ -4221,7 +4250,7 @@ function ScreenForms({ onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, 
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {effectiveActive==="regl"     && <FormReglementation/>}
       {effectiveActive==="docavion" && <FormDocAvion/>}
-      {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft}/>}
+      {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}/>}
       {effectiveActive==="clients"  && <FormClients clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
@@ -6000,6 +6029,7 @@ function AppMain({ onLogout, profileId }) {
   const [melHist,setMelHist]     = usePersist("melHist",[]);
   const [icao24,setIcao24]   = usePersist("icao24","CN-KTA");
   const [lastBackup,setLastBackup] = usePersist("lastBackup",null);
+  const [ndsArchive,setNdsArchive]=usePersist(NDS_ARCHIVE_PERSIST_KEY, []);   // archives du générateur
   const [ac,setAc]           = useState(null);
   const [mTraffic,setMTraff] = useState([]);
   const [loading,setLoading] = useState(false);
@@ -6019,6 +6049,7 @@ function AppMain({ onLogout, profileId }) {
     if(data.alertHist) setAlertHist(data.alertHist);
     if(data.melHist)   setMelHist(data.melHist);
     if(data.aircraft)  setAircraft(data.aircraft);
+    if(data.ndsArchive)setNdsArchive(data.ndsArchive);
   };
 const [showRestoreModal,setShowRestoreModal] = useState(false);
   const [restoreProgress,setRestoreProgress] = useState(null);
@@ -6054,7 +6085,9 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
   const doReset = () => {
     clearStorage();
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
-    setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);setReport(null);setReset(false);setTab("forms");
+    setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);
+    setClients(INIT_CLIENTS);setNdsArchive([]);   // sinon ces deux-là reviennent depuis le cloud
+    setReport(null);setReset(false);setTab("forms");
   };
 
   const allAlerts  = computeAlerts(kpis,flights,maintData,aircraft,crew);
@@ -6140,6 +6173,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           melHist={melHist} setMelHist={setMelHist}
           canForm={canForm} profileLabel={profile.label} profileId={profileId}
           clients={clients} setClients={setClients}
+          ndsArchive={ndsArchive} setNdsArchive={setNdsArchive}
           onImport={onImport}
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
