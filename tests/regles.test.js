@@ -24,7 +24,7 @@ function extract(name){
     else if(!fm&&depth===0&&(ch===';'||ch==='\n')) return code.slice(i,k+1);
   }
 }
-const names=['SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -102,6 +102,10 @@ test('rouge : action immédiate',        ()=>attendu(T.SGS_NIVEAUX.intolerable.d
 test('jaune : actions sous 30 jours',   ()=>attendu(T.SGS_NIVEAUX.tolerable.delai===30,'délai faux'));
 test('risque résiduel prioritaire',     ()=>attendu(T.sgsRisqueCourant({P:5,G:'A',P2:2,G2:'D'}).cell==='2D','résiduel ignoré'));
 test('chaque indicateur a un seuil',    ()=>attendu(T.SAFETY_EVENTS.filter(e=>e.manuel).every(e=>T.SGS_SPI[e.k]),'seuil manquant'));
+
+console.log('\nRecherche dans les registres SGS');
+test('insensible aux accents et majuscules', ()=>attendu(T.sgsMatch('SURETE','Sûreté aéroportuaire')&&T.sgsMatch('dakhla','Ingestion à DAKHLA'),'accent ou casse mal géré'));
+test('recherche vide : tout correspond',     ()=>attendu(T.sgsMatch('  ','x')&&!T.sgsMatch('abc','xyz'),'filtre vide faux'));
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
