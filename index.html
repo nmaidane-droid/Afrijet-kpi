@@ -2842,6 +2842,31 @@ Sections dans cet ordre : "Participants", "Événements de sécurité du mois", 
   </div>);
 }
 
+// Comptes rendus de démonstration : couvrent les six services, répartis sur 7 j,
+// 30 j et au-delà ; certains confidentiels, trois seuils du manuel franchis.
+// Ajoutés une seule fois (drapeau synchronisé), sans écraser les données existantes.
+function sgsDemoSafety(){
+  const d=n=>{ const x=new Date(); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10); };
+  const V=(id,n,num,from,to,flags,desc,extra)=>({demoId:id,demo:true,date:d(n),num,from,to,rattachement:"vol",...flags,description:desc,confidentiel:false,anonyme:false,timestamp:"demo-"+id,...(extra||{})});
+  const X=(id,n,mode,num,flags,desc,extra)=>({demoId:id,demo:true,date:d(n),num,from:"",to:"",rattachement:mode,...flags,description:desc,confidentiel:false,anonyme:false,timestamp:"demo-"+id,...(extra||{})});
+  return [
+    V("d01",2 ,"AJS201","VIL","CMN",{bird:true},"Impact aviaire en montée initiale, FL030. Inspection moteur n° 2 sans dommage."),
+    V("d02",9 ,"AJS203","VIL","RBA",{bird:true},"Impact aviaire au roulement à l'atterrissage, bord d'attaque gauche."),
+    V("d03",12,"AJS205","CMN","VIL",{bird:true},"Collision aviaire en courte finale piste 03."),
+    V("d04",5 ,"AJS301","CMN","NKC",{tsv:true},"Turbulence sévère en croisière FL350, service cabine interrompu, aucun blessé."),
+    V("d05",4 ,"AJS302","NKC","VIL",{unruly:true},"Passager agressif envers l'équipage de cabine avant la fermeture des portes.",{unrulyType:"Débarqué",confidentiel:true}),
+    V("d06",6 ,"AJS207","VIL","CMN",{loadsheet:true},"Écart de 4 passagers entre loadsheet et comptage cabine, corrigé avant départ."),
+    X("d07",3 ,"appareil","CN-KTA",{qrp:true},"Retour au parking avant décollage : alarme HYD 2 LO PRESS au roulage."),
+    X("d08",25,"appareil","CN-KTA",{aog:true},"AOG 18 h à Dakhla : remplacement d'un démarreur moteur n° 1."),
+    X("d09",15,"hors","",{groundInjury:true},"Agent de piste blessé à la main lors du chargement des soutes.",{confidentiel:true}),
+    X("d10",20,"hors","",{cgoProc:true},"Fret chargé sans document de pesée validé."),
+    X("d11",60,"hors","",{dg:true},"Colis de batteries lithium non déclaré détecté au contrôle fret.",{confidentiel:true}),
+    X("d12",1 ,"hors","",{unruly:true},"Passager non admis à l'embarquement pour état d'ébriété.",{unrulyType:"Non admis"}),
+    V("d13",40,"AJS209","RBA","VIL",{cfg:true},"Alarme de configuration au décollage : volets non sortis, décollage interrompu à basse vitesse."),
+    V("d14",80,"AJS303","VIL","NKC",{peqInjury:true},"Membre d'équipage de cabine blessé au poignet lors d'une turbulence."),
+  ];
+}
+
 function FormFin({ onSubmit, saved }) {
   const MOIS=["Janvier","Fevrier","Mars","Avril","Mai","Juin","Juillet","Aout","Septembre","Octobre","Novembre","Decembre"];
   const [mois,setMois]=useState("Juin");
@@ -4752,15 +4777,15 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
     {id:"crew",     icon:"👨‍✈️", label:"Equipage",       color:"#0369A1"},
     {id:"maint",    icon:"🔧",  label:"Maintenance",    color:"#00936A"},
     {id:"vol",      icon:"🛫",  label:"Vol",            color:"#0F1F3D"},
+    {id:"sgs",      icon:"🛡",  label:"SGS",             color:"#0F766E"},
     {id:"secu",     icon:"🛡",  label:"Sécurité",       color:"#DC2626"},
-    {id:"fin",      icon:"💰",  label:"Finances",       color:"#7C3AED"},
     {id:"docavion", icon:"📁",  label:"Doc Avion",      color:"#0369A1"},
     {id:"regl",     icon:"📋",  label:"Réglementation", color:"#B45309"},
     {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"},
     {id:"clients",  icon:"🏢",  label:"Clients",         color:"#0891B2"},
     {id:"nds",      icon:"📋",  label:"Générateur IA",   color:"#0F1F3D"},
     {id:"rapport",  icon:"📊",  label:"Rapport",         color:"#00936A"},
-    {id:"sgs",      icon:"🛡",  label:"SGS",             color:"#0F766E"},
+    {id:"fin",      icon:"💰",  label:"Finances",       color:"#7C3AED"},
   ];
   const FORMS = ALL_FORMS; // Toujours afficher toutes les tuiles
   const canAccessForm = (id) => !canForm || canForm(id);
@@ -7067,6 +7092,17 @@ function AppMain({ onLogout, profileId }) {
   const [maintData,setMaint] = usePersist("maint",INIT_MAINT);
   const [finData,setFin]     = usePersist("fin",INIT_FIN);
   const [safetyData,setSafety] = usePersist("safety",INIT_SAFETY);
+  // Démonstration Sécurité : ajout unique ; dédoublonnage par demoId si deux appareils l'ajoutent.
+  const [demoSafetyV1,setDemoSafetyV1] = usePersist("demoSafetyV1",false);
+  useEffect(()=>{
+    if(demoSafetyV1) return;
+    const t=setTimeout(()=>{
+      setSafety(s=>{ const have=new Set((s||[]).map(e=>e.demoId).filter(Boolean));
+        return [...(s||[]), ...sgsDemoSafety().filter(e=>!have.has(e.demoId))]; });
+      setDemoSafetyV1(true);
+    },4000);   // laisse le temps aux données du cloud d'arriver
+    return ()=>clearTimeout(t);
+  },[demoSafetyV1]);
   const [crew,setCrew]       = usePersist("crew",INIT_CREW);
   const [clients,setClients] = usePersist("clients",INIT_CLIENTS);
   const [aircraft,setAircraft] = usePersist("aircraft",INIT_AIRCRAFT);
@@ -7836,11 +7872,12 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,padding:"6px 2px",position:"relative",...NOTAP,borderTop:active?"2.5px solid "+C.gold:"2.5px solid transparent"}}>
               <span style={{fontSize:17,lineHeight:1}}>{t.icon}</span>
               <span style={{fontSize:8,fontWeight:active?700:500,color:active?C.gold:C.slate}}>{t.label}</span>
-              {/* Emplacement de l'œil, de hauteur fixe : tous les libellés restent alignés */}
-              <span style={{height:9,fontSize:7,lineHeight:"9px",color:C.slateL,position:"relative",display:"inline-block"}}
+              {/* Emplacement de l'œil : case fixe et centrée, tous les libellés restent alignés.
+                  Le trait est centré sur la case, pas sur l'émoji, dont la largeur varie selon le téléphone. */}
+              <span style={{width:12,height:9,position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}
                 aria-label={interdit?"Accès non autorisé":undefined}>
-                {(isRO||interdit)&&"👁"}
-                {interdit&&<span style={{position:"absolute",left:"50%",top:"50%",width:11,height:1.2,marginLeft:-5.5,marginTop:-0.6,background:"#64748B",transform:"rotate(-35deg)",borderRadius:1}}/>}
+                {(isRO||interdit)&&<span style={{fontSize:7,lineHeight:1,color:C.slateL}}>👁</span>}
+                {interdit&&<span style={{position:"absolute",left:2.5,right:2.5,top:4,height:1.2,background:"#64748B",transform:"rotate(-35deg)",borderRadius:1}}/>}
               </span>
               {badge&&(
                 <div style={{position:"absolute",top:4,right:"50%",transform:"translateX(10px)",background:C.danger,color:"white",borderRadius:10,minWidth:16,height:16,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>
