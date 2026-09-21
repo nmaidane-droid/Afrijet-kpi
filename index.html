@@ -3256,17 +3256,45 @@ function SgsAuditsView({ items, setItems, nomResp, onAction }){
 
 // ── Formation et sensibilisation — SGS 04-01 ──
 const SGS_FORM_TYPES=[{k:'initiale',l:'Sensibilisation SGS initiale'},{k:'recyclage',l:'Recyclage SGS'},{k:'direction',l:'DR et responsables désignés'},{k:'soustraitant',l:'Sous-traitants'}];
-const sgsFormNoms=f=>String(f.participants||'').split(/\n|,/).map(s=>s.trim()).filter(Boolean);
+// Participants d'une session : une ligne par personne (nom, fonction, présence, résultat au test facultatif).
+// Les anciennes sessions (liste de noms en texte) sont converties à la lecture, sans perte.
+const sgsFormPers=f=>Array.isArray(f.pers)?f.pers:String(f.participants||'').split(/\n|,/).map(s=>s.trim()).filter(Boolean).map(n=>{ const [nom,fonction]=n.split(/\s+[—–-]\s+/); return {nom:(nom||'').trim(),fonction:(fonction||'').trim(),present:true,score:''}; });
+const sgsFormSeuil=f=>Number(f.seuil)||75;
+// Résultat : absent · présent (sans test) · réussi · à reprendre
+const sgsFormRes=(p,f)=>!p.present?'absent':(p.score===''||p.score==null)?'present':(Number(p.score)>=sgsFormSeuil(f)?'reussi':'reprendre');
+const SGS_FORM_RES={absent:{l:'Absent',c:'#B91C1C',bg:'#FCEBEB'},present:{l:'Formé',c:'#047857',bg:'#EAF3DE'},reussi:{l:'Réussi',c:'#047857',bg:'#EAF3DE'},reprendre:{l:'À reprendre',c:'#B45309',bg:'#FAEEDA'}};
+const sgsFormOK=(p,f)=>['present','reussi'].includes(sgsFormRes(p,f));
+// Personnes considérées comme formées (présentes, et reçues si un test a eu lieu)
+const sgsFormNoms=f=>sgsFormPers(f).filter(p=>p.nom&&sgsFormOK(p,f)).map(p=>p.nom);
 function SgsFormationsView({ items, setItems, nomResp }){
   const [ed,setEd]=useState(null);
   const today=sgsToday(), list=[...(items||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  // Dernière session par personne et échéance de recyclage
-  const pers={}; list.forEach(f=>sgsFormNoms(f).forEach(n=>{ const k=n.toLowerCase(); if(!pers[k]||pers[k].date<f.date){ const d=new Date(f.date); d.setMonth(d.getMonth()+(Number(f.periodicite)||24)); pers[k]={nom:n,date:f.date,ech:d.toISOString().slice(0,10),ref:f.ref}; } }));
-  const P=Object.values(pers).sort((a,b)=>a.ech.localeCompare(b.ech)), echus=P.filter(p=>p.ech<today), bientot=P.filter(p=>p.ech>=today&&sgsJours(p.ech)>-60);
-  if(ed){ const up=p=>setEd({...ed,...p});
-    const save=()=>{ if(!ed.date||!sgsFormNoms(ed).length){ uiAlert("⚠️ Indiquez la date et au moins un participant."); return; } const now=new Date().toISOString();
-      if(ed.id) setItems(l=>(l||[]).map(x=>x.id===ed.id?{...ed,updatedAt:now}:x)); else setItems(l=>[...(l||[]),{...ed,id:'FOR'+Date.now(),ref:sgsRefAn(items,'FOR',ed.date),createdAt:now}]);
+  // Dernière session réussie par personne → échéance de recyclage ; personnes à former (absentes ou à reprendre, sans réussite ultérieure)
+  const pers={}, aFormer={};
+  [...list].reverse().forEach(f=>sgsFormPers(f).forEach(p=>{ if(!p.nom) return; const k=p.nom.toLowerCase();
+    if(sgsFormOK(p,f)){ const d=new Date(f.date); d.setMonth(d.getMonth()+(Number(f.periodicite)||24)); pers[k]={nom:p.nom,date:f.date,ech:d.toISOString().slice(0,10),ref:f.ref}; delete aFormer[k]; }
+    else if(!pers[k]||pers[k].date<f.date) aFormer[k]={nom:p.nom,motif:SGS_FORM_RES[sgsFormRes(p,f)].l.toLowerCase(),ref:f.ref,date:f.date}; }));
+  const P=Object.values(pers).sort((a,b)=>a.ech.localeCompare(b.ech)), echus=P.filter(p=>p.ech<today), bientot=P.filter(p=>p.ech>=today&&sgsJours(p.ech)>-60), AF=Object.values(aFormer);
+  const presence=f=>{ try{ const ps=sgsFormPers(f);
+    sgsDocPDF({ref:(f.ref||'FOR')+'-PRES',titre:'Tableau récapitulatif de présence',sous:(f.intitule||'Sensibilisation au SGS')+' — '+sgsFr(f.date),nom:nomResp,fonction:'Responsable du Système de Gestion de la Sécurité',
+      meta:[['Session',f.ref||'-'],['Type',(SGS_FORM_TYPES.find(t=>t.k===f.type)||{}).l||'-'],['Date et durée',sgsFr(f.date)+(f.duree?' · '+f.duree:'')],['Formateur',f.formateur||'-'],['Seuil de réussite au test',ps.some(p=>p.score!==''&&p.score!=null)?sgsFormSeuil(f)+' %':'Pas de test']],
+      blocs:[{t:'Participants (SGS 04-01)',cols:[{l:'Nom',w:48},{l:'Fonction',w:40},{l:'Présence',w:22},{l:'Test',w:16},{l:'Résultat',w:24},{l:'Signature',w:32}],
+        rows:ps.map(p=>[p.nom,p.fonction||'-',p.present?'Présent':'Absent',(p.score===''||p.score==null)?'-':p.score+' %',SGS_FORM_RES[sgsFormRes(p,f)].l,'\n\n'])}]});   // hauteur de ligne suffisante pour signer à la main
+    sgsToast('Tableau de présence exporté'); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
+  const attestation=(f,p)=>{ try{
+    sgsDocPDF({ref:(f.ref||'FOR')+'-ATT-'+String(sgsFormPers(f).indexOf(p)+1).padStart(2,'0'),titre:'Attestation de formation',sous:p.nom+(p.fonction?' — '+p.fonction:''),nom:nomResp,fonction:'Responsable du Système de Gestion de la Sécurité',
+      meta:[['Formation',f.intitule||'Sensibilisation au SGS'],['Type',(SGS_FORM_TYPES.find(t=>t.k===f.type)||{}).l||'-'],['Date et durée',sgsFr(f.date)+(f.duree?' · '+f.duree:'')],['Formateur',f.formateur||'-'],
+        ['Résultat',SGS_FORM_RES[sgsFormRes(p,f)].l+((p.score===''||p.score==null)?'':' ('+p.score+' %, seuil '+sgsFormSeuil(f)+' %)')],['Prochain recyclage',(()=>{ const d=new Date(f.date); d.setMonth(d.getMonth()+(Number(f.periodicite)||24)); return sgsFr(d.toISOString().slice(0,10)); })()]],
+      blocs:[{t:'Attestation',txt:'Le Responsable du Système de Gestion de la Sécurité d\'Afrijet Sahara atteste que '+p.nom+(p.fonction?', '+p.fonction+',':'')+' a suivi la formation « '+(f.intitule||'Sensibilisation au SGS')+' » le '+sgsFr(f.date)+(f.duree?' (durée : '+f.duree+')':'')+', conformément au Manuel SGS, chapitre SGS 04-01.'}]});
+    sgsToast('Attestation exportée · '+p.nom); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
+  if(ed){ const up=p=>setEd({...ed,...p}), rows=ed.pers||[];
+    const setRow=(i,p)=>up({pers:rows.map((r,k)=>k===i?{...r,...p}:r)});
+    const save=()=>{ const ps=rows.filter(r=>(r.nom||'').trim()).map(r=>({...r,nom:r.nom.trim(),fonction:(r.fonction||'').trim(),score:r.score===''||r.score==null?'':Math.max(0,Math.min(100,Number(r.score)))}));
+      if(!ed.date||!ps.length){ uiAlert("⚠️ Indiquez la date et au moins un participant."); return; }
+      const now=new Date().toISOString(), rec={...ed,pers:ps,seuil:sgsFormSeuil(ed)}; delete rec.participants; delete rec.reussite;
+      if(ed.id) setItems(l=>(l||[]).map(x=>x.id===ed.id?{...rec,updatedAt:now}:x)); else setItems(l=>[...(l||[]),{...rec,id:'FOR'+Date.now(),ref:sgsRefAn(items,'FOR',ed.date),createdAt:now}]);
       setEd(null); sgsToast("Session de formation enregistrée"); };
+    const cell={...sgsInput,padding:"7px 8px",fontSize:12.5};
     return (<Card accent="#0F766E"><FHeader icon="🎓" title={ed.ref||'Nouvelle session'} subtitle="SGS 04-01 · formation et sensibilisation" color="#0F766E"/>
       <div style={{display:"flex",flexDirection:"column",gap:11}}>
         <SgsField label="Type"><SgsPills value={ed.type} onChange={v=>up({type:v})} options={SGS_FORM_TYPES} color="#0F766E"/></SgsField>
@@ -3275,26 +3303,47 @@ function SgsFormationsView({ items, setItems, nomResp }){
           <SgsField label="Date"><input type="date" value={ed.date||''} onChange={e=>up({date:e.target.value})} style={sgsInput}/></SgsField>
           <SgsField label="Durée"><input value={ed.duree||''} onChange={e=>up({duree:e.target.value})} placeholder="2 h" style={sgsInput}/></SgsField></div>
         <SgsField label="Formateur"><input value={ed.formateur||''} onChange={e=>up({formateur:e.target.value})} style={sgsInput}/></SgsField>
-        <SgsField label="Participants (un par ligne)"><textarea rows={5} value={ed.participants||''} onChange={e=>up({participants:e.target.value})} style={sgsInput}/></SgsField>
+        <div style={{fontSize:11,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:".04em",marginTop:4}}>Participants · {rows.length}</div>
+        {rows.map((r,i)=>{ const res=r.nom?SGS_FORM_RES[sgsFormRes(r,ed)]:null;
+          return <div key={i} style={{border:"1px solid "+C.border,borderRadius:10,padding:9,display:"flex",flexDirection:"column",gap:6}}>
+            <div style={{display:"flex",gap:6}}>
+              <input aria-label={"Nom du participant "+(i+1)} value={r.nom||''} onChange={e=>setRow(i,{nom:e.target.value})} placeholder="Nom et prénom" style={{...cell,flex:1.4}}/>
+              <input aria-label={"Fonction du participant "+(i+1)} value={r.fonction||''} onChange={e=>setRow(i,{fonction:e.target.value})} placeholder="Fonction" style={{...cell,flex:1}}/>
+              <button onClick={()=>up({pers:rows.filter((_,k)=>k!==i)})} aria-label="Retirer" style={{border:"none",background:"none",color:C.slate,fontSize:16,...TAP}}>✕</button></div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <div style={{flex:"0 0 auto"}}><SgsPills value={r.present?'o':'n'} onChange={v=>setRow(i,{present:v==='o'})} options={[{k:'o',l:'Présent'},{k:'n',l:'Absent'}]} color="#0F766E"/></div>
+              <input aria-label={"Test du participant "+(i+1)} type="number" min="0" max="100" value={r.score??''} onChange={e=>setRow(i,{score:e.target.value})} placeholder="Test %" disabled={!r.present} style={{...cell,width:62,flex:"0 0 auto",opacity:r.present?1:.5}}/>
+              {res&&<span style={{marginLeft:"auto",fontSize:10.5,fontWeight:800,borderRadius:6,padding:"3px 6px",background:res.bg,color:res.c,whiteSpace:"nowrap"}}>{res.l}</span>}</div>
+          </div>; })}
+        <button onClick={()=>up({pers:[...rows,{nom:'',fonction:'',present:true,score:''}]})} style={{height:40,borderRadius:10,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",fontWeight:700,...TAP}}>+ Ajouter un participant</button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Réussite au test (%)"><input type="number" min="0" max="100" value={ed.reussite||''} onChange={e=>up({reussite:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Seuil de réussite au test (%)"><input type="number" min="0" max="100" value={ed.seuil??75} onChange={e=>up({seuil:e.target.value})} style={sgsInput}/></SgsField>
           <SgsField label="Recyclage tous les (mois)"><input type="number" min="1" value={ed.periodicite||24} onChange={e=>up({periodicite:e.target.value})} style={sgsInput}/></SgsField></div>
-        <div style={{fontSize:10.5,color:C.slate}}>Le manuel prévoit une sensibilisation « régulière » sans en fixer la fréquence : 24 mois par défaut, à confirmer.</div>
+        <div style={{fontSize:10.5,color:C.slate,lineHeight:1.45}}>Le test est facultatif : laissez la case vide si aucun test n'a eu lieu, la personne présente est alors considérée comme formée. Le manuel exige un tableau de présence et une attestation par personne ; il prévoit une sensibilisation « régulière » sans en fixer la fréquence (24 mois par défaut, à confirmer).</div>
       </div>
+      {ed.id&&<div style={{marginTop:14,borderTop:"1px solid "+C.border,paddingTop:12,display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:".04em"}}>Documents (SGS 04-01)</div>
+        <SgsBtn l="📄 Tableau récapitulatif de présence" onClick={()=>presence(ed)} full/>
+        {sgsFormPers(ed).filter(p=>sgsFormOK(p,ed)).map((p,i)=><SgsBtn key={i} l={"📄 Attestation — "+p.nom} onClick={()=>attestation(ed,p)} full/>)}
+        {sgsFormPers(ed).some(p=>!sgsFormOK(p,ed))&&<div style={{fontSize:11,color:C.slate}}>Pas d'attestation pour les absents ni pour les tests à reprendre.</div>}
+      </div>}
       <div style={{display:"flex",gap:8,marginTop:16}}><SgsBtn l="Annuler" onClick={()=>setEd(null)}/><div style={{flex:1}}><SgsBtn l="Enregistrer" onClick={save} prim full/></div></div></Card>); }
   const pdf=()=>{ try{ sgsDocPDF({ref:'REG-FOR-'+today.replace(/-/g,''),titre:'Registre des formations SGS',sous:'Formation et sensibilisation au SGS (SGS 04-01)',nom:nomResp,
-    meta:[['Sessions',String(list.length)],['Personnes formées',String(P.length)],['Recyclages échus',String(echus.length)]],
-    blocs:[{t:'Sessions',cols:[{l:'Référence',w:28},{l:'Date',w:22},{l:'Type',w:46},{l:'Formateur',w:40},{l:'Participants',w:46}],rows:list.map(f=>[f.ref,sgsFr(f.date),(SGS_FORM_TYPES.find(t=>t.k===f.type)||{}).l,f.formateur||'-',sgsFormNoms(f).join(', ')])},
-      {t:'Échéances de recyclage par personne',cols:[{l:'Personne',w:70},{l:'Dernière session',w:40},{l:'Échéance',w:32},{l:'État',w:40}],rows:P.map(p=>[p.nom,sgsFr(p.date)+' ('+p.ref+')',sgsFr(p.ech),p.ech<today?'Échu':'À jour'])}]}); sgsToast("Registre des formations exporté"); }catch(e){ uiAlert("❌ Erreur PDF : "+e.message); } };
+    meta:[['Sessions',String(list.length)],['Personnes formées',String(P.length)],['Recyclages échus',String(echus.length)],['Personnes à former',String(AF.length)]],
+    blocs:[{t:'Sessions',cols:[{l:'Référence',w:28},{l:'Date',w:22},{l:'Type',w:42},{l:'Formateur',w:38},{l:'Présents / inscrits',w:24},{l:'Formés',w:28}],
+        rows:list.map(f=>{ const ps=sgsFormPers(f); return [f.ref,sgsFr(f.date),(SGS_FORM_TYPES.find(t=>t.k===f.type)||{}).l,f.formateur||'-',ps.filter(p=>p.present).length+' / '+ps.length,String(sgsFormNoms(f).length)]; })},
+      {t:'Échéances de recyclage par personne',cols:[{l:'Personne',w:70},{l:'Dernière session réussie',w:44},{l:'Échéance',w:32},{l:'État',w:36}],rows:P.map(p=>[p.nom,sgsFr(p.date)+' ('+p.ref+')',sgsFr(p.ech),p.ech<today?'Échu':'À jour'])},
+      ...(AF.length?[{t:'Personnes à former',cols:[{l:'Personne',w:70},{l:'Motif',w:40},{l:'Session',w:72}],rows:AF.map(a=>[a.nom,a.motif,a.ref+' · '+sgsFr(a.date)])}]:[])]}); sgsToast("Registre des formations exporté"); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
   return (<div style={{display:"flex",flexDirection:"column",gap:12}}>
-    <SgsIntro titre="Formation et sensibilisation" refm="SGS 04-01" txt="Tout le personnel est convié aux sessions de sensibilisation SGS ; le DR, les responsables désignés et les sous-traitants ont leurs propres sessions. Le responsable SGS vérifie que chacun est formé et que les recyclages sont respectés."/>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-      {[[P.length,'Personnes formées','#085041','#E1F5EE'],[echus.length,'Recyclages échus',echus.length?'#791F1F':'#085041',echus.length?'#FCEBEB':'#E1F5EE'],[list.length,'Sessions','#085041','#E1F5EE']].map(([n,l,fg,bg])=>
-        <div key={l} style={{background:bg,borderRadius:10,padding:"9px 10px"}}><div style={{fontSize:22,fontWeight:800,color:fg}}>{n}</div><div style={{fontSize:11,color:fg}}>{l}</div></div>)}</div>
-    <SgsBtn l="+ Nouvelle session" onClick={()=>setEd({type:'initiale',intitule:'Sensibilisation au SGS',date:today,formateur:nomResp,participants:'',periodicite:24})} prim full/>
-    {(echus.length>0||bientot.length>0)&&<div style={sgsCard}><div style={{...sgsH,marginTop:0}}>Recyclages à prévoir</div>
-      {[...echus,...bientot].slice(0,12).map(p=><div key={p.nom} style={{display:"flex",fontSize:12.5,padding:"5px 0",borderBottom:"1px solid "+C.border}}><span style={{flex:1}}>{p.nom}</span><b style={{color:p.ech<today?'#B91C1C':'#B45309'}}>{p.ech<today?'échu depuis le ':'avant le '}{sgsFr(p.ech)}</b></div>)}</div>}
-    <div style={sgsCard}>{list.length?list.map(f=><SgsRow key={f.id} titre={f.ref+' · '+(f.intitule||'')} sub={sgsFr(f.date)+' · '+(SGS_FORM_TYPES.find(t=>t.k===f.type)||{}).l+' · '+sgsFormNoms(f).length+' participant(s)'} onClick={()=>setEd(f)}/>)
+    <SgsIntro titre="Formation et sensibilisation" refm="SGS 04-01" txt="Tout le personnel est convié aux sessions de sensibilisation SGS ; le DR, les responsables désignés et les sous-traitants ont leurs propres sessions. Chaque session donne lieu à un tableau de présence et à une attestation par personne. Le responsable SGS vérifie que chacun est formé et que les recyclages sont respectés."/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+      {[[P.length,'Personnes formées',false],[echus.length,'Recyclages échus',echus.length>0],[AF.length,'Personnes à former',AF.length>0],[list.length,'Sessions',false]].map(([n,l,al])=>
+        <div key={l} style={{background:al?'#FCEBEB':'#E1F5EE',borderRadius:10,padding:"9px 10px"}}><div style={{fontSize:22,fontWeight:800,color:al?'#791F1F':'#085041'}}>{n}</div><div style={{fontSize:11,color:al?'#791F1F':'#085041'}}>{l}</div></div>)}</div>
+    <SgsBtn l="+ Nouvelle session" onClick={()=>setEd({type:'initiale',intitule:'Sensibilisation au SGS',date:today,formateur:nomResp,pers:[{nom:'',fonction:'',present:true,score:''}],seuil:75,periodicite:24})} prim full/>
+    {(echus.length>0||bientot.length>0||AF.length>0)&&<div style={sgsCard}><div style={{...sgsH,marginTop:0}}>Formations à prévoir</div>
+      {AF.map(a=><div key={'a'+a.nom} style={{display:"flex",fontSize:12.5,padding:"5px 0",borderBottom:"1px solid "+C.border}}><span style={{flex:1}}>{a.nom}</span><b style={{color:'#B91C1C'}}>à former ({a.motif})</b></div>)}
+      {[...echus,...bientot].slice(0,12).map(p=><div key={p.nom} style={{display:"flex",fontSize:12.5,padding:"5px 0",borderBottom:"1px solid "+C.border}}><span style={{flex:1}}>{p.nom}</span><b style={{color:p.ech<today?'#B91C1C':'#B45309'}}>{p.ech<today?'recyclage échu depuis le ':'recyclage avant le '}{sgsFr(p.ech)}</b></div>)}</div>}
+    <div style={sgsCard}>{list.length?list.map(f=>{ const ps=sgsFormPers(f); return <SgsRow key={f.id} titre={f.ref+' · '+(f.intitule||'')} sub={sgsFr(f.date)+' · '+(SGS_FORM_TYPES.find(t=>t.k===f.type)||{}).l+' · '+ps.filter(p=>p.present).length+' présent(s) sur '+ps.length+' · '+sgsFormNoms(f).length+' formé(s)'} onClick={()=>setEd({...f,pers:ps})}/>; })
       :<div style={{fontSize:12.5,color:C.slate,padding:"6px 0"}}>Aucune session enregistrée.</div>}</div>
     {list.length>0&&<SgsBtn l="📄 Exporter le registre des formations" onClick={pdf} full/>}
   </div>);
