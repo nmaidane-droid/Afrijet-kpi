@@ -118,7 +118,7 @@ const PROFILES = [
   {id:"comm",  label:"Commercial",     icon:"💼",  color:"#0891B2",
    pwdHash:"d01acdec3a3b87b33882a0fb8959ffda858a0642f7f54190f67aa230e04d1547",
    forms:["clients"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"], blocked:[] },
-  {id:"sgs",   label:"Qualité / SGS",  icon:"🛡", color:"#0F766E",
+  {id:"sgs",   label:"SGS",  icon:"🛡", color:"#0F766E",
    pwdHash:"e6a585f2870b2afbc4e0900a53d6b6b050781460d2d1eb575c347693b29b0d4e",
    forms:["sgs","secu","frat","docavion","regl"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
@@ -6780,7 +6780,7 @@ function ActionBar({ isAdmin, doExport, onRestore, onReset, onLogout }){
             isAdmin&&{k:"res", icon:"☁️", label:"Restore", bg:"#DBEAFE", bd:"#0369A1", fg:"#0369A1", on:onRestore},
             isAdmin&&{k:"rst", icon:"🗑", label:"Effacer", bg:"#FEE2E2", bd:"#DC2626", fg:"#DC2626", on:onReset},
             isAdmin&&{k:"usr", icon:"👥", label:"Comptes", bg:"#E1F5EE", bd:"#0F766E", fg:"#085041", on:()=>window.dispatchEvent(new Event("open-accounts"))},
-            {k:"man", icon:"📖", label:"Manuel", bg:"#EFF6FF", bd:"#0369A1", fg:"#0369A1", href:"Manuel_Utilisateur_Afrijet_v6.pdf"},
+            {k:"man", icon:"📖", label:"Manuel", bg:"#EFF6FF", bd:"#0369A1", fg:"#0369A1", href:"Manuel_Utilisateur_Afrijet_v7.pdf"},
             {k:"out", icon:(
               // Icône de sortie : flèche quittant un cadre
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{display:"block"}}>
@@ -6867,7 +6867,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
     {id:"vol",      icon:"🛫",  label:"Vol",            color:"#0F1F3D"},
     {id:"frat",     icon:"🧭",  label:"FRAT",            color:"#0F766E"},
     {id:"sgs",      icon:"🛡",  label:"SGS",             color:"#0F766E"},
-    {id:"secu",     icon:"🛡",  label:"Sécurité",       color:"#DC2626"},
+    {id:"secu",     icon:"🛡",  label:"Comptes rendus", color:"#DC2626"},
     {id:"docavion", icon:"📁",  label:"Doc Avion",      color:"#0369A1"},
     {id:"regl",     icon:"📋",  label:"Réglementation", color:"#B45309"},
     {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"},
@@ -10151,7 +10151,7 @@ function qrSvgDataUrl(text){ const q=new SGS_QR.QRCode(-1,SGS_QR.L.M); q.addData
   for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(q.isDark(r,c)) d+='M'+(c+m)+' '+(r+m)+'h1v1h-1z';
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+s+' '+s+'" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="'+d+'" fill="#000"/></svg>'); }
 // Libellé du compte dans Microsoft Authenticator, propre à chaque profil (auparavant identique pour tous)
-const TOTP_ACCOUNTS={dir:"Direction",rdoa:"Administrateur",sgs:"Qualite-SGS"};
+const TOTP_ACCOUNTS={dir:"Direction",rdoa:"Administrateur",sgs:"SGS"};
 function TotpSetup({ secret, onVerified, profileId, account:accountLabel }) {
   const [code,setCode]=useState("");
   const [err,setErr]=useState("");
@@ -10385,7 +10385,7 @@ function LoginGate({ onAuth }) {
   const [users,setUsers]=useState([]), [user,setUser]=useState(null);
   const [waitMs,setUntil]=useCountdown();
   useEffect(()=>{ usersLoad().then(setUsers); },[]);
-  const TOTP_REQUIRED = ["dir","rdoa","sgs"]; // double authentification : Direction, Administrateur, Qualité / SGS
+  const TOTP_REQUIRED = ["dir","rdoa","sgs"]; // double authentification : Direction, Administrateur, SGS
   const actifs=pid=>(users||[]).filter(u=>u.actif&&u.profil===pid).sort((a,b)=>userLabel(a).localeCompare(userLabel(b)));
   const selectProfile=async(id)=>{ setProfileId(id); setErr(""); setPwd(""); setUser(null);
     const fresh=await usersLoad(); setUsers(fresh);
@@ -10778,7 +10778,7 @@ function AppMain({ onLogout, profileId }) {
   const [showAccounts,setShowAccounts]=useState(false);
   useEffect(()=>{ const f=()=>setShowAccounts(true); window.addEventListener("open-accounts",f); return ()=>window.removeEventListener("open-accounts",f); },[]);
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
-  // Tuile Finances : profil Finances seul. Tuile SGS : Qualité / SGS et Administrateur.
+  // Tuile Finances : profil Finances seul. Tuile SGS : profil SGS et Administrateur.
   const canForm = (id) => id==="fin" ? profile.id==="fin"
                         : id==="sgs" ? (profile.id==="sgs"||profile.id==="rdoa")
                         : id==="journal" ? ["dir","sgs","rdoa"].includes(profile.id)
@@ -10825,7 +10825,7 @@ function AppMain({ onLogout, profileId }) {
   const [icao24,setIcao24]   = usePersist("icao24","CN-KTA");
   const [lastBackup,setLastBackup] = usePersist("lastBackup",null);
   const [ndsArchive,setNdsArchive]=usePersist(NDS_ARCHIVE_PERSIST_KEY, []);   // archives du générateur
-  // Système de gestion de la sécurité (tuile Qualité / SGS)
+  // Système de gestion de la sécurité (tuile SGS)
   const [sgsHazards,setSgsHazards]   = usePersist("sgsHazards",[]);
   const [sgsActions,setSgsActions]   = usePersist("sgsActions",[]);
   const [sgsEvStatus,setSgsEvStatus] = usePersist("sgsEvStatus",{});
