@@ -4346,6 +4346,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
           {!acts.length&&<div style={{fontSize:12.5,color:C.slate}}>Aucune action pour ce danger.</div>}
           <button onClick={()=>setEdit({kind:'action',data:{type:'corrective',statut:'afaire',hazardId:h.id,echeance:echeanceDefaut(h.id)}})} style={{...smallBtn,marginTop:10,width:"100%",border:"1.5px dashed #0F766E",color:"#0F766E"}}>+ Action liée</button></div>
       </div>
+      <AuditHistory refs={[h.ref]} v={h.updatedAt||h.statut}/>
       <button onClick={()=>delHazard(h)} style={{marginTop:16,border:"none",background:"none",padding:0,color:"#B91C1C",fontSize:12,...TAP}}>Annuler ce danger</button>
     </div>); };
   const actionDetail=a=>{ if(!a) return null;
@@ -4367,6 +4368,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
         {L("Critère d'efficacité",a.critere||'—')}
       </div>
       {L('Preuve de réalisation et d\'efficacité',a.preuve||'Pas encore de preuve.',a.preuve?null:C.slate)}
+      <AuditHistory refs={[a.ref]} v={a.statut+'|'+(a.preuve||'')+'|'+(a.echeance||'')}/>
       <button onClick={()=>delAction(a)} style={{marginTop:16,border:"none",background:"none",padding:0,color:"#B91C1C",fontSize:12,...TAP}}>Annuler cette action</button>
     </div>); };
   const tabContent=(<>
@@ -6809,6 +6811,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
     {id:"nds",      icon:"📋",  label:"Générateur IA",   color:"#0F1F3D"},
     {id:"rapport",  icon:"📊",  label:"Rapport",         color:"#00936A"},
     {id:"fin",      icon:"💰",  label:"Finances",       color:"#7C3AED"},
+    {id:"journal",  icon:"🔏",  label:"Journal d'audit", color:"#1a1a2e"},
   ];
   const FORMS = ALL_FORMS; // Toujours afficher toutes les tuiles
   const canAccessForm = (id) => !canForm || canForm(id);
@@ -7114,6 +7117,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
       {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
       {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} crew={crew} saved={saved}/>}
+      {effectiveActive==="journal" && <JournalView/>}
       {effectiveActive==="frat" && sgs && <Card accent="#0F766E"><FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="Manuel SGS 02-04 · à remplir par le CDB avant chaque étape" color="#0F766E"/>
         <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} crew={crew} standalone/></Card>}
       {effectiveActive==="sgs" && sgs && <SgsTile safety={safetyData} flights={flights} aircraft={aircraft} crew={crew} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
@@ -8537,6 +8541,119 @@ const auditId=(o,i)=>o&&typeof o==="object"?(o.id||o.ref||(o.num&&o.date?o.num+"
 const auditName=o=>o&&typeof o==="object"?(o.ref||o.immat||o.num&&o.date&&(o.num+" "+o.date)||(o.nom&&(o.nom+" "+(o.prenom||"")).trim())||o.titre||o.id||""):"";
 function auditFields(a,b){ const ch={}; const ks=new Set([...Object.keys(a||{}),...Object.keys(b||{})]);
   ks.forEach(k=>{ if(k==="updatedAt") return; const x=auditV((a||{})[k]), y=auditV((b||{})[k]); if(x!==y) ch[k]=[x,y]; }); return ch; }
+
+// ══ Consultation du journal d'audit (lot 3) ═════════════════════════
+const AUDIT_MODULES={sgsHazards:"Dangers",sgsActions:"Actions",sgsEvStatus:"Statut et analyse des comptes rendus",safety:"Comptes rendus",flights:"Vols",crew:"Équipage",aircraft:"Avions",
+  clients:"Clients",sgsManual:"Indicateurs saisis",sgsMeetings:"Safety Meetings",sgsRevues:"Revues de sécurité",sgsChanges:"Changements",sgsAudits:"Audits",sgsFormations:"Formations",
+  sgsFrat:"FRAT",sgsMeda:"MEDA",sgsFdm:"FDM",sgsItw:"Interviews",sgsReco:"Recommandations",sgsPlan:"Planning SGS",sgsOsv:"Contrôles OSV",sgsResponsable:"Signataire SGS",
+  connexion:"Connexions",comptes:"Comptes",["export PDF"]:"Exports PDF",essai:"Installation"};
+const AUDIT_FIELDS={statut:"Statut",titre:"Intitulé",description:"Description",P:"Probabilité",G:"Gravité",P2:"Probabilité résiduelle",G2:"Gravité résiduelle",mesures:"Mesures",strategie:"Stratégie",
+  echeance:"Échéance",responsable:"Responsable",critere:"Critère d'efficacité",preuve:"Preuve",acceptation:"Acceptation du risque",annulation:"Annulation",hazardId:"Danger lié",type:"Type",
+  analyse:"Fiche d'analyse",recu:"Réception",dac:"Transmission DAC",date:"Date",num:"Vol",immat:"Immatriculation",valeur:"Valeur",profil:"Profil",fonction:"Fonction",motif:"Motif",document:"Document",elements:"Éléments"};
+const auditMod=m=>AUDIT_MODULES[m]||m;
+const auditFld=f=>AUDIT_FIELDS[f]||f;
+const auditTs=s=>{ try{ const d=new Date(s); return d.toLocaleDateString('fr-FR')+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }catch(_e){ return s; } };
+// Lecture : Supabase, du plus récent au plus ancien, 100 par page
+async function auditFetch({ since, user, module, objet, objets, offset=0, limit=100 }={}){
+  if(!supabase) return {rows:[],count:0,error:"Supabase indisponible (hors ligne)"};
+  try{ let q=supabase.from("audit_log").select("*",{count:"exact"}).order("id",{ascending:false}).range(offset,offset+limit-1);
+    if(since) q=q.gte("ts",since); if(user) q=q.eq("user_label",user); if(module) q=q.eq("module",module);
+    if(objets&&objets.length) q=q.in("objet",objets); else if(objet) q=q.ilike("objet","%"+objet+"%");
+    const {data,error,count}=await q; if(error) return {rows:[],count:0,error:error.message};
+    return {rows:data||[],count:count||0};
+  }catch(e){ return {rows:[],count:0,error:e.message||String(e)}; }
+}
+async function auditVerifyChain(){
+  if(!supabase) return {error:"Supabase indisponible (hors ligne)"};
+  try{ const {data,error}=await supabase.rpc("audit_verify"); if(error) return {error:error.message}; return {broken:data}; }catch(e){ return {error:e.message||String(e)}; }
+}
+function AuditChanges({ changes }){
+  const ks=Object.keys(changes||{}); if(!ks.length) return null;
+  const show=v=>v==null?<span style={{color:C.slateL}}>—</span>:String(v).replace(/^"|"$/g,"");
+  return <div style={{marginTop:5,background:C.bg,borderRadius:7,padding:"5px 8px",fontSize:11,lineHeight:1.45}}>
+    {ks.map(k=>{ const [a,b]=changes[k]||[]; return <div key={k}><b>{auditFld(k)}</b> : {a!=null&&<><span style={{textDecoration:"line-through",color:"#B91C1C"}}>{show(a)}</span> → </>}<span style={{color:"#047857"}}>{show(b)}</span></div>; })}</div>;
+}
+function AuditRow({ e, compact }){
+  const [open,setOpen]=useState(!compact);
+  const n=Object.keys(e.changes||{}).length;
+  return <div style={{borderBottom:"1px solid "+C.border,padding:"8px 0"}}>
+    <div role="button" onClick={()=>n&&setOpen(o=>!o)} style={{display:"flex",gap:8,alignItems:"flex-start",cursor:n?"pointer":"default"}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12.5,color:C.text}}><b>{e.user_label||"—"}</b> · {e.action}{!compact&&<> · <span style={{color:"#0F766E",fontWeight:700}}>{auditMod(e.module)}</span></>}{e.objet?<> · {e.objet}</>:null}</div>
+        <div style={{fontSize:10.5,color:C.slate}}>{auditTs(e.ts)} · {e.pending?<span style={{color:"#B45309",fontWeight:700}}>en attente d'envoi</span>:"n° "+e.id}{e.device?" · "+e.device:""}</div></div>
+      {n>0&&<span style={{fontSize:10.5,color:C.slate,whiteSpace:"nowrap"}}>{n} champ{n>1?"s":""} {open?"▲":"▼"}</span>}</div>
+    {open&&<AuditChanges changes={e.changes}/>}
+  </div>;
+}
+// Bloc « Historique » d'une fiche (danger, action)
+function AuditHistory({ refs, v }){
+  const [st,setSt]=useState({rows:null});
+  const key=(refs||[]).join('|');
+  // Rechargé quand la fiche change (v) ; les entrées de cet appareil pas encore envoyées sont montrées aussitôt
+  useEffect(()=>{ let alive=true;
+    const t=setTimeout(()=>auditFetch({objets:refs,limit:50}).then(r=>{ if(!alive) return;
+      const seen=new Set((r.rows||[]).map(e=>e.client_ts+'|'+e.objet+'|'+e.action));
+      const pend=auditQueueGet().filter(e=>(refs||[]).includes(e.objet)&&!seen.has(e.client_ts+'|'+e.objet+'|'+e.action)).reverse()
+        .map((e,i)=>({...e,id:'—',ts:e.client_ts,pending:true,_k:'p'+i}));
+      setSt({...r,rows:[...pend,...(r.rows||[])]}); }),v?600:0);
+    return ()=>{ alive=false; clearTimeout(t); }; },[key,v]);
+  return <div style={{marginTop:14}}>
+    <div style={{fontSize:11,fontWeight:700,color:C.slate,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Historique</div>
+    {st.rows===null?<div style={{fontSize:12,color:C.slate}}>Chargement…</div>
+      :st.error?<div style={{fontSize:12,color:C.slate}}>Historique indisponible : {st.error}.</div>
+      :!st.rows.length?<div style={{fontSize:12,color:C.slate}}>Aucune entrée : les modifications sont journalisées depuis la mise en service du journal.</div>
+      :st.rows.map(e=><AuditRow key={e._k||e.id} e={e} compact/>)}
+  </div>;
+}
+// Onglet Journal : filtres, détail, vérification d'intégrité, exports
+function JournalView(){
+  const [f,setF]=useState({periode:"30",user:"",module:"",objet:""});
+  const [st,setSt]=useState({rows:[],count:0,loading:true});
+  const [ver,setVer]=useState(null);
+  const pend=auditQueueGet().length;
+  const since=f.periode==="all"?null:new Date(Date.now()-Number(f.periode)*86400000).toISOString();
+  const load=async(append)=>{ setSt(s=>({...s,loading:true}));
+    const r=await auditFetch({since,user:f.user,module:f.module,objet:f.objet.trim(),offset:append?st.rows.length:0});
+    setSt(s=>({rows:append?[...s.rows,...r.rows]:r.rows,count:r.count,error:r.error,loading:false})); };
+  useEffect(()=>{ load(false); },[f.periode,f.user,f.module,f.objet]);
+  const users=[...new Set(st.rows.map(e=>e.user_label).filter(Boolean))].sort();
+  const verifier=async()=>{ setVer({loading:true}); const r=await auditVerifyChain(); setVer(r); auditLog("journal","","vérification d'intégrité",{resultat:[null,r.error?"erreur":r.broken==null?"chaîne intacte":"altération à l'entrée "+r.broken]}); };
+  const exportCsv=()=>{ const esc=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
+    const lines=[["N°","Date (serveur)","Personne","Profil","Module","Objet","Action","Détail","Empreinte"].map(esc).join(";"),
+      ...st.rows.map(e=>[e.id,auditTs(e.ts),e.user_label,e.profil,auditMod(e.module),e.objet,e.action,Object.entries(e.changes||{}).map(([k,v])=>auditFld(k)+" : "+(v[0]==null?"—":v[0])+" → "+(v[1]==null?"—":v[1])).join(" | "),e.hash].map(esc).join(";"))];
+    const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="journal-audit-"+new Date().toISOString().slice(0,10)+".csv"; document.body.appendChild(a); a.click(); a.remove();
+    auditLog("export","journal","export CSV",{entrees:[null,String(st.rows.length)]}); };
+  const exportPdf=()=>{ try{ sgsDocPDF({ref:"JOURNAL-"+new Date().toISOString().slice(0,10).replace(/-/g,""),titre:"Journal d'audit",sous:"Extrait de "+st.rows.length+" entrée(s) sur "+st.count,
+      nom:userLabel(sgsCurrentUser())||"Administrateur",fonction:(sgsCurrentUser()||{}).fonction||"",
+      meta:[["Période",f.periode==="all"?"Tout":f.periode+" derniers jours"],["Personne",f.user||"Toutes"],["Module",f.module?auditMod(f.module):"Tous"],["Recherche",f.objet||"—"],
+        ["Intégrité de la chaîne",ver&&!ver.loading?(ver.error?"Non vérifiée ("+ver.error+")":ver.broken==null?"Intacte (vérifiée le "+new Date().toLocaleString('fr-FR')+")":"ALTÉRATION à l'entrée n° "+ver.broken):"Non vérifiée"]],
+      blocs:[{t:"Entrées",cols:[{l:"N°",w:12},{l:"Date",w:28},{l:"Personne",w:32},{l:"Action",w:34},{l:"Objet",w:26},{l:"Détail",w:50}],
+        rows:st.rows.map(e=>[String(e.id),auditTs(e.ts),e.user_label||"",e.action+" · "+auditMod(e.module),e.objet||"",Object.entries(e.changes||{}).map(([k,v])=>auditFld(k)+" : "+(v[0]==null?"—":v[0])+" → "+(v[1]==null?"—":v[1])).join("\n").slice(0,400)])}]}); }
+    catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
+  const pill=(k,v,l)=><button key={v} onClick={()=>setF({...f,[k]:v})} style={{padding:"6px 10px",borderRadius:8,fontSize:11.5,fontWeight:700,cursor:"pointer",border:"1.5px solid "+(f[k]===v?"#1a1a2e":C.border),background:f[k]===v?"#1a1a2e":"white",color:f[k]===v?"white":C.slate}}>{l}</button>;
+  const sel={height:38,borderRadius:9,border:"1.5px solid "+C.border,background:"white",padding:"0 8px",fontSize:12.5,fontFamily:"inherit",flex:1,minWidth:0};
+  return (<Card accent="#1a1a2e"><FHeader icon="🔏" title="Journal d'audit" subtitle="Qui a fait quoi, quand — inaltérable, chaîné et horodaté par le serveur" color="#1a1a2e"/>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{background:ver&&!ver.loading?(ver.error?"#FAEEDA":ver.broken==null?"#EAF3DE":"#FCEBEB"):C.bg,borderRadius:10,padding:"9px 11px",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{flex:1,fontSize:12,color:C.text}}>{!ver?"Intégrité de la chaîne : non vérifiée dans cette session.":ver.loading?"Vérification en cours…":ver.error?"Vérification impossible : "+ver.error:ver.broken==null?<><b>Chaîne intacte</b> : aucune entrée n'a été modifiée ni retirée.</>:<><b>Altération détectée</b> à l'entrée n° {ver.broken}. Prévenez immédiatement l'Administrateur.</>}</div>
+        <button onClick={verifier} style={{border:"1px solid "+C.border,background:"white",borderRadius:8,padding:"6px 10px",fontSize:11.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>Vérifier</button></div>
+      {pend>0&&<div style={{fontSize:11.5,color:"#B45309"}}>{pend} entrée(s) de cet appareil en attente d'envoi : elles partiront dès le retour du réseau.</div>}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{pill("periode","1","24 h")}{pill("periode","7","7 jours")}{pill("periode","30","30 jours")}{pill("periode","365","12 mois")}{pill("periode","all","Tout")}</div>
+      <div style={{display:"flex",gap:6}}>
+        <select aria-label="Personne" value={f.user} onChange={e=>setF({...f,user:e.target.value})} style={sel}><option value="">Toutes les personnes</option>{[...new Set([...users,f.user].filter(Boolean))].map(u=><option key={u}>{u}</option>)}</select>
+        <select aria-label="Module" value={f.module} onChange={e=>setF({...f,module:e.target.value})} style={sel}><option value="">Tous les modules</option>{Object.keys(AUDIT_MODULES).map(m=><option key={m} value={m}>{AUDIT_MODULES[m]}</option>)}</select></div>
+      <input aria-label="Rechercher un objet" value={f.objet} onChange={e=>setF({...f,objet:e.target.value})} placeholder="Rechercher un objet : DG-006, AC-001, CN-KTA…" style={{...sel,flex:"none",width:"100%",boxSizing:"border-box",padding:"0 11px"}}/>
+      <div style={{fontSize:11.5,color:C.slate}}>{st.loading?"Chargement…":st.error?"Journal indisponible : "+st.error:st.count+" entrée(s)"+(st.rows.length<st.count?" · "+st.rows.length+" affichée(s)":"")}</div>
+      <div>{st.rows.map(e=><AuditRow key={e.id} e={e}/>)}</div>
+      {st.rows.length<st.count&&!st.loading&&<button onClick={()=>load(true)} style={{height:40,borderRadius:9,border:"1.5px dashed "+C.border,background:"white",fontWeight:700,cursor:"pointer"}}>Afficher les 100 suivantes</button>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <button onClick={exportPdf} disabled={!st.rows.length} style={{height:42,borderRadius:9,border:"1.5px solid #1a1a2e",background:"white",color:"#1a1a2e",fontWeight:700,cursor:"pointer"}}>📄 Export PDF</button>
+        <button onClick={exportCsv} disabled={!st.rows.length} style={{height:42,borderRadius:9,border:"none",background:"#1a1a2e",color:"white",fontWeight:700,cursor:"pointer"}}>📊 Export CSV</button></div>
+      <div style={{fontSize:10.5,color:C.slate,lineHeight:1.45}}>Les exports portent sur les entrées affichées ; lancez la vérification avant un export destiné à une inspection, pour que son résultat figure dans le PDF.</div>
+    </div></Card>);
+}
+
 function auditDiff(key, prev, next){
   if(AUDIT_SKIP.test(key)||prev===next) return;
   try{
@@ -10561,6 +10678,7 @@ function AppMain({ onLogout, profileId }) {
   // Tuile Finances : profil Finances seul. Tuile SGS : Qualité / SGS et Administrateur.
   const canForm = (id) => id==="fin" ? profile.id==="fin"
                         : id==="sgs" ? (profile.id==="sgs"||profile.id==="rdoa")
+                        : id==="journal" ? ["dir","sgs","rdoa"].includes(profile.id)
                         : (profile.forms===null || profile.forms.includes(id));
   // Onglet Finances : Administrateur, Finances et Direction uniquement
   const canTab = (id) => id!=="fin" || ["rdoa","fin","dir"].includes(profile.id);
