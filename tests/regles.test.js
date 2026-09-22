@@ -24,7 +24,7 @@ function extract(name){
     else if(!fm&&depth===0&&(ch===';'||ch==='\n')) return code.slice(i,k+1);
   }
 }
-const names=['sgsPlanAuto','sgsDureeMin','sgsCrtsvDac','sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['SGS_ACC_FONCTIONS','sgsAccAllowed','sgsAccCheck','sgsPlanAuto','sgsDureeMin','sgsCrtsvDac','sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -145,6 +145,15 @@ console.log('\nPlanning SGS (SMS-10) : pointage automatique');
   test('contrôle OSV compté en contrôle des escales', ()=>attendu(A.aEsc[4],'faux'));
   test('sensibilisation pointée seulement avec des présents', ()=>attendu(A.sensi[2]&&!A.sensi[7],'faux'));
   test('bulletin d\'une autre année ignoré', ()=>attendu(A.bull[9]&&!A.bull[12],'faux')); }
+
+console.log('\nClôture d\'un danger : acceptation du risque résiduel');
+{ const base={P:4,G:'B',P2:2,G2:'C'};
+  test('sans résiduel : refusé', ()=>attendu(/risque résiduel/.test(T.sgsAccCheck({P:2,G:'C'})),'faux'));
+  test('résiduel rouge : refusé', ()=>attendu(/intolérable/.test(T.sgsAccCheck({P:2,G:'C',P2:4,G2:'B'})),'faux'));
+  test('rouge initial : Responsable SGS refusé', ()=>attendu(T.sgsAccCheck({...base,acceptation:{nom:'Y. IKLI',fonction:'Responsable SGS',date:'2026-09-20'}})!=='','faux'));
+  test('rouge initial : Dirigeant Responsable accepté', ()=>attendu(T.sgsAccCheck({...base,acceptation:{nom:'N. MAIDANE',fonction:'Dirigeant Responsable',date:'2026-09-20'}})==='','faux'));
+  test('résiduel vert : Responsable SGS accepté', ()=>attendu(T.sgsAccCheck({P:3,G:'C',P2:1,G2:'C',acceptation:{nom:'Y. IKLI',fonction:'Responsable SGS',date:'2026-09-20'}})==='','faux'));
+  test('nom manquant : refusé', ()=>attendu(/nom, fonction et date/.test(T.sgsAccCheck({P:3,G:'C',P2:1,G2:'C',acceptation:{fonction:'Responsable SGS',date:'2026-09-20'}})),'faux')); }
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
