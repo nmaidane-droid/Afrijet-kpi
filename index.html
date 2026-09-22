@@ -223,6 +223,7 @@ function usePersist(key, init) {
   const timer    = useRef(null);   // anti-rebond
   const pending  = useRef(null);   // enveloppe en attente d'envoi
 
+  const valRef = useRef(null);      // valeur courante, pour comparer avant / après (journal d'audit)
   const [val, setVal] = useState(() => {
     const s = lsGet(fk);
     if (!s) return init;
@@ -267,6 +268,7 @@ function usePersist(key, init) {
       const adopt = u.t > localT.current || (u.t === localT.current && !dirty.current);
       if (adopt) {
         localT.current = u.t;
+        valRef.current = u.v;
         setVal(u.v);
         lsSet(fk, JSON.stringify({__v:u.v, __t:u.t}));
       } else {
@@ -289,17 +291,21 @@ function usePersist(key, init) {
     };
   }, [fk]);
 
+  valRef.current = val;
+  // Modification locale : calculée tout de suite (et non pendant le rendu), pour la journaliser
+  // avec la personne connectée. Les données reçues d'un autre appareil ne passent pas par ici.
   const set = v => {
-    setVal(prev => {
-      const next = typeof v === "function" ? v(prev) : v;
-      const t = Date.now();
-      localT.current = t;
-      dirty.current = true;
-      const env = {__v: next, __t: t};
-      lsSet(fk, JSON.stringify(env));
-      schedule(env);
-      return next;
-    });
+    const prev = valRef.current;
+    const next = typeof v === "function" ? v(prev) : v;
+    valRef.current = next;
+    const t = Date.now();
+    localT.current = t;
+    dirty.current = true;
+    const env = {__v: next, __t: t};
+    lsSet(fk, JSON.stringify(env));
+    schedule(env);
+    setVal(next);
+    auditDiff(key, prev, next);
   };
   return [val, set];
 }
@@ -2701,7 +2707,7 @@ const sgsMatch = (q, ...champs) => !q.trim() || sgsNorm(champs.join(' ')).includ
 
 // ── Export du registre des dangers et des actions (A4 paysage) ──
 // Tout le registre, clos compris ; aucune description de compte rendu d'événement.
-function sgsExportRegistre(H, A, nom){
+function sgsExportRegistre(H, A, nom, annules){ auditLog("export PDF","REG-SGS","export",{document:[null,"Registre des dangers et des actions"]});
   nom=(nom||'').trim()||SGS_RESP_DEFAUT;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'landscape' });
@@ -2808,6 +2814,10 @@ function sgsExportRegistre(H, A, nom){
           sgsFr(a.echeance)+(late?'\nEN RETARD':''), (SGS_A_STATUTS.find(s=>s.k===a.statut)||{}).l, a.critere||'-', a.preuve||'-'],
         style: late?{5:{fg:'#DC2626',bold:true}}:{} };
     }));
+  // Éléments annulés : jamais supprimés, ils restent tracés dans le registre
+  if((annules||[]).length){ title('4. Dangers et actions annulés');
+    table([{l:'Réf.',w:15},{l:'Nature',w:18},{l:'Intitulé',w:80},{l:'Annulé le',w:24},{l:'Par',w:40},{l:'Motif',w:96}],
+      annules.map(x=>({ v:[x.ref, x._k, x.titre, sgsFr((x.annulation||{}).date), (x.annulation||{}).par||'-', (x.annulation||{}).motif||'-'], style:{} }))); }
   // Bloc de signature
   if(y>HP-40){ doc.addPage(); header(); }
   y+=4; const sx=W-MX-80;
@@ -2998,7 +3008,8 @@ const SGS_FREQ=[{k:5,l:'Élevée'},{k:4,l:'Occasionnelle'},{k:3,l:'Faible'},{k:2
 const SGS_GRAV6=[{k:'A',l:'Catastrophique'},{k:'B',l:'Grave'},{k:'C',l:'Majeure'},{k:'D',l:'Mineure'},{k:'E',l:'Négligeable'}];
 
 // PDF générique A4 portrait : en-tête, métadonnées, blocs de texte et tableaux, signature
-function sgsDocPDF({ ref, titre, sous, meta, blocs, nom, fonction }){
+function sgsDocPDF(o){ auditLog("export PDF",o&&o.ref,"export",{document:[null,o&&o.titre]}); return sgsDocPDF_(o); }
+function sgsDocPDF_({ ref, titre, sous, meta, blocs, nom, fonction }){
   const { jsPDF } = window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
   const W=210, HP=297, MX=14, CW=W-2*MX; let y=0;
   const clean=s=>String(s==null?'':s).replace(/[→]/g,'->').replace(/[–—]/g,'-').replace(/[’]/g,"'").replace(/[^\x00-\xFF\u0152\u0153]/g,'');
@@ -4037,7 +4048,9 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const [qD,setQD]=useState(''), [fDst,setFDst]=useState('actifs'), [fDniv,setFDniv]=useState('all');   // dangers
   const [qA,setQA]=useState(''), [fAst,setFAst]=useState('ouvertes'), [fAty,setFAty]=useState('all');  // actions
   const today=new Date().toISOString().slice(0,10);
-  const H=hazards||[], A=actions||[], ES=evStatus||{}, M=manual||{changes:[],crm:[],bulletins:[]}, MT=meetings||[];
+  // Les éléments annulés sortent des listes et des calculs, mais restent dans le registre et le journal
+  const Hall=hazards||[], Aall=actions||[];
+  const H=Hall.filter(h=>h.statut!=='annule'), A=Aall.filter(a=>a.statut!=='annule'), ES=evStatus||{}, M=manual||{changes:[],crm:[],bulletins:[]}, MT=meetings||[];
 
   // ── Données dérivées ──
   const events=[...(safety||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
@@ -4074,7 +4087,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const aStOk=a=>fAst==='all'||(fAst==='ouvertes'?sgsActionOuverte(a):fAst==='retard'?(sgsActionOuverte(a)&&a.echeance&&a.echeance<today):a.statut===fAst);
   const Af=A.filter(a=>{ const h=H.find(x=>x.id===a.hazardId);
     return aStOk(a)&&(fAty==='all'||(a.type||'corrective')===fAty)&&sgsMatch(qA,a.ref,a.titre,a.responsable,h&&h.ref,h&&h.titre); });
-  const exporter=()=>{ try{ const r=sgsExportRegistre(H,A,nomResp); sgsToast("Registre exporté · "+r); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
+  const exporter=()=>{ try{ const r=sgsExportRegistre(H,A,nomResp,[...Hall.filter(h=>h.statut==='annule').map(h=>({...h,_k:'Danger'})),...Aall.filter(a=>a.statut==='annule').map(a=>({...a,_k:'Action'}))]); sgsToast("Registre exporté · "+r); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
 
   // ── Enregistrement ──
   const saveHazard=h=>{
@@ -4107,8 +4120,18 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const echeanceDefaut=hid=>{ const h=H.find(x=>x.id===hid); const r=h&&sgsRisqueCourant(h); return r&&r.niv==='intolerable'?today:sgsAddDays(30); };
   const setEvSt=(e,st)=>setEvStatus(s=>({...(s||{}),[sgsEventKey(e)]:{...((s||{})[sgsEventKey(e)]||{}),statut:st,updatedAt:new Date().toISOString()}}));
   const delHazard=async h=>{ if(A.some(a=>a.hazardId===h.id&&sgsActionOuverte(a))){ uiAlert("⚠️ Des actions ouvertes sont liées à ce danger. Clôturez-les d'abord."); return; }
-    if(await uiConfirm("⚠️ Supprimer définitivement le danger "+h.ref+" ?")) setHazards(l=>(l||[]).filter(x=>x.id!==h.id)); };
-  const delAction=async a=>{ if(await uiConfirm("⚠️ Supprimer définitivement l'action "+a.ref+" ?")) setActions(l=>(l||[]).filter(x=>x.id!==a.id)); };
+    // Pas de suppression : le danger est annulé, avec un motif ; il reste dans le registre et le journal
+    const motif=await uiPrompt("Annuler le danger "+h.ref+" ?\n\nIl disparaîtra des listes mais restera dans le registre et le journal d'audit. Motif de l'annulation (obligatoire) :","");
+    if(motif==null) return; if(!String(motif).trim()){ uiAlert("⚠️ Le motif de l'annulation est obligatoire."); return; }
+    const par=userLabel(sgsCurrentUser())||"profil partagé";
+    setHazards(l=>(l||[]).map(x=>x.id===h.id?{...x,statut:'annule',annulation:{motif:String(motif).trim(),date:today,par},updatedAt:new Date().toISOString()}:x)); setView(null);
+    sgsToast(h.ref+" annulé"); };
+  const delAction=async a=>{
+    const motif=await uiPrompt("Annuler l'action "+a.ref+" ?\n\nElle disparaîtra des listes mais restera dans le registre et le journal d'audit. Motif de l'annulation (obligatoire) :","");
+    if(motif==null) return; if(!String(motif).trim()){ uiAlert("⚠️ Le motif de l'annulation est obligatoire."); return; }
+    const par=userLabel(sgsCurrentUser())||"profil partagé";
+    setActions(l=>(l||[]).map(x=>x.id===a.id?{...x,statut:'annule',annulation:{motif:String(motif).trim(),date:today,par}}:x)); setView(null);
+    sgsToast(a.ref+" annulée"); };
 
   const TABS=[{k:'bord',l:'Bord'},{k:'ev',l:'Événements'},{k:'dg',l:'Dangers'},{k:'ac',l:'Actions'},{k:'spi',l:'Indicateurs'},{k:'sm',l:'Safety Meeting'}];
   const Row=({left,right,sub,color,onClick})=>(
@@ -4323,7 +4346,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
           {!acts.length&&<div style={{fontSize:12.5,color:C.slate}}>Aucune action pour ce danger.</div>}
           <button onClick={()=>setEdit({kind:'action',data:{type:'corrective',statut:'afaire',hazardId:h.id,echeance:echeanceDefaut(h.id)}})} style={{...smallBtn,marginTop:10,width:"100%",border:"1.5px dashed #0F766E",color:"#0F766E"}}>+ Action liée</button></div>
       </div>
-      <button onClick={()=>delHazard(h)} style={{marginTop:16,border:"none",background:"none",padding:0,color:"#B91C1C",fontSize:12,...TAP}}>Supprimer ce danger</button>
+      <button onClick={()=>delHazard(h)} style={{marginTop:16,border:"none",background:"none",padding:0,color:"#B91C1C",fontSize:12,...TAP}}>Annuler ce danger</button>
     </div>); };
   const actionDetail=a=>{ if(!a) return null;
     const h=H.find(x=>x.id===a.hazardId), late=sgsActionOuverte(a)&&a.echeance<today;
@@ -4344,7 +4367,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
         {L("Critère d'efficacité",a.critere||'—')}
       </div>
       {L('Preuve de réalisation et d\'efficacité',a.preuve||'Pas encore de preuve.',a.preuve?null:C.slate)}
-      <button onClick={()=>delAction(a)} style={{marginTop:16,border:"none",background:"none",padding:0,color:"#B91C1C",fontSize:12,...TAP}}>Supprimer cette action</button>
+      <button onClick={()=>delAction(a)} style={{marginTop:16,border:"none",background:"none",padding:0,color:"#B91C1C",fontSize:12,...TAP}}>Annuler cette action</button>
     </div>); };
   const tabContent=(<>
       {tab==='bord'&&bordView()}
@@ -8479,6 +8502,60 @@ async function usersSave(list){ const ok=await sbSet(USERS_KEY,list); try{ local
 // Personne connectée pendant la session (null pour les profils encore à mot de passe partagé)
 function sgsCurrentUser(){ try{ return JSON.parse(sessionStorage.getItem(PFX+"active_user")||"null"); }catch(_e){ return null; } }
 const USER_TOTP_KEY=u=>TOTP_KEY+"_u_"+u.id;
+// ══ Journal d'audit (lot 2) ═════════════════════════════════════════
+// Chaque modification locale d'un registre est comparée à l'état précédent ; les champs changés
+// sont notés avec leur valeur avant et après, avec la personne connectée. Les entrées partent,
+// dans l'ordre, vers la fonction Supabase audit_append (horodatage serveur, chaînage SHA-256,
+// table inaltérable). Sans réseau, elles attendent dans une file locale.
+const AUDIT_QKEY=PFX+"audit_queue";
+const AUDIT_SKIP=/demo|backup|lastBackup|pref|draft|filter|period|users|totp|audit/i;   // réglages et données techniques : non journalisés
+let AUDIT_SYSTEM=0;   // > 0 : opérations automatiques (corrections, démonstration), attribuées au « système »
+function auditAsSystem(fn){ AUDIT_SYSTEM++; try{ return fn(); } finally { AUDIT_SYSTEM--; } }
+function auditDevice(){ try{ const u=navigator.userAgent||""; return (/iPhone|iPad/.test(u)?"iOS":/Android/.test(u)?"Android":/Windows/.test(u)?"Windows":/Mac/.test(u)?"Mac":"Autre")+(window.innerWidth<700?" · téléphone":" · grand écran"); }catch(_e){ return ""; } }
+function auditQueueGet(){ try{ return JSON.parse(localStorage.getItem(AUDIT_QKEY)||"[]"); }catch(_e){ return []; } }
+function auditQueueSet(q){ try{ localStorage.setItem(AUDIT_QKEY,JSON.stringify(q.slice(-5000))); }catch(_e){ logSilent(_e); } }
+let AUDIT_FLUSHING=false;
+async function auditFlush(){
+  if(AUDIT_FLUSHING||!supabase) return; AUDIT_FLUSHING=true;
+  try{ let q=auditQueueGet();
+    while(q.length){ const {error}=await supabase.rpc("audit_append",{p:q[0]}); if(error){ SYNC.auditError=error.message||String(error); break; }
+      q=auditQueueGet(); q.shift(); auditQueueSet(q); SYNC.auditError=null; }
+  }catch(e){ SYNC.auditError=e.message||String(e); } finally { AUDIT_FLUSHING=false; }
+}
+if(typeof window!=="undefined"){ window.addEventListener("online",()=>auditFlush()); setInterval(()=>{ if(auditQueueGet().length) auditFlush(); },15000); }
+function auditLog(module, objet, action, changes){
+  const u=AUDIT_SYSTEM?null:(typeof sgsCurrentUser==="function"?sgsCurrentUser():null);
+  let prof=""; try{ prof=sessionStorage.getItem(PFX+"active_profile")||""; }catch(_e){ logSilent(_e); }
+  const e={client_ts:new Date().toISOString(),user_id:AUDIT_SYSTEM?"systeme":(u?u.id:""),user_label:AUDIT_SYSTEM?"Système (automatique)":(u?userLabel(u):((PROFILES.find(p=>p.id===prof)||{}).label||"")+" (profil partagé)"),
+    profil:prof,device:auditDevice(),module:String(module||"?"),objet:objet==null?"":String(objet),action:String(action||"?"),changes:changes||null};
+  const q=auditQueueGet(); q.push(e); auditQueueSet(q); setTimeout(auditFlush,300);
+}
+// Comparaison avant / après d'un registre (liste d'enregistrements, table par clé, ou valeur simple)
+const AUDIT_MAXV=240;
+const auditV=v=>{ if(v==null||v==="") return null; const s=typeof v==="string"?v:JSON.stringify(v); return s.length>AUDIT_MAXV?s.slice(0,AUDIT_MAXV)+"…":s; };
+const auditId=(o,i)=>o&&typeof o==="object"?(o.id||o.ref||(o.num&&o.date?o.num+" "+o.date:null)||o.immat||o.timestamp||o.demoId||("#"+i)):("#"+i);
+const auditName=o=>o&&typeof o==="object"?(o.ref||o.immat||o.num&&o.date&&(o.num+" "+o.date)||(o.nom&&(o.nom+" "+(o.prenom||"")).trim())||o.titre||o.id||""):"";
+function auditFields(a,b){ const ch={}; const ks=new Set([...Object.keys(a||{}),...Object.keys(b||{})]);
+  ks.forEach(k=>{ if(k==="updatedAt") return; const x=auditV((a||{})[k]), y=auditV((b||{})[k]); if(x!==y) ch[k]=[x,y]; }); return ch; }
+function auditDiff(key, prev, next){
+  if(AUDIT_SKIP.test(key)||prev===next) return;
+  try{
+    const out=[];
+    if(Array.isArray(prev)||Array.isArray(next)){
+      const P=new Map((prev||[]).map((o,i)=>[auditId(o,i),o])), N=new Map((next||[]).map((o,i)=>[auditId(o,i),o]));
+      N.forEach((o,id)=>{ if(!P.has(id)) out.push([auditName(o)||id,"création",auditFields({},o)]);
+        else { const ch=auditFields(P.get(id),o); if(Object.keys(ch).length) out.push([auditName(o)||id,ch.statut&&ch.statut[1]==='"annule"'||(ch.statut&&ch.statut[1]==="annule")?"annulation":ch.statut?"changement de statut":"modification",ch]); } });
+      P.forEach((o,id)=>{ if(!N.has(id)) out.push([auditName(o)||id,"suppression",auditFields(o,{})]); });
+    } else if(prev&&next&&typeof prev==="object"&&typeof next==="object"){
+      const ks=new Set([...Object.keys(prev),...Object.keys(next)]);
+      ks.forEach(k=>{ const a=prev[k], b=next[k]; if(JSON.stringify(a)===JSON.stringify(b)) return;
+        out.push([k,a==null?"création":b==null?"suppression":"modification",(a&&typeof a==="object")||(b&&typeof b==="object")?auditFields(a||{},b||{}):{valeur:[auditV(a),auditV(b)]}]); });
+    } else out.push(["",prev==null?"création":"modification",{valeur:[auditV(prev),auditV(next)]}]);
+    if(out.length>40){ auditLog(key,"",'modification en masse',{elements:[null,String(out.length)]}); return; }
+    out.forEach(([o,a,c])=>auditLog(key,o,a,c));
+  }catch(e){ logSilent(e); }
+}
+
 
 // Gestion des comptes par l'Administrateur : création, mot de passe provisoire, réinitialisations, désactivation.
 // Un compte n'est jamais supprimé : il reste identifiable dans les enregistrements et le futur journal d'audit.
@@ -8495,18 +8572,18 @@ function AccountsModal({ onClose }){
     const pwd=tempPwd(), salt=randomToken(16), now=new Date().toISOString();
     const u={id:"U"+Date.now().toString(36)+randomToken(4,"abcdefghjkmnpqrstuvwxyz23456789"),nom:f.nom.trim().toUpperCase(),prenom:f.prenom.trim(),fonction:(f.fonction||"").trim(),profil:f.profil,
       salt,hash:await userHash(pwd,salt),mustChange:true,actif:true,createdAt:now,createdBy:userLabel(me)||"Administrateur"};
-    if(await persist([...(list||[]),u])){ setForm(null); setShown({u,pwd,motif:"Compte créé"}); }
+    if(await persist([...(list||[]),u])){ setForm(null); setShown({u,pwd,motif:"Compte créé"}); auditLog("comptes",userLabel(u),"création de compte",{profil:[null,u.profil],fonction:[null,u.fonction||null]}); }
   };
   const resetPwd=async u=>{ if(!(await uiConfirm("Réinitialiser le mot de passe de "+userLabel(u)+" ? Un mot de passe provisoire sera généré."))) return;
     const pwd=tempPwd(), salt=randomToken(16), h=await userHash(pwd,salt);
-    if(await persist(list.map(x=>x.id===u.id?{...x,salt,hash:h,mustChange:true,pwdResetAt:new Date().toISOString()}:x))) setShown({u,pwd,motif:"Mot de passe réinitialisé"}); };
+    if(await persist(list.map(x=>x.id===u.id?{...x,salt,hash:h,mustChange:true,pwdResetAt:new Date().toISOString()}:x))){ setShown({u,pwd,motif:"Mot de passe réinitialisé"}); auditLog("comptes",userLabel(u),"réinitialisation du mot de passe",null); } };
   const resetTotp=async u=>{ if(!(await uiConfirm("Réinitialiser la double authentification de "+userLabel(u)+" ? À sa prochaine connexion, il activera à nouveau Microsoft Authenticator."))) return;
-    await sbSet(USER_TOTP_KEY(u),null); await persist(list.map(x=>x.id===u.id?{...x,totpResetAt:new Date().toISOString()}:x)); sgsToast("Double authentification réinitialisée · "+userLabel(u)); };
+    await sbSet(USER_TOTP_KEY(u),null); await persist(list.map(x=>x.id===u.id?{...x,totpResetAt:new Date().toISOString()}:x)); auditLog("comptes",userLabel(u),"réinitialisation de l'Authenticator",null); sgsToast("Double authentification réinitialisée · "+userLabel(u)); };
   const toggle=async u=>{
     if(u.actif&&me&&u.id===me.id){ uiAlert("⚠️ Vous ne pouvez pas désactiver votre propre compte."); return; }
     if(u.actif&&u.profil==="rdoa"&&(list||[]).filter(x=>x.actif&&x.profil==="rdoa").length===1){ uiAlert("⚠️ Il doit rester au moins un compte Administrateur actif."); return; }
     if(!(await uiConfirm((u.actif?"Désactiver":"Réactiver")+" le compte de "+userLabel(u)+" ?"))) return;
-    await persist(list.map(x=>x.id===u.id?{...x,actif:!u.actif,[u.actif?"desactiveAt":"reactiveAt"]:new Date().toISOString()}:x)); };
+    await persist(list.map(x=>x.id===u.id?{...x,actif:!u.actif,[u.actif?"desactiveAt":"reactiveAt"]:new Date().toISOString()}:x)); auditLog("comptes",userLabel(u),u.actif?"désactivation":"réactivation",null); };
   const copy=async t=>{ try{ await navigator.clipboard.writeText(t); sgsToast("Mot de passe copié"); }catch(e){ logSilent(e); } };
   const inp={width:"100%",height:42,boxSizing:"border-box",border:"1.5px solid "+C.border,borderRadius:9,padding:"0 11px",fontSize:13.5,fontFamily:"inherit",outline:"none",background:C.bg};
   const btn=(l,f,col)=><button onClick={f} disabled={busy} style={{border:"1px solid "+(col||C.border),background:"white",color:col||C.navy,borderRadius:8,padding:"6px 9px",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{l}</button>;
@@ -10099,8 +10176,9 @@ function LoginGate({ onAuth }) {
     // Dès qu'un compte nominatif a existé pour ce profil, même désactivé, le mot de passe partagé n'est plus accepté
     setStep(NOMINATIVE_PROFILES.includes(id)&&fresh.some(u=>u.profil===id)?"user":"pwd"); };
   const finish=(u)=>{
+    try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){ logSilent(_e); }
     try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); if(u) sessionStorage.setItem(PFX+"active_user",JSON.stringify({id:u.id,nom:u.nom,prenom:u.prenom,fonction:u.fonction,profil:u.profil})); else sessionStorage.removeItem(PFX+"active_user"); }catch(_e){ logSilent(_e); }
-    setOk(true); setTimeout(()=>onAuth(profileId,u||null),400); };
+    setOk(true); auditLog("connexion",u?userLabel(u):profileId,"connexion réussie",{profil:[null,profileId]}); setTimeout(()=>onAuth(profileId,u||null),400); };
   const goTotp=async(u)=>{
     const key=u?USER_TOTP_KEY(u):TOTP_KEY+"_"+profileId;
     const existing=await sbGet(key);
@@ -10110,7 +10188,7 @@ function LoginGate({ onAuth }) {
   // Profil encore à mot de passe partagé (aucun compte nominatif actif)
   const submit=async()=>{
     if(NOMINATIVE_PROFILES.includes(profileId)&&(users||[]).some(u=>u.profil===profileId)){ setErr("Ce profil utilise des comptes nominatifs : choisissez votre nom."); setStep("user"); return; }
-    if(!await checkPassword(pwd, profileId)){ setErr("Mot de passe incorrect"); return; }
+    if(!await checkPassword(pwd, profileId)){ setErr("Mot de passe incorrect"); auditLog("connexion",profileId,"échec de connexion",{motif:[null,"mot de passe incorrect"],profil:[null,profileId]}); return; }
     if(!TOTP_REQUIRED.includes(profileId)){ finish(null); return; }
     await goTotp(null);
   };
@@ -10118,7 +10196,7 @@ function LoginGate({ onAuth }) {
   const submitUser=async()=>{
     const fresh=(await usersLoad()).find(x=>x.id===user.id);
     if(!fresh||!fresh.actif){ setErr("Ce compte est désactivé. Contactez l'Administrateur."); return; }
-    if(await userHash(pwd,fresh.salt)!==fresh.hash){ setErr("Mot de passe incorrect"); setPwd(""); return; }
+    if(await userHash(pwd,fresh.salt)!==fresh.hash){ setErr("Mot de passe incorrect"); setPwd(""); auditLog("connexion",userLabel(fresh),"échec de connexion",{motif:[null,"mot de passe incorrect"],profil:[null,profileId]}); return; }
     setUser(fresh); setPwd("");
     if(fresh.mustChange){ setStep("newpwd"); return; }
     await goTotp(fresh);
@@ -10510,11 +10588,11 @@ function AppMain({ onLogout, profileId }) {
   const [demoSafetyV1,setDemoSafetyV1] = usePersist("demoSafetyV1",false);
   useEffect(()=>{
     if(demoSafetyV1) return;
-    const t=setTimeout(()=>{
+    const t=setTimeout(()=>auditAsSystem(()=>{   // opérations automatiques : journalisées au nom du système
       setSafety(s=>{ const have=new Set((s||[]).map(e=>e.demoId).filter(Boolean));
         return [...(s||[]), ...sgsDemoSafety().filter(e=>!have.has(e.demoId))]; });
       setDemoSafetyV1(true);
-    },4000);   // laisse le temps aux données du cloud d'arriver
+    }),4000);   // laisse le temps aux données du cloud d'arriver
     return ()=>clearTimeout(t);
   },[demoSafetyV1]);
   const [crew,setCrew]       = usePersist("crew",INIT_CREW);
@@ -10548,12 +10626,12 @@ function AppMain({ onLogout, profileId }) {
   // Correction des données enregistrées : CN-KTA est un EMB-140 LR (auparavant « EMB 135 »).
   // Idempotente : ne modifie que les enregistrements de CN-KTA dont le type diffère.
   useEffect(()=>{ const T="EMB-140 LR", K="CN-KTA";
-    const t=setTimeout(()=>{
+    const t=setTimeout(()=>auditAsSystem(()=>{   // opérations automatiques : journalisées au nom du système
       if((aircraft||[]).some(a=>a.immat===K&&a.type!==T)) setAircraft(l=>(l||[]).map(a=>a.immat===K?{...a,type:T}:a));
       if((safetyData||[]).some(e=>e.fx&&e.fx.immat===K&&e.fx.typeAv&&e.fx.typeAv!==T)) setSafety(l=>(l||[]).map(e=>e.fx&&e.fx.immat===K&&e.fx.typeAv!==T?{...e,fx:{...e.fx,typeAv:T}}:e));
       [[sgsItw,setSgsItw,'type'],[sgsOsv,setSgsOsv,'type'],[sgsMeda,setSgsMeda,'typeAv'],[sgsFdm,setSgsFdm,'typeAv']].forEach(([L,S,f])=>{
         if((L||[]).some(x=>x.immat===K&&x[f]&&x[f]!==T)) S(l=>(l||[]).map(x=>x.immat===K&&x[f]&&x[f]!==T?{...x,[f]:T}:x)); });
-    },5000);   // après l'arrivée des données du cloud
+    }),5000);   // après l'arrivée des données du cloud
     return ()=>clearTimeout(t);
   },[aircraft,safetyData,sgsItw,sgsOsv,sgsMeda,sgsFdm]);
   const [sgsResponsable,setSgsResponsable] = usePersist("sgsResponsable",SGS_RESP_DEFAUT);
@@ -10561,7 +10639,7 @@ function AppMain({ onLogout, profileId }) {
   const [demoSgsV1,setDemoSgsV1] = usePersist("demoSgsV1",false);
   useEffect(()=>{
     if(demoSgsV1) return;
-    const t=setTimeout(()=>{
+    const t=setTimeout(()=>auditAsSystem(()=>{   // opérations automatiques : journalisées au nom du système
       const evs=(safetyData||[]).filter(e=>e.demoId);
       if(!evs.length) return;   // pas de comptes rendus de démonstration : rien à relier
       const d=sgsDemoSgs(evs, sgsHazards||[], sgsActions||[]);
@@ -10569,7 +10647,7 @@ function AppMain({ onLogout, profileId }) {
       if(d.actions.length) setSgsActions(l=>[...(l||[]),...d.actions.filter(a=>!(l||[]).some(x=>x.demoId===a.demoId))]);
       setSgsEvStatus(s=>{ const n={...(s||{})}; Object.entries(d.ev).forEach(([k,v])=>{ if(!n[k]) n[k]=v; }); return n; });
       setDemoSgsV1(true);
-    },5000);   // laisse le temps aux données du cloud d'arriver
+    }),5000);   // laisse le temps aux données du cloud d'arriver
     return ()=>clearTimeout(t);
   },[demoSgsV1,safetyData]);
   // Risques intolérables : visibles de la Direction (Dirigeant Responsable) et du SGS
