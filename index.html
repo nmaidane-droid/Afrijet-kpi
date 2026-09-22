@@ -4004,6 +4004,10 @@ function sgsAccAllowed(h){
   if(r2&&r2.niv==='tolerable') return {f:['Dirigeant Responsable','Responsable désigné du processus'],motif:"Risque résiduel tolérable : acceptation par la direction ou le responsable désigné du processus."};
   return {f:SGS_ACC_FONCTIONS,motif:"Risque résiduel acceptable : acceptation par le responsable SGS ou le responsable du processus."};
 }
+// Acceptation préremplie avec la personne connectée (compte nominatif), si sa fonction est autorisée pour ce niveau
+function sgsAccDefault(h){ const u=typeof sgsCurrentUser==='function'?sgsCurrentUser():null, t=new Date().toISOString().slice(0,10);
+  if(!u) return {date:t}; const f=u.profil==='dir'?'Dirigeant Responsable':u.profil==='sgs'?'Responsable SGS':'';
+  return {date:t,nom:userLabel(u),...(f&&sgsAccAllowed(h).f.includes(f)?{fonction:f}:{}),userId:u.id}; }
 function sgsAccCheck(h){
   const r2=sgsRisque(h.P2,h.G2);
   if(!r2) return "Évaluez d'abord le risque résiduel (étape Résiduel) : on ne clôt pas un danger sans savoir ce qui reste.";
@@ -4154,7 +4158,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
             <div style={{fontSize:12.5,color:C.text,lineHeight:1.5}}>Le <b>risque résiduel</b> se mesure une fois les mesures en place. Si elles ne le sont pas encore, laissez la matrice vide : vous y reviendrez plus tard.</div>
             <SgsMatrice P={h.P2} G={h.G2} onPick={(P2,G2)=>up({P2,G2})} small/>
             {r2&&<div style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>Résiduel : <SgsBadge r={r2}/><span role="button" onClick={()=>up({P2:null,G2:null})} style={{color:C.slate,textDecoration:"underline",...TAP}}>effacer</span></div>}
-            <SgsField label="Statut"><SgsPills value={h.statut||'ouvert'} onChange={v=>up({statut:v,...(v==='clos'&&!h.acceptation?{acceptation:{date:today}}:{})})} options={SGS_H_STATUTS} color="#0F766E"/></SgsField>
+            <SgsField label="Statut"><SgsPills value={h.statut||'ouvert'} onChange={v=>up({statut:v,...(v==='clos'&&!h.acceptation?{acceptation:sgsAccDefault(h)}:{})})} options={SGS_H_STATUTS} color="#0F766E"/></SgsField>
             {h.statut==='clos'&&(()=>{ const al=sgsAccAllowed(h), a=h.acceptation||{}, setA=p=>up({acceptation:{...a,...p}});
               return <div style={{background:"#F0FDFA",border:"1.5px solid #0F766E",borderRadius:10,padding:11,display:"flex",flexDirection:"column",gap:9}}>
                 <div style={{fontSize:12.5,fontWeight:800,color:"#0F766E"}}>Acceptation du risque résiduel</div>
@@ -4292,7 +4296,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const hazardDetail=h=>{ if(!h) return null;
     const r1=sgsRisque(h.P,h.G), r2=sgsRisque(h.P2,h.G2), acts=A.filter(a=>a.hazardId===h.id), ev=h.eventKey&&(safety||[]).find(e=>sgsEventKey(e)===h.eventKey);
     const setSt=k=>{ if(k==='clos'&&acts.some(sgsActionOuverte)){ uiAlert("⚠️ Des actions liées sont encore ouvertes. Clôturez-les avant de clore le danger."); return; }
-      if(k==='clos'&&(h.statut||'ouvert')!=='clos'){ setEdit({kind:'hazard',data:{...h,statut:'clos',acceptation:h.acceptation||{date:today}},step:4}); return; }
+      if(k==='clos'&&(h.statut||'ouvert')!=='clos'){ setEdit({kind:'hazard',data:{...h,statut:'clos',acceptation:h.acceptation||sgsAccDefault(h)},step:4}); return; }
       const avant=h.statut||'ouvert'; setHazards(l=>(l||[]).map(x=>x.id===h.id?{...x,statut:k,updatedAt:new Date().toISOString()}:x));
       sgsToast(h.ref+' : '+(SGS_H_STATUTS.find(x=>x.k===k)||{}).l.toLowerCase(),()=>setHazards(l=>(l||[]).map(x=>x.id===h.id?{...x,statut:avant}:x))); };
     return (<div style={cardS}>
@@ -6686,6 +6690,7 @@ function ActionBar({ isAdmin, doExport, onRestore, onReset, onLogout }){
             isAdmin&&{k:"exp", icon:"📥", label:"Export",  bg:"#EDE9FE", bd:"#7C3AED", fg:"#5B21B6", on:doExport},
             isAdmin&&{k:"res", icon:"☁️", label:"Restore", bg:"#DBEAFE", bd:"#0369A1", fg:"#0369A1", on:onRestore},
             isAdmin&&{k:"rst", icon:"🗑", label:"Effacer", bg:"#FEE2E2", bd:"#DC2626", fg:"#DC2626", on:onReset},
+            isAdmin&&{k:"usr", icon:"👥", label:"Comptes", bg:"#E1F5EE", bd:"#0F766E", fg:"#085041", on:()=>window.dispatchEvent(new Event("open-accounts"))},
             {k:"man", icon:"📖", label:"Manuel", bg:"#EFF6FF", bd:"#0369A1", fg:"#0369A1", href:"Manuel_Utilisateur_Afrijet_v5.pdf"},
             {k:"out", icon:(
               // Icône de sortie : flèche quittant un cadre
@@ -8455,6 +8460,90 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
 // ── Login Gate ──────────────────────────────────────────────────────────────
 // ── TOTP (Microsoft Authenticator) ──────────────────────────────────────────────
 const TOTP_KEY = PFX + "totp_secret";
+// ══ Comptes nominatifs (lot 1) ══════════════════════════════════════
+// Profils à comptes nominatifs : chaque personne a son nom, son mot de passe et sa double authentification.
+// Tant qu'aucun compte actif n'existe pour un profil, son mot de passe partagé reste valable (démarrage).
+const NOMINATIVE_PROFILES=["dir","rdoa","sgs"];
+const USERS_KEY=PFX+"users";
+async function sha256hex(s){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)); return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join(""); }
+const userHash=(pwd,salt)=>sha256hex(salt+":"+pwd);
+function randomToken(n,alpha){ const a=alpha||"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; const r=new Uint32Array(n); crypto.getRandomValues(r); return Array.from(r).map(x=>a[x%a.length]).join(""); }
+const userLabel=u=>u?((u.prenom||"")+" "+(u.nom||"")).trim():"";
+// Liste des comptes : Supabase, avec copie locale pour pouvoir se connecter si le réseau est lent
+async function usersLoad(){
+  const u=await sbGet(USERS_KEY);
+  if(Array.isArray(u)){ try{ localStorage.setItem(USERS_KEY+"_cache",JSON.stringify(u)); }catch(_e){ logSilent(_e); } return u; }
+  try{ return JSON.parse(localStorage.getItem(USERS_KEY+"_cache")||"[]")||[]; }catch(_e){ return []; }
+}
+async function usersSave(list){ const ok=await sbSet(USERS_KEY,list); try{ localStorage.setItem(USERS_KEY+"_cache",JSON.stringify(list)); }catch(_e){ logSilent(_e); } return ok; }
+// Personne connectée pendant la session (null pour les profils encore à mot de passe partagé)
+function sgsCurrentUser(){ try{ return JSON.parse(sessionStorage.getItem(PFX+"active_user")||"null"); }catch(_e){ return null; } }
+const USER_TOTP_KEY=u=>TOTP_KEY+"_u_"+u.id;
+
+// Gestion des comptes par l'Administrateur : création, mot de passe provisoire, réinitialisations, désactivation.
+// Un compte n'est jamais supprimé : il reste identifiable dans les enregistrements et le futur journal d'audit.
+function AccountsModal({ onClose }){
+  const [list,setList]=useState(null), [form,setForm]=useState(null), [shown,setShown]=useState(null), [busy,setBusy]=useState(false);
+  useEffect(()=>{ usersLoad().then(setList); },[]);
+  const me=sgsCurrentUser();
+  const persist=async L=>{ setBusy(true); const ok=await usersSave(L); setBusy(false); setList(L); if(!ok) uiAlert("⚠️ Enregistrement dans le cloud impossible. Vérifiez la connexion, puis recommencez."); return ok; };
+  const tempPwd=()=>randomToken(10);
+  const create=async()=>{
+    const f=form||{};
+    if(!(f.nom||"").trim()||!(f.prenom||"").trim()||!f.profil){ uiAlert("⚠️ Nom, prénom et profil sont obligatoires."); return; }
+    if((list||[]).some(u=>u.actif&&u.profil===f.profil&&u.nom.trim().toLowerCase()===f.nom.trim().toLowerCase()&&u.prenom.trim().toLowerCase()===f.prenom.trim().toLowerCase())){ uiAlert("⚠️ Ce compte existe déjà pour ce profil."); return; }
+    const pwd=tempPwd(), salt=randomToken(16), now=new Date().toISOString();
+    const u={id:"U"+Date.now().toString(36)+randomToken(4,"abcdefghjkmnpqrstuvwxyz23456789"),nom:f.nom.trim().toUpperCase(),prenom:f.prenom.trim(),fonction:(f.fonction||"").trim(),profil:f.profil,
+      salt,hash:await userHash(pwd,salt),mustChange:true,actif:true,createdAt:now,createdBy:userLabel(me)||"Administrateur"};
+    if(await persist([...(list||[]),u])){ setForm(null); setShown({u,pwd,motif:"Compte créé"}); }
+  };
+  const resetPwd=async u=>{ if(!(await uiConfirm("Réinitialiser le mot de passe de "+userLabel(u)+" ? Un mot de passe provisoire sera généré."))) return;
+    const pwd=tempPwd(), salt=randomToken(16), h=await userHash(pwd,salt);
+    if(await persist(list.map(x=>x.id===u.id?{...x,salt,hash:h,mustChange:true,pwdResetAt:new Date().toISOString()}:x))) setShown({u,pwd,motif:"Mot de passe réinitialisé"}); };
+  const resetTotp=async u=>{ if(!(await uiConfirm("Réinitialiser la double authentification de "+userLabel(u)+" ? À sa prochaine connexion, il activera à nouveau Microsoft Authenticator."))) return;
+    await sbSet(USER_TOTP_KEY(u),null); await persist(list.map(x=>x.id===u.id?{...x,totpResetAt:new Date().toISOString()}:x)); sgsToast("Double authentification réinitialisée · "+userLabel(u)); };
+  const toggle=async u=>{
+    if(u.actif&&me&&u.id===me.id){ uiAlert("⚠️ Vous ne pouvez pas désactiver votre propre compte."); return; }
+    if(u.actif&&u.profil==="rdoa"&&(list||[]).filter(x=>x.actif&&x.profil==="rdoa").length===1){ uiAlert("⚠️ Il doit rester au moins un compte Administrateur actif."); return; }
+    if(!(await uiConfirm((u.actif?"Désactiver":"Réactiver")+" le compte de "+userLabel(u)+" ?"))) return;
+    await persist(list.map(x=>x.id===u.id?{...x,actif:!u.actif,[u.actif?"desactiveAt":"reactiveAt"]:new Date().toISOString()}:x)); };
+  const copy=async t=>{ try{ await navigator.clipboard.writeText(t); sgsToast("Mot de passe copié"); }catch(e){ logSilent(e); } };
+  const inp={width:"100%",height:42,boxSizing:"border-box",border:"1.5px solid "+C.border,borderRadius:9,padding:"0 11px",fontSize:13.5,fontFamily:"inherit",outline:"none",background:C.bg};
+  const btn=(l,f,col)=><button onClick={f} disabled={busy} style={{border:"1px solid "+(col||C.border),background:"white",color:col||C.navy,borderRadius:8,padding:"6px 9px",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{l}</button>;
+  return (<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(15,31,61,.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"calc(16px + env(safe-area-inset-top,0px)) 12px 30px"}}>
+    <div style={{background:"white",borderRadius:14,width:"100%",maxWidth:560,padding:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}><div style={{fontSize:17,fontWeight:800,color:C.text,flex:1}}>Comptes nominatifs</div>
+        <button onClick={onClose} aria-label="Fermer" style={{border:"none",background:C.bg,borderRadius:8,width:34,height:34,fontSize:16,cursor:"pointer"}}>✕</button></div>
+      <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45,marginBottom:12}}>Direction, Administrateur et Qualité / SGS se connectent avec leur nom, leur mot de passe et leur propre Microsoft Authenticator. Tant qu'un profil n'a aucun compte actif, son mot de passe partagé reste valable. Un compte n'est jamais supprimé, seulement désactivé.</div>
+      {shown&&<div style={{background:"#F0FDFA",border:"1.5px solid #0F766E",borderRadius:10,padding:12,marginBottom:12}}>
+        <div style={{fontSize:12.5,fontWeight:800,color:"#0F766E"}}>{shown.motif} — {userLabel(shown.u)}</div>
+        <div style={{fontSize:11.5,color:C.text,margin:"6px 0"}}>Mot de passe provisoire, affiché une seule fois. Transmettez-le par un autre canal que l'adresse de l'application ; il devra le changer à sa première connexion.</div>
+        <div role="button" onClick={()=>copy(shown.pwd)} style={{fontFamily:"monospace",fontSize:18,letterSpacing:2,textAlign:"center",background:"white",border:"1.5px dashed #0F766E",borderRadius:9,padding:"8px 0",cursor:"pointer"}}>{shown.pwd}</div>
+        <div style={{textAlign:"right",marginTop:8}}>{btn("J'ai noté le mot de passe",()=>setShown(null),"#0F766E")}</div></div>}
+      {list===null?<div style={{fontSize:12.5,color:C.slate}}>Chargement…</div>:
+        NOMINATIVE_PROFILES.map(pid=>{ const P=PROFILES.find(p=>p.id===pid), L=list.filter(u=>u.profil===pid);
+          return <div key={pid} style={{marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:800,color:P.color,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{P.label} · {L.filter(u=>u.actif).length} actif(s){!L.length?" — mot de passe partagé encore valable":!L.some(u=>u.actif)?" — aucun compte actif : accès fermé":""}</div>
+            {L.map(u=><div key={u.id} style={{border:"1px solid "+C.border,borderRadius:10,padding:"9px 10px",marginBottom:6,opacity:u.actif?1:.55}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,minWidth:0}}><b style={{fontSize:13}}>{userLabel(u)}</b>{u.fonction&&<span style={{fontSize:11.5,color:C.slate}}> · {u.fonction}</span>}
+                <div style={{fontSize:10.5,color:C.slate}}>{u.actif?(u.mustChange?"Mot de passe provisoire à changer":"Actif"):"Désactivé"}{me&&me.id===u.id?" · vous":""}</div></div></div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>{u.actif&&btn("Réinitialiser le mot de passe",()=>resetPwd(u))}{u.actif&&btn("Réinitialiser l'Authenticator",()=>resetTotp(u))}{btn(u.actif?"Désactiver":"Réactiver",()=>toggle(u),u.actif?"#B91C1C":"#0F766E")}</div>
+            </div>)}
+          </div>; })}
+      {form?<div style={{border:"1.5px solid "+C.border,borderRadius:10,padding:11,display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{fontSize:12.5,fontWeight:800}}>Nouveau compte</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <input aria-label="Prénom" placeholder="Prénom" value={form.prenom||""} onChange={e=>setForm({...form,prenom:e.target.value})} style={inp}/>
+            <input aria-label="Nom" placeholder="Nom" value={form.nom||""} onChange={e=>setForm({...form,nom:e.target.value})} style={inp}/></div>
+          <input aria-label="Fonction" placeholder="Fonction (ex. Dirigeant Responsable, Responsable SGS)" value={form.fonction||""} onChange={e=>setForm({...form,fonction:e.target.value})} style={inp}/>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{NOMINATIVE_PROFILES.map(pid=>{ const P=PROFILES.find(p=>p.id===pid); const on=form.profil===pid;
+            return <button key={pid} onClick={()=>setForm({...form,profil:pid})} style={{padding:"7px 10px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",border:"1.5px solid "+(on?P.color:C.border),background:on?P.color:"white",color:on?"white":C.slate}}>{P.label}</button>; })}</div>
+          <div style={{display:"flex",gap:8}}><button onClick={()=>setForm(null)} style={{flex:1,height:40,borderRadius:9,border:"1.5px solid "+C.border,background:"white",fontWeight:700,cursor:"pointer"}}>Annuler</button>
+            <button onClick={create} disabled={busy} style={{flex:2,height:40,borderRadius:9,border:"none",background:"#0F766E",color:"white",fontWeight:700,cursor:"pointer"}}>Créer le compte</button></div></div>
+        :<button onClick={()=>setForm({})} style={{width:"100%",height:44,borderRadius:10,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",fontWeight:700,cursor:"pointer"}}>+ Nouveau compte</button>}
+    </div></div>);
+}
+
 const TOTP_ISSUER = "Afrijet Sahara";
 const TOTP_ACCOUNT = "rdoa@afrijet-sahara.ma";
 
@@ -9777,11 +9866,11 @@ function qrSvgDataUrl(text){ const q=new SGS_QR.QRCode(-1,SGS_QR.L.M); q.addData
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+s+' '+s+'" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="'+d+'" fill="#000"/></svg>'); }
 // Libellé du compte dans Microsoft Authenticator, propre à chaque profil (auparavant identique pour tous)
 const TOTP_ACCOUNTS={dir:"Direction",rdoa:"Administrateur",sgs:"Qualite-SGS"};
-function TotpSetup({ secret, onVerified, profileId }) {
+function TotpSetup({ secret, onVerified, profileId, account:accountLabel }) {
   const [code,setCode]=useState("");
   const [err,setErr]=useState("");
   const [copied,setCopied]=useState(false);
-  const account=(TOTP_ACCOUNTS[profileId]||"Afrijet")+"@afrijet-sahara.ma";
+  const account=accountLabel?accountLabel+" ("+((PROFILES.find(p=>p.id===profileId)||{}).label||"")+")":(TOTP_ACCOUNTS[profileId]||"Afrijet")+"@afrijet-sahara.ma";
   const qr=`otpauth://totp/${encodeURIComponent(TOTP_ISSUER)}:${encodeURIComponent(account)}?secret=${secret}&issuer=${encodeURIComponent(TOTP_ISSUER)}&algorithm=SHA1&digits=6&period=30`;
   const qrUrl=qrSvgDataUrl(qr);   // fabriqué sur l'appareil : aucun service extérieur, la clé ne sort pas
   const keyShown=String(secret||"").replace(/(.{4})/g,"$1 ").trim();
@@ -9821,7 +9910,7 @@ function TotpSetup({ secret, onVerified, profileId }) {
   );
 }
 
-function TotpVerify({ profileId, onVerified }) {
+function TotpVerify({ profileId, onVerified, storeKey, account }) {
   const [code,setCode]=useState("");
   const [err,setErr]=useState("");
   const [addingDevice,setAddingDevice]=useState(false);
@@ -9830,7 +9919,7 @@ function TotpVerify({ profileId, onVerified }) {
   // Ajouter un autre téléphone Authenticator exige d'abord un code valide de celui déjà activé
   const startAddDevice=async()=>{
     if(code.length!==6){ setErr("Pour ajouter un autre téléphone, entrez d'abord le code de votre Authenticator actuel."); return; }
-    const stored=await sbGet(TOTP_KEY+"_"+(profileId||"rdoa"));
+    const stored=await sbGet(storeKey||TOTP_KEY+"_"+(profileId||"rdoa"));
     const secrets=stored?(Array.isArray(stored)?stored:[stored]):[];
     let okc=false; for(const s of secrets){ if(await verifyTotp(s,code)){ okc=true; break; } }
     if(!okc){ setErr("Code incorrect : impossible d'ajouter un autre téléphone."); setCode(""); return; }
@@ -9841,7 +9930,7 @@ function TotpVerify({ profileId, onVerified }) {
 
   const handleNewDeviceVerified=async()=>{
     // Add new secret to existing list
-    const key=TOTP_KEY+"_"+(profileId||"rdoa");
+    const key=storeKey||TOTP_KEY+"_"+(profileId||"rdoa");
     const existing=await sbGet(key);
     let secrets=[];
     if(existing){
@@ -9853,12 +9942,12 @@ function TotpVerify({ profileId, onVerified }) {
   };
 
   if(addingDevice){
-    return <TotpSetup secret={newSecret} profileId={profileId} onVerified={handleNewDeviceVerified}/>;
+    return <TotpSetup secret={newSecret} profileId={profileId} account={account} onVerified={handleNewDeviceVerified}/>;
   }
 
   const verify=async()=>{
     if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
-    const key=TOTP_KEY+"_"+(profileId||"rdoa");
+    const key=storeKey||TOTP_KEY+"_"+(profileId||"rdoa");
     const stored=await sbGet(key);
     if(!stored){setErr("TOTP non configuré");return;}
     const secrets=Array.isArray(stored)?stored:[stored];
@@ -9996,76 +10085,95 @@ function ProfileSelectScreen({ onSelect }) {
 
 function LoginGate({ onAuth }) {
   const [profileId,setProfileId]=useState(null);
-  const [step,setStep]=useState("select"); // select | pwd | totp_setup | totp_verify
-  const [pwd,setPwd]=useState("");
+  const [step,setStep]=useState("select"); // select | user | pwd | upwd | newpwd | totp_setup | totp_verify
+  const [pwd,setPwd]=useState(""), [pwd2,setPwd2]=useState("");
   const [err,setErr]=useState("");
   const [ok,setOk]=useState(false);
   const [totpSecret,setTotpSecret]=useState("");
-
-  const selectProfile=(id)=>{ setProfileId(id); setStep("pwd"); setErr(""); setPwd(""); };
-
+  const [users,setUsers]=useState([]), [user,setUser]=useState(null);
+  useEffect(()=>{ usersLoad().then(setUsers); },[]);
   const TOTP_REQUIRED = ["dir","rdoa","sgs"]; // double authentification : Direction, Administrateur, Qualité / SGS
-
+  const actifs=pid=>(users||[]).filter(u=>u.actif&&u.profil===pid).sort((a,b)=>userLabel(a).localeCompare(userLabel(b)));
+  const selectProfile=async(id)=>{ setProfileId(id); setErr(""); setPwd(""); setUser(null);
+    const fresh=await usersLoad(); setUsers(fresh);
+    // Dès qu'un compte nominatif a existé pour ce profil, même désactivé, le mot de passe partagé n'est plus accepté
+    setStep(NOMINATIVE_PROFILES.includes(id)&&fresh.some(u=>u.profil===id)?"user":"pwd"); };
+  const finish=(u)=>{
+    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); if(u) sessionStorage.setItem(PFX+"active_user",JSON.stringify({id:u.id,nom:u.nom,prenom:u.prenom,fonction:u.fonction,profil:u.profil})); else sessionStorage.removeItem(PFX+"active_user"); }catch(_e){ logSilent(_e); }
+    setOk(true); setTimeout(()=>onAuth(profileId,u||null),400); };
+  const goTotp=async(u)=>{
+    const key=u?USER_TOTP_KEY(u):TOTP_KEY+"_"+profileId;
+    const existing=await sbGet(key);
+    if(existing&&(!Array.isArray(existing)||existing.length)) setStep("totp_verify");
+    else { setTotpSecret(await generateTotpSecret()); setStep("totp_setup"); }
+  };
+  // Profil encore à mot de passe partagé (aucun compte nominatif actif)
   const submit=async()=>{
+    if(NOMINATIVE_PROFILES.includes(profileId)&&(users||[]).some(u=>u.profil===profileId)){ setErr("Ce profil utilise des comptes nominatifs : choisissez votre nom."); setStep("user"); return; }
     if(!await checkPassword(pwd, profileId)){ setErr("Mot de passe incorrect"); return; }
-    if(!TOTP_REQUIRED.includes(profileId)){
-      // Pas de TOTP pour ce département (mode test)
-      try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){ logSilent(_e); }
-      setOk(true);
-      setTimeout(()=>onAuth(profileId),400);
-      return;
-    }
-    const existingSecret=await sbGet(TOTP_KEY+"_"+profileId);
-    if(existingSecret){
-      setStep("totp_verify");
-    } else {
-      const newSecret=await generateTotpSecret();
-      setTotpSecret(newSecret);
-      setStep("totp_setup");
-    }
+    if(!TOTP_REQUIRED.includes(profileId)){ finish(null); return; }
+    await goTotp(null);
   };
-
-  const handleTotpVerified=async()=>{
-    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){ logSilent(_e); }
-    setOk(true);
-    setTimeout(()=>onAuth(profileId),400);
+  // Compte nominatif : mot de passe personnel
+  const submitUser=async()=>{
+    const fresh=(await usersLoad()).find(x=>x.id===user.id);
+    if(!fresh||!fresh.actif){ setErr("Ce compte est désactivé. Contactez l'Administrateur."); return; }
+    if(await userHash(pwd,fresh.salt)!==fresh.hash){ setErr("Mot de passe incorrect"); setPwd(""); return; }
+    setUser(fresh); setPwd("");
+    if(fresh.mustChange){ setStep("newpwd"); return; }
+    await goTotp(fresh);
   };
-
-  const handleTotpSetupVerified=async()=>{
-    await sbSet(TOTP_KEY+"_"+profileId,[totpSecret]);
-    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); }catch(_e){ logSilent(_e); }
-    setOk(true);
-    setTimeout(()=>onAuth(profileId),400);
+  const submitNew=async()=>{
+    if(pwd.length<8){ setErr("8 caractères au minimum."); return; }
+    if(!/[A-Za-z]/.test(pwd)||!/\d/.test(pwd)){ setErr("Mélangez lettres et chiffres."); return; }
+    if(pwd!==pwd2){ setErr("Les deux saisies ne correspondent pas."); return; }
+    const L=await usersLoad(), salt=randomToken(16), h=await userHash(pwd,salt);
+    const u={...user,salt,hash:h,mustChange:false,pwdChangedAt:new Date().toISOString()};
+    if(!(await usersSave(L.map(x=>x.id===u.id?u:x)))){ setErr("Enregistrement impossible : vérifiez la connexion."); return; }
+    setUser(u); setPwd(""); setPwd2(""); setErr(""); await goTotp(u);
   };
-
+  const handleTotpVerified=async()=>finish(user);
+  const handleTotpSetupVerified=async()=>{ await sbSet(user?USER_TOTP_KEY(user):TOTP_KEY+"_"+profileId,[totpSecret]); finish(user); };
   if(step==="select") return <ProfileSelectScreen onSelect={selectProfile}/>;
-
   const profile=PROFILES.find(p=>p.id===profileId);
+  const inp={width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:14,outline:"none",marginBottom:10};
+  const main={width:"100%",height:46,background:ok?"#00936A":profile?.color||"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer"};
   return (
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:20}}>
       <div style={{background:"#fff",borderRadius:16,padding:32,width:"100%",maxWidth:340,boxShadow:"0 20px 50px rgba(0,0,0,.3)"}}>
-        <button onClick={()=>setStep("select")} style={{background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:12,marginBottom:12,display:"flex",alignItems:"center",gap:4}}>
-          ← Changer de profil
+        <button onClick={()=>{ if(step==="upwd"){ setStep("user"); setErr(""); setPwd(""); } else setStep("select"); }} style={{background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:12,marginBottom:12,display:"flex",alignItems:"center",gap:4}}>
+          ← {step==="upwd"?"Changer de nom":"Changer de profil"}
         </button>
         <div style={{textAlign:"center",marginBottom:20}}>
           <div style={{fontSize:32,marginBottom:6}}>{profile?.icon}</div>
           <div style={{fontWeight:700,fontSize:16,color:profile?.color}}>{profile?.label}</div>
-          <div style={{fontSize:11,color:"#64748B"}}>Afrijet Sahara — KPI Dashboard</div>
+          <div style={{fontSize:11,color:"#64748B"}}>{user?userLabel(user):"Afrijet Sahara — KPI Dashboard"}</div>
         </div>
-        {step==="pwd"&&(<>
-          <input type="password" value={pwd} placeholder="Mot de passe"
-            onChange={e=>{setPwd(e.target.value);setErr("");}}
-            onKeyDown={e=>{if(e.key==="Enter")submit();}}
-            autoFocus
-            style={{width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:14,outline:"none",marginBottom:10}}/>
-          {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
-          <button onClick={submit}
-            style={{width:"100%",height:46,background:ok?"#00936A":profile?.color||"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer",transition:"background 0.3s"}}>
-            {ok?"✅ Connecté":"Se connecter"}
-          </button>
+        {step==="user"&&(<>
+          <div style={{fontSize:12,color:"#475569",marginBottom:8,textAlign:"center"}}>Qui êtes-vous ?</div>
+          {actifs(profileId).map(u=><button key={u.id} onClick={()=>{ setUser(u); setStep("upwd"); setErr(""); setPwd(""); }}
+            style={{width:"100%",minHeight:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",background:"#fff",borderRadius:10,padding:"8px 14px",marginBottom:8,textAlign:"left",cursor:"pointer"}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#0F1F3D"}}>{userLabel(u)}</div>{u.fonction&&<div style={{fontSize:11,color:"#64748B"}}>{u.fonction}</div>}</button>)}
+          {!actifs(profileId).length&&<div style={{fontSize:12.5,color:"#B91C1C",textAlign:"center",lineHeight:1.45}}>Aucun compte actif pour ce profil. Contactez l'Administrateur pour qu'il réactive ou crée votre compte.</div>}
+          {err&&<div style={{color:"#DC2626",fontSize:12}}>{err}</div>}
         </>)}
-        {step==="totp_setup"&&<TotpSetup secret={totpSecret} profileId={profileId} onVerified={handleTotpSetupVerified}/>}
-        {step==="totp_verify"&&<TotpVerify profileId={profileId} onVerified={handleTotpVerified}/>}
+        {(step==="pwd"||step==="upwd")&&(<>
+          <input type="password" value={pwd} placeholder={step==="upwd"?"Votre mot de passe":"Mot de passe"} autoComplete={step==="upwd"?"current-password":"off"}
+            onChange={e=>{setPwd(e.target.value);setErr("");}} onKeyDown={e=>{if(e.key==="Enter")(step==="upwd"?submitUser:submit)();}} autoFocus style={inp}/>
+          {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
+          <button onClick={step==="upwd"?submitUser:submit} style={main}>{ok?"✅ Connecté":"Se connecter"}</button>
+          {step==="upwd"&&<div style={{fontSize:10.5,color:"#64748B",marginTop:10,textAlign:"center"}}>Mot de passe oublié : demandez à l'Administrateur de le réinitialiser.</div>}
+        </>)}
+        {step==="newpwd"&&(<>
+          <div style={{fontSize:12.5,color:"#0F1F3D",fontWeight:700,marginBottom:4}}>Choisissez votre mot de passe</div>
+          <div style={{fontSize:11,color:"#64748B",marginBottom:10}}>Le mot de passe provisoire doit être remplacé : 8 caractères au minimum, lettres et chiffres. Il vous est personnel.</div>
+          <input type="password" value={pwd} placeholder="Nouveau mot de passe" autoComplete="new-password" onChange={e=>{setPwd(e.target.value);setErr("");}} autoFocus style={inp}/>
+          <input type="password" value={pwd2} placeholder="Confirmer le mot de passe" autoComplete="new-password" onChange={e=>{setPwd2(e.target.value);setErr("");}} onKeyDown={e=>{if(e.key==="Enter")submitNew();}} style={inp}/>
+          {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
+          <button onClick={submitNew} style={main}>Enregistrer et continuer</button>
+        </>)}
+        {step==="totp_setup"&&<TotpSetup secret={totpSecret} profileId={profileId} account={user?userLabel(user):null} onVerified={handleTotpSetupVerified}/>}
+        {step==="totp_verify"&&<TotpVerify profileId={profileId} storeKey={user?USER_TOTP_KEY(user):null} account={user?userLabel(user):null} onVerified={handleTotpVerified}/>}
       </div>
     </div>
   );
@@ -10282,12 +10390,12 @@ function AppInner() {
   });
   const [loggedOut,setLoggedOut] = useState(false);
   if(loggedOut) return <LoggedOutScreen onReturnToLogin={()=>setLoggedOut(false)}/>;
-  if(!authed) return <LoginGate onAuth={(profileId)=>{
+  if(!authed) return <LoginGate onAuth={(profileId,user)=>{
     try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){ logSilent(_e); }
     setAuthed(profileId);
   }}/>;
   return <ErrorBoundary><AppMain profileId={authed} onLogout={()=>{
-    try{ sessionStorage.removeItem(PFX+"authed_"+authed); sessionStorage.removeItem(PFX+"active_profile"); }catch(_e){ logSilent(_e); }
+    try{ sessionStorage.removeItem(PFX+"authed_"+authed); sessionStorage.removeItem(PFX+"active_profile"); sessionStorage.removeItem(PFX+"active_user"); }catch(_e){ logSilent(_e); }
     setAuthed(null);
     setLoggedOut(true);
   }}/></ErrorBoundary>;
@@ -10369,6 +10477,8 @@ function RestoreModal({ onClose, setRestoreProgress, onImport }){
 }
 
 function AppMain({ onLogout, profileId }) {
+  const [showAccounts,setShowAccounts]=useState(false);
+  useEffect(()=>{ const f=()=>setShowAccounts(true); window.addEventListener("open-accounts",f); return ()=>window.removeEventListener("open-accounts",f); },[]);
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
   // Tuile Finances : profil Finances seul. Tuile SGS : Qualité / SGS et Administrateur.
   const canForm = (id) => id==="fin" ? profile.id==="fin"
@@ -10605,6 +10715,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:"Inter,-apple-system,system-ui,sans-serif",display:"flex",flexDirection:"column",position:"relative"}}>
       <style>{`*{box-sizing:border-box;margin:0;padding:0;}@keyframes dot-pulse{0%,100%{opacity:1}50%{opacity:.5}}input,select,button{-webkit-tap-highlight-color:transparent;font-family:inherit;}::-webkit-scrollbar{display:none;}`}</style>
 
+      {showAccounts&&profileId==='rdoa'&&<AccountsModal onClose={()=>setShowAccounts(false)}/>}
       {/* TOP BAR */}
       <div style={{background:C.white,borderBottom:"1px solid "+C.border,padding:"0 12px",height:TOP,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 6px rgba(0,0,0,.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
@@ -10614,6 +10725,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           <div style={{minWidth:0}}>
             <div style={{fontWeight:800,fontSize:13,color:C.navy,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>AFRIJET SAHARA</div>
             <div style={{background:profile.color,color:"white",borderRadius:8,padding:"2px 8px",fontSize:9,fontWeight:700,flexShrink:0}}>{profile.label.toUpperCase()}</div>
+            {sgsCurrentUser()&&<div style={{fontSize:10,fontWeight:700,color:C.slate,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:130}}>{userLabel(sgsCurrentUser())}</div>}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
