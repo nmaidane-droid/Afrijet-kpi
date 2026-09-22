@@ -2477,6 +2477,17 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
             border:"1.5px solid "+(form===f.k?"#DC2626":C.border),background:form===f.k?"#DC2626":"white",color:form===f.k?"white":C.slate}}>{f.court}</button>)}
         </div>
         <div style={{fontSize:11.5,color:C.slate,marginTop:-6}}>{FD.l} · formulaire ENR/SGS-FOR/{FD.k}</div>
+        {/* Confidentialité et anonymat : posés avant toute saisie, comme en tête des formulaires du manuel */}
+        {(()=>{ const duo=(q,val,set,oui,aide)=><div>
+            <FLabel>{q}</FLabel>
+            <div style={{display:"flex",gap:6}}>{[[false,'Non'],[true,oui]].map(([v,l])=>
+              <button key={l} onClick={()=>set(v)} style={{flex:1,height:40,borderRadius:9,fontSize:12.5,fontWeight:700,...TAP,
+                border:"1.5px solid "+(val===v?(v?"#B45309":C.navy):C.border),background:val===v?(v?"#B45309":C.navy):"white",color:val===v?"white":C.slate}}>{l}</button>)}</div>
+            <div style={{fontSize:10.5,color:C.slateL,marginTop:3,lineHeight:1.4}}>{aide}</div></div>;
+          return <>
+            {duo("Ce rapport est-il confidentiel ?",conf,setConf,"Oui, confidentiel","La description n'est alors consultable que par le responsable SGS, et masquée dans les exports.")}
+            {duo("Ce rapport est-il anonyme ?",anon,setAnon,"Oui, anonyme","Le déclarant ne doit pas pouvoir être identifié : ni rédacteur, ni équipage, ni vol, ni date exacte ne seront enregistrés (seul le mois est conservé). Répondez avant de saisir.")}
+          </>; })()}
         <FSection title="Informations générales" color="#DC2626"/>
         {(()=>{ const inp={width:"100%",boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"9px 11px",fontSize:13,fontFamily:"inherit",outline:"none"};
           const setF=(k,v)=>setFx(o=>({...o,[k]:v}));
@@ -2563,14 +2574,8 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
         <SgsAssessment rows={assess} setRows={setAssess} risk={risk} setRisk={setRisk}/>
 
         <FSection title="Diffusion" color="#DC2626"/>
-        <Box on={conf} color="#475569" onClick={()=>setConf(v=>!v)}>
-          <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Confidentiel</div>
-          <div style={{fontSize:10,color:C.slateL,marginTop:2}}>La description n'est consultable que par le responsable Qualité / SGS.</div>
-        </Box>
-        <Box on={anon} color="#475569" onClick={()=>setAnon(v=>!v)}>
-          <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Anonyme</div>
-          <div style={{fontSize:10,color:C.slateL,marginTop:2}}>Ni vol, ni date exacte, ni noms ne sont enregistrés : seul le mois est conservé. Cochez-la dès le début de la saisie.</div>
-        </Box>
+        <div style={{background:C.bg,borderRadius:9,padding:"9px 11px",fontSize:11.5,color:C.slate,lineHeight:1.45}}>
+          Ce rapport est <b style={{color:C.text}}>{conf?'confidentiel':'non confidentiel'}</b> et <b style={{color:anon?"#B45309":C.text}}>{anon?'anonyme':'non anonyme'}</b> — choix faits en haut du formulaire.</div>
 
         <FSubmit label="Enregistrer le compte rendu" onClick={submit} saved={saved}/>
       </div>
