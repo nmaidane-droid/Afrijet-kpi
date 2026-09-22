@@ -2268,7 +2268,8 @@ const sgsCrewRole=(crew,nom)=>{ const m=(crew||[]).find(x=>sgsCrewNom(x)===nom);
 // t : text · area · place (pays + code OACI) · yn (oui/non) · sel (liste)
 const SGS_CR_FORMS=[
   {k:'SMS-19',l:'Rapport de danger — équipage',court:'Équipage',motif:true,redac:true,f:[
-    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'nomCdb',l:'Nom du CDB',t:'crew',kind:'cdb'},{k:'roleCdb',l:'Rôle du CDB',t:'ro'},{k:'nomOpl',l:"Nom de l'OPL",t:'crew',kind:'opl'},{k:'roleOpl',l:"Rôle de l'OPL",t:'ro'},
+    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'nomCdb',l:'Nom du CDB',t:'crew',kind:'cdb'},{k:'roleCdb',l:'Rôle du CDB pendant le vol',t:'sel',opts:['PF — pilote en fonction','PM — pilote surveillant']},
+    {k:'nomOpl',l:"Nom de l'OPL",t:'crew',kind:'opl'},{k:'roleOpl',l:"Rôle de l'OPL pendant le vol",t:'sel',opts:['PF — pilote en fonction','PM — pilote surveillant']},
     {k:'nomCc',l:'Nom du CC',t:'crew',kind:'pnc'},{k:'nomPnc',l:'Nom du PCB / PNC',t:'crew',kind:'pnc'},
     {k:'heure',l:'Heure locale',t:'time'},{k:'depart',l:'Départ',t:'place'},{k:'arrivee',l:'Arrivée',t:'place'},{k:'lieu',l:"Lieu de l'événement",t:'place'},
     {k:'infos',l:'Informations / précisions (waypoint, coordonnées, pistes, routes…)',t:'area'},{k:'precisions',l:"Précisions sur la nature de l'événement"}]},
@@ -2338,6 +2339,11 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
   const [desc,setDesc]=useState("");
   const [conf,setConf]=useState(false);
   const [anon,setAnon]=useState(false);
+  // Anonyme : noms, vol et date exacte ne sont pas enregistrés (seul le mois est conservé).
+  // Masquer à l'écran ne suffirait pas : le vol permettrait de retrouver l'équipage.
+  const ANON_FX=["nomCdb","nomOpl","nomCc","nomPnc","roleCdb","roleOpl","depart","arrivee"];
+  useEffect(()=>{ if(!anon) return; setRedac(""); setMode("hors"); setVolNum(""); setAcId("");
+    setFx(o=>{ const n={...o}; ANON_FX.forEach(k=>delete n[k]); return n; }); },[anon]);
   const [open,setOpen]=useState({FLT:true});
   // Formulaire officiel et ses champs (Manuel SGS 05-01)
   // Formulaire choisi depuis « Formulaires SMS » : présélectionné à l'ouverture
@@ -2350,8 +2356,7 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
   useEffect(()=>{ if(mode!=="vol"||!volNum) return; const [n,d]=volNum.split("|"); const fl=(flights||[]).find(x=>x.num===n&&x.date===d); if(!fl) return;
     const ac=(aircraft||[]).find(a=>a.id===fl.acId||a.immat===fl.num);
     setFx(o=>({...o,nomCdb:o.nomCdb||fl.cm1||"",nomOpl:o.nomOpl||fl.cm2||"",nomCc:o.nomCc||fl.cc||"",
-      immat:o.immat||(ac?ac.immat:fl.num)||"",typeAv:o.typeAv||(ac?ac.type:"")||"",
-      roleCdb:o.roleCdb||sgsCrewRole(crew,fl.cm1),roleOpl:o.roleOpl||sgsCrewRole(crew,fl.cm2)})); },[volNum,mode]);
+      immat:o.immat||(ac?ac.immat:fl.num)||"",typeAv:o.typeAv||(ac?ac.type:"")||""})); },[volNum,mode]);
   const pickForm=k=>{ setForm(k); const d=SGS_CR_BY[k]; if(d.auto) setSel(s=>{ const n={...s}; d.auto.forEach(a=>n[a]=true); return n; }); };
 
   const reset=()=>{ setVolNum(""); setAcId(""); setDateEv(today); setSel({}); setUnrulyType(""); setDesc(""); setConf(false); setAnon(false);
@@ -2384,8 +2389,10 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
     onSubmit({
       ...base, ...flags, rattachement:mode,
       ...(sel.unruly?{unrulyType}:{}),
+      ...(anon?{num:"",from:"",to:"",acId:undefined,rattachement:"hors",date:String(dateEv||today).slice(0,7)+"-01"}:{}),
       description:desc.trim(), confidentiel:conf, anonyme:anon,
-      form, titre:titre.trim(), ...(FD.redac?{redacteur:redac.trim()}:{}), ...(FD.motif?{motif}:{}), fx, enquete,
+      form, titre:titre.trim(), ...(FD.redac&&!anon?{redacteur:redac.trim()}:{}), ...(FD.motif?{motif}:{}),
+      fx:anon?Object.fromEntries(Object.entries(fx).filter(([k])=>!ANON_FX.includes(k))):fx, enquete,
       assess:assess.filter(r=>Object.values(r).some(v=>String(v||'').trim())), risk,
       timestamp:new Date().toISOString()
     });
@@ -2478,7 +2485,7 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
               <input aria-label={f.l+' — pays'} value={(v||{}).pays||''} onChange={e=>setF(f.k,{...(v||{}),pays:e.target.value})} placeholder="Pays" style={inp}/>
               <input aria-label={f.l+' — code OACI'} value={(v||{}).oaci||''} onChange={e=>setF(f.k,{...(v||{}),oaci:e.target.value.toUpperCase().slice(0,4)})} placeholder="OACI" style={inp}/></div></div>;
             if(f.t==='crew') return <div key={f.k}><FLabel>{f.l}</FLabel><CustomSelect value={v||''} searchable icon={f.kind==='pnc'?'🧑‍✈️':'👨‍✈️'} placeholder="-- Choisir dans le registre Équipage --"
-              onChange={x=>{ setF(f.k,x); if(f.k==='nomCdb') setF('roleCdb',sgsCrewRole(crew,x)); if(f.k==='nomOpl') setF('roleOpl',sgsCrewRole(crew,x)); }} options={sgsCrewOpts(crew,f.kind,v)}/></div>;
+              onChange={x=>setF(f.k,x)} options={sgsCrewOpts(crew,f.kind,v)}/></div>;
             if(f.t==='ro') return <div key={f.k}><FLabel>{f.l}</FLabel><div style={{...inp,color:v?C.text:C.slateL,background:"#EEF2F6"}}>{v||(f.k==='typeAv'?"Rempli selon l'appareil choisi":'Rempli selon le nom choisi')}</div></div>;
             if(f.t==='area') return <div key={f.k}><FLabel>{f.l}</FLabel><textarea aria-label={f.l} rows={3} value={v||''} onChange={e=>setF(f.k,e.target.value)} style={inp}/></div>;
             if(f.t==='yn') return <div key={f.k}><FLabel>{f.l}</FLabel><div style={{display:"flex",gap:6}}>{[['oui','Oui'],['non','Non']].map(([k,l])=><button key={k} onClick={()=>setF(f.k,k)} style={{flex:1,height:36,borderRadius:8,fontSize:12,fontWeight:700,...TAP,border:"1.5px solid "+(v===k?C.navy:C.border),background:v===k?C.navy:"white",color:v===k?"white":C.slate}}>{l}</button>)}</div></div>;
@@ -2486,11 +2493,16 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
             if(f.t==='time') return <div key={f.k}><FLabel>{f.l}</FLabel><TimeField value={v||''} onChange={x=>setF(f.k,x)} style={{height:40}}/></div>;
             if(f.t==='ac') return <div key={f.k}><FLabel>{f.l}</FLabel><AircraftSelect aircraft={aircraft} value={v} onChange={(im,ty)=>setFx(o=>({...o,immat:im,typeAv:ty||o.typeAv}))}/></div>;
             return <div key={f.k}><FLabel>{f.l}</FLabel><input aria-label={f.l} type="text" value={v||''} placeholder={f.ph||''} onChange={e=>setF(f.k,e.target.value)} style={inp}/></div>; };
+          const masque=f=>ANON_FX.includes(f.k)&&anon;
+          const nonEnr=f=><div key={f.k}><FLabel>{f.l}</FLabel><div style={{...inp,background:"#EEF2F6",color:C.slateL}}>Non enregistré — rapport anonyme</div></div>;
           return <>
             <div><FLabel>Titre de l'événement *</FLabel><input aria-label="Titre de l'événement" value={titre} onChange={e=>setTitre(e.target.value)} style={inp}/></div>
-            {FD.redac&&<div><FLabel>Rédacteur</FLabel><input aria-label="Rédacteur" value={redac} onChange={e=>setRedac(e.target.value)} placeholder="Laisser vide si le rapport est anonyme" style={inp}/></div>}
+            {FD.redac&&(anon?nonEnr({k:'redacteur',l:'Rédacteur'})
+              :<div><FLabel>Rédacteur</FLabel><input aria-label="Rédacteur" value={redac} onChange={e=>setRedac(e.target.value)} placeholder="Qui a écrit le rapport" style={inp}/></div>)}
+            {anon&&<div style={{background:"#FAEEDA",color:"#633806",borderRadius:9,padding:"9px 11px",fontSize:11.5,lineHeight:1.45}}>
+              <b>Rapport anonyme.</b> Le vol, la date exacte et les noms ne seront pas enregistrés ; seul le mois est conservé. Vérifiez que la description ne permet pas d'identifier son auteur. Aucune demande de précision ni retour d'information ne sera possible (SGS 02-01 § 1.1).</div>}
             {FD.motif&&<div><FLabel>Motif du rapport</FLabel><div style={{display:"flex",gap:6}}>{[['evenement','Événement'],['danger','Danger']].map(([k,l])=><button key={k} onClick={()=>setMotif(k)} style={{flex:1,height:36,borderRadius:8,fontSize:12,fontWeight:700,...TAP,border:"1.5px solid "+(motif===k?C.navy:C.border),background:motif===k?C.navy:"white",color:motif===k?"white":C.slate}}>{l}</button>)}</div></div>}
-            {FD.f.map(one)}
+            {FD.f.map(f=>masque(f)?nonEnr(f):one(f))}
             {form==="SMS-17"&&sgsDureeMin(fx.duree)>60&&<div style={{background:"#FAEEDA",color:"#633806",borderRadius:9,padding:"8px 10px",fontSize:12,fontWeight:600}}>Plus d'une heure : une copie de ce compte rendu, avec les observations d'Afrijet Sahara, doit être adressée à la DAC au plus tard 28 jours après l'événement (SMS-17).</div>}
           </>; })()}
         <FSection title={"Nature de l'événement"+(nbSel?" · "+nbSel+" sélectionnée"+(nbSel>1?"s":""):"")} color="#DC2626"/>
@@ -2539,7 +2551,7 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
         })}
 
         <FSection title={FD.descL||"Description des faits"} color="#DC2626"/>
-        <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={4}
+        <textarea aria-label="Description des faits" value={desc} onChange={e=>setDesc(e.target.value)} rows={4}
           placeholder="Circonstances, déroulé, mesures immédiates prises…"
           style={{width:"100%",boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",resize:"vertical"}}/>
 
@@ -2557,7 +2569,7 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
         </Box>
         <Box on={anon} color="#475569" onClick={()=>setAnon(v=>!v)}>
           <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Anonyme</div>
-          <div style={{fontSize:10,color:C.slateL,marginTop:2}}>Aucune demande de précision ni retour d'information ne sera possible (Manuel SGS 02-01 § 1.1).</div>
+          <div style={{fontSize:10,color:C.slateL,marginTop:2}}>Ni vol, ni date exacte, ni noms ne sont enregistrés : seul le mois est conservé. Cochez-la dès le début de la saisie.</div>
         </Box>
 
         <FSubmit label="Enregistrer le compte rendu" onClick={submit} saved={saved}/>
