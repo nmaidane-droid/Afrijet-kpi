@@ -8491,7 +8491,8 @@ const TOTP_KEY = PFX + "totp_secret";
 // ══ Comptes nominatifs (lot 1) ══════════════════════════════════════
 // Profils à comptes nominatifs : chaque personne a son nom, son mot de passe et sa double authentification.
 // Tant qu'aucun compte actif n'existe pour un profil, son mot de passe partagé reste valable (démarrage).
-const NOMINATIVE_PROFILES=["dir","rdoa","sgs"];
+// Tous les profils : comptes personnels avec double authentification ; mot de passe partagé du profil tant qu'aucun compte n'y a été créé
+const NOMINATIVE_PROFILES=["ops","maint","fin","comm","dir","sgs","rdoa"];
 const USERS_KEY=PFX+"users";
 async function sha256hex(s){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)); return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join(""); }
 const userHash=(pwd,salt)=>sha256hex(salt+":"+pwd);
@@ -8709,7 +8710,7 @@ function AccountsModal({ onClose }){
     <div style={{background:"white",borderRadius:14,width:"100%",maxWidth:560,padding:16}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}><div style={{fontSize:17,fontWeight:800,color:C.text,flex:1}}>Comptes nominatifs</div>
         <button onClick={onClose} aria-label="Fermer" style={{border:"none",background:C.bg,borderRadius:8,width:34,height:34,fontSize:16,cursor:"pointer"}}>✕</button></div>
-      <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45,marginBottom:12}}>Direction, Administrateur et Qualité / SGS se connectent avec leur nom, leur mot de passe et leur propre Microsoft Authenticator. Tant qu'un profil n'a aucun compte actif, son mot de passe partagé reste valable. Un compte n'est jamais supprimé, seulement désactivé.</div>
+      <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45,marginBottom:12}}>Chaque personne se connecte avec son nom, son mot de passe et son propre Microsoft Authenticator. Tant qu'aucun compte n'a été créé pour un département, son mot de passe partagé reste valable ; dès le premier compte, il est refusé. Un compte n'est jamais supprimé, seulement désactivé.</div>
       {shown&&<div style={{background:"#F0FDFA",border:"1.5px solid #0F766E",borderRadius:10,padding:12,marginBottom:12}}>
         <div style={{fontSize:12.5,fontWeight:800,color:"#0F766E"}}>{shown.motif} — {userLabel(shown.u)}</div>
         <div style={{fontSize:11.5,color:C.text,margin:"6px 0"}}>Mot de passe provisoire, affiché une seule fois. Transmettez-le par un autre canal que l'adresse de l'application ; il devra le changer à sa première connexion.</div>
