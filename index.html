@@ -8571,6 +8571,30 @@ async function usersSave(list){ const ok=await sbSet(USERS_KEY,list); try{ local
 // Personne connectée pendant la session (null pour les profils encore à mot de passe partagé)
 function sgsCurrentUser(){ try{ return JSON.parse(sessionStorage.getItem(PFX+"active_user")||"null"); }catch(_e){ return null; } }
 const USER_TOTP_KEY=u=>TOTP_KEY+"_u_"+u.id;
+// ── Limitation des tentatives de connexion ──
+// 3 et 4 échecs : 30 s d'attente ; 5 échecs : blocage 15 min (journalisé). Réussite : compteur remis à zéro.
+// Compteur dans Supabase (clé auth_locks), par compte (« u:<id> ») ou par profil à mot de passe partagé (« p:<profil> »).
+const LOCK_KEY=PFX+"auth_locks";
+const LOCK_RULE={delayAfter:3,delayS:30,lockAfter:5,lockMin:15};
+async function locksAll(){ const r=await sbGet(LOCK_KEY); if(r&&typeof r==="object"){ try{ localStorage.setItem(LOCK_KEY+"_c",JSON.stringify(r)); }catch(_e){ logSilent(_e); } return r; }
+  try{ return JSON.parse(localStorage.getItem(LOCK_KEY+"_c")||"{}")||{}; }catch(_e){ return {}; } }
+async function lockSet(id,v){ const L={...(await locksAll())}; if(v) L[id]=v; else delete L[id]; await sbSet(LOCK_KEY,L); try{ localStorage.setItem(LOCK_KEY+"_c",JSON.stringify(L)); }catch(_e){ logSilent(_e); } }
+async function authWait(id){ const s=(await locksAll())[id]||{}; return Math.max(0,(s.until||0)-Date.now()); }
+async function authFail(id,label){
+  const s=(await locksAll())[id]||{}; const fails=(s.fails||0)+1; let until=0;
+  if(fails>=LOCK_RULE.lockAfter) until=Date.now()+LOCK_RULE.lockMin*60000; else if(fails>=LOCK_RULE.delayAfter) until=Date.now()+LOCK_RULE.delayS*1000;
+  await lockSet(id,{fails,until,last:new Date().toISOString(),label});
+  if(fails===LOCK_RULE.lockAfter) auditLog("connexion",label,"blocage après "+fails+" échecs",{duree:[null,LOCK_RULE.lockMin+" min"]});
+  return {fails,until};
+}
+async function authOk(id){ const s=(await locksAll())[id]; if(s) await lockSet(id,null); }
+const fmtWait=ms=>{ const s=Math.ceil(ms/1000); return s>=60?Math.floor(s/60)+" min "+String(s%60).padStart(2,"0")+" s":s+" s"; };
+const failMsg=(r,base)=>r.until?(r.fails>=LOCK_RULE.lockAfter?"Trop d'essais : accès bloqué "+LOCK_RULE.lockMin+" minutes.":"Trop d'essais : patientez "+LOCK_RULE.delayS+" secondes."):base+(r.fails>=1?" ("+(LOCK_RULE.delayAfter-r.fails)+" essai(s) avant un délai)":"");
+// Compte à rebours affiché tant que l'attente court
+function useCountdown(){ const [until,setUntil]=useState(0), [,tick]=useState(0);
+  useEffect(()=>{ if(until<=Date.now()) return; const t=setInterval(()=>{ tick(x=>x+1); if(until<=Date.now()) clearInterval(t); },1000); return ()=>clearInterval(t); },[until]);
+  return [Math.max(0,until-Date.now()),setUntil]; }
+
 // ══ Journal d'audit (lot 2) ═════════════════════════════════════════
 // Chaque modification locale d'un registre est comparée à l'état précédent ; les champs changés
 // sont notés avec leur valeur avant et après, avec la personne connectée. Les entrées partent,
@@ -8743,7 +8767,9 @@ function auditDiff(key, prev, next){
 // Un compte n'est jamais supprimé : il reste identifiable dans les enregistrements et le futur journal d'audit.
 function AccountsModal({ onClose }){
   const [list,setList]=useState(null), [form,setForm]=useState(null), [shown,setShown]=useState(null), [busy,setBusy]=useState(false);
-  useEffect(()=>{ usersLoad().then(setList); },[]);
+  const [locks,setLocks]=useState({});
+  useEffect(()=>{ usersLoad().then(setList); locksAll().then(setLocks); },[]);
+  const unlock=async u=>{ await lockSet("u:"+u.id,null); setLocks(await locksAll()); auditLog("comptes",userLabel(u),"déblocage",null); sgsToast("Compte débloqué · "+userLabel(u)); };
   const me=sgsCurrentUser();
   const persist=async L=>{ setBusy(true); const ok=await usersSave(L); setBusy(false); setList(L); if(!ok) uiAlert("⚠️ Enregistrement dans le cloud impossible. Vérifiez la connexion, puis recommencez."); return ok; };
   const tempPwd=()=>randomToken(10);
@@ -8785,8 +8811,9 @@ function AccountsModal({ onClose }){
             <div style={{fontSize:11,fontWeight:800,color:P.color,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{P.label} · {L.filter(u=>u.actif).length} actif(s){!L.length?" — mot de passe partagé encore valable":!L.some(u=>u.actif)?" — aucun compte actif : accès fermé":""}</div>
             {L.map(u=><div key={u.id} style={{border:"1px solid "+C.border,borderRadius:10,padding:"9px 10px",marginBottom:6,opacity:u.actif?1:.55}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,minWidth:0}}><b style={{fontSize:13}}>{userLabel(u)}</b>{u.fonction&&<span style={{fontSize:11.5,color:C.slate}}> · {u.fonction}</span>}
-                <div style={{fontSize:10.5,color:C.slate}}>{u.actif?(u.mustChange?"Mot de passe provisoire à changer":"Actif"):"Désactivé"}{me&&me.id===u.id?" · vous":""}</div></div></div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>{u.actif&&btn("Réinitialiser le mot de passe",()=>resetPwd(u))}{u.actif&&btn("Réinitialiser l'Authenticator",()=>resetTotp(u))}{btn(u.actif?"Désactiver":"Réactiver",()=>toggle(u),u.actif?"#B91C1C":"#0F766E")}</div>
+                <div style={{fontSize:10.5,color:C.slate}}>{u.actif?(u.mustChange?"Mot de passe provisoire à changer":"Actif"):"Désactivé"}{me&&me.id===u.id?" · vous":""}</div>
+                {((locks["u:"+u.id]||{}).until||0)>Date.now()&&<div style={{fontSize:10.5,color:"#B91C1C",fontWeight:700}}>Bloqué jusqu'à {new Date(locks["u:"+u.id].until).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})} · {locks["u:"+u.id].fails} échecs</div>}</div></div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>{((locks["u:"+u.id]||{}).until||0)>Date.now()&&btn("Débloquer",()=>unlock(u),"#B45309")}{u.actif&&btn("Réinitialiser le mot de passe",()=>resetPwd(u))}{u.actif&&btn("Réinitialiser l'Authenticator",()=>resetTotp(u))}{btn(u.actif?"Désactiver":"Réactiver",()=>toggle(u),u.actif?"#B91C1C":"#0F766E")}</div>
             </div>)}
           </div>; })}
       {form?<div style={{border:"1.5px solid "+C.border,borderRadius:10,padding:11,display:"flex",flexDirection:"column",gap:8}}>
@@ -10169,19 +10196,24 @@ function TotpSetup({ secret, onVerified, profileId, account:accountLabel }) {
   );
 }
 
-function TotpVerify({ profileId, onVerified, storeKey, account }) {
+function TotpVerify({ profileId, onVerified, storeKey, account, lockId, lockLabel }) {
   const [code,setCode]=useState("");
+  const [waitMs,setUntil]=useCountdown();
+  const lid=lockId||"p:"+(profileId||"rdoa");
+  const fail=async base=>{ const r=await authFail(lid,lockLabel||profileId); if(r.until) setUntil(r.until); setErr(failMsg(r,base)); setCode(""); auditLog("connexion",lockLabel||profileId,"échec de connexion",{motif:[null,"code Authenticator incorrect"]}); };
+  const blocked=async()=>{ const w=await authWait(lid); if(w){ setUntil(Date.now()+w); setErr("Trop d'essais : patientez."); return true; } return false; };
   const [err,setErr]=useState("");
   const [addingDevice,setAddingDevice]=useState(false);
   const [newSecret,setNewSecret]=useState("");
 
   // Ajouter un autre téléphone Authenticator exige d'abord un code valide de celui déjà activé
   const startAddDevice=async()=>{
+    if(await blocked()) return;
     if(code.length!==6){ setErr("Pour ajouter un autre téléphone, entrez d'abord le code de votre Authenticator actuel."); return; }
     const stored=await sbGet(storeKey||TOTP_KEY+"_"+(profileId||"rdoa"));
     const secrets=stored?(Array.isArray(stored)?stored:[stored]):[];
     let okc=false; for(const s of secrets){ if(await verifyTotp(s,code)){ okc=true; break; } }
-    if(!okc){ setErr("Code incorrect : impossible d'ajouter un autre téléphone."); setCode(""); return; }
+    if(!okc){ await fail("Code incorrect : impossible d'ajouter un autre téléphone."); return; }
     const secret=await generateTotpSecret();
     setNewSecret(secret);
     setAddingDevice(true);
@@ -10205,6 +10237,7 @@ function TotpVerify({ profileId, onVerified, storeKey, account }) {
   }
 
   const verify=async()=>{
+    if(await blocked()) return;
     if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
     const key=storeKey||TOTP_KEY+"_"+(profileId||"rdoa");
     const stored=await sbGet(key);
@@ -10213,8 +10246,7 @@ function TotpVerify({ profileId, onVerified, storeKey, account }) {
     for(const secret of secrets){
       if(await verifyTotp(secret,code)){onVerified();return;}
     }
-    setErr("Code incorrect.");
-    setCode("");
+    await fail("Code incorrect.");
   };
   return (
     <div style={{textAlign:"center"}}>
@@ -10226,8 +10258,9 @@ function TotpVerify({ profileId, onVerified, storeKey, account }) {
         style={{width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:18,letterSpacing:8,outline:"none",marginBottom:8,textAlign:"center"}}
         autoFocus/>
       {err&&<div style={{color:"#DC2626",fontSize:12,marginBottom:8}}>{err}</div>}
-      <button onClick={verify}
-        style={{width:"100%",height:46,background:"#0F1F3D",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+      {waitMs>0&&<div role="alert" style={{background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:9,padding:"8px 10px",color:"#991B1B",fontSize:12.5,marginBottom:10}}>Réessayez dans <b>{fmtWait(waitMs)}</b></div>}
+      <button onClick={verify} disabled={waitMs>0}
+        style={{width:"100%",height:46,background:"#0F1F3D",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:waitMs>0?"not-allowed":"pointer",opacity:waitMs>0?.45:1}}>
         Vérifier
       </button>
       <button onClick={startAddDevice}
@@ -10350,6 +10383,7 @@ function LoginGate({ onAuth }) {
   const [ok,setOk]=useState(false);
   const [totpSecret,setTotpSecret]=useState("");
   const [users,setUsers]=useState([]), [user,setUser]=useState(null);
+  const [waitMs,setUntil]=useCountdown();
   useEffect(()=>{ usersLoad().then(setUsers); },[]);
   const TOTP_REQUIRED = ["dir","rdoa","sgs"]; // double authentification : Direction, Administrateur, Qualité / SGS
   const actifs=pid=>(users||[]).filter(u=>u.actif&&u.profil===pid).sort((a,b)=>userLabel(a).localeCompare(userLabel(b)));
@@ -10358,6 +10392,7 @@ function LoginGate({ onAuth }) {
     // Dès qu'un compte nominatif a existé pour ce profil, même désactivé, le mot de passe partagé n'est plus accepté
     setStep(NOMINATIVE_PROFILES.includes(id)&&fresh.some(u=>u.profil===id)?"user":"pwd"); };
   const finish=(u)=>{
+    authOk(u?"u:"+u.id:"p:"+profileId);
     try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){ logSilent(_e); }
     try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); if(u) sessionStorage.setItem(PFX+"active_user",JSON.stringify({id:u.id,nom:u.nom,prenom:u.prenom,fonction:u.fonction,profil:u.profil})); else sessionStorage.removeItem(PFX+"active_user"); }catch(_e){ logSilent(_e); }
     setOk(true); auditLog("connexion",u?userLabel(u):profileId,"connexion réussie",{profil:[null,profileId]}); setTimeout(()=>onAuth(profileId,u||null),400); };
@@ -10370,7 +10405,8 @@ function LoginGate({ onAuth }) {
   // Profil encore à mot de passe partagé (aucun compte nominatif actif)
   const submit=async()=>{
     if(NOMINATIVE_PROFILES.includes(profileId)&&(users||[]).some(u=>u.profil===profileId)){ setErr("Ce profil utilise des comptes nominatifs : choisissez votre nom."); setStep("user"); return; }
-    if(!await checkPassword(pwd, profileId)){ setErr("Mot de passe incorrect"); auditLog("connexion",profileId,"échec de connexion",{motif:[null,"mot de passe incorrect"],profil:[null,profileId]}); return; }
+    { const w=await authWait("p:"+profileId); if(w){ setUntil(Date.now()+w); setErr("Trop d'essais : patientez."); return; } }
+    if(!await checkPassword(pwd, profileId)){ const r=await authFail("p:"+profileId,profileId); if(r.until) setUntil(r.until); setErr(failMsg(r,"Mot de passe incorrect")); setPwd(""); auditLog("connexion",profileId,"échec de connexion",{motif:[null,"mot de passe incorrect"],profil:[null,profileId]}); return; }
     if(!TOTP_REQUIRED.includes(profileId)){ finish(null); return; }
     await goTotp(null);
   };
@@ -10378,7 +10414,8 @@ function LoginGate({ onAuth }) {
   const submitUser=async()=>{
     const fresh=(await usersLoad()).find(x=>x.id===user.id);
     if(!fresh||!fresh.actif){ setErr("Ce compte est désactivé. Contactez l'Administrateur."); return; }
-    if(await userHash(pwd,fresh.salt)!==fresh.hash){ setErr("Mot de passe incorrect"); setPwd(""); auditLog("connexion",userLabel(fresh),"échec de connexion",{motif:[null,"mot de passe incorrect"],profil:[null,profileId]}); return; }
+    { const w=await authWait("u:"+fresh.id); if(w){ setUntil(Date.now()+w); setErr("Trop d'essais : patientez."); return; } }
+    if(await userHash(pwd,fresh.salt)!==fresh.hash){ const r=await authFail("u:"+fresh.id,userLabel(fresh)); if(r.until) setUntil(r.until); setErr(failMsg(r,"Mot de passe incorrect")); setPwd(""); auditLog("connexion",userLabel(fresh),"échec de connexion",{motif:[null,"mot de passe incorrect"],profil:[null,profileId]}); return; }
     setUser(fresh); setPwd("");
     if(fresh.mustChange){ setStep("newpwd"); return; }
     await goTotp(fresh);
@@ -10421,7 +10458,8 @@ function LoginGate({ onAuth }) {
           <input type="password" value={pwd} placeholder={step==="upwd"?"Votre mot de passe":"Mot de passe"} autoComplete={step==="upwd"?"current-password":"off"}
             onChange={e=>{setPwd(e.target.value);setErr("");}} onKeyDown={e=>{if(e.key==="Enter")(step==="upwd"?submitUser:submit)();}} autoFocus style={inp}/>
           {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
-          <button onClick={step==="upwd"?submitUser:submit} style={main}>{ok?"✅ Connecté":"Se connecter"}</button>
+          {waitMs>0&&<div role="alert" style={{background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:9,padding:"8px 10px",color:"#991B1B",fontSize:12.5,marginBottom:10,textAlign:"center"}}>Réessayez dans <b>{fmtWait(waitMs)}</b></div>}
+          <button onClick={step==="upwd"?submitUser:submit} disabled={waitMs>0} style={{...main,opacity:waitMs>0?.45:1,cursor:waitMs>0?"not-allowed":"pointer"}}>{ok?"✅ Connecté":"Se connecter"}</button>
           {step==="upwd"&&<div style={{fontSize:10.5,color:"#64748B",marginTop:10,textAlign:"center"}}>Mot de passe oublié : demandez à l'Administrateur de le réinitialiser.</div>}
         </>)}
         {step==="newpwd"&&(<>
@@ -10433,7 +10471,7 @@ function LoginGate({ onAuth }) {
           <button onClick={submitNew} style={main}>Enregistrer et continuer</button>
         </>)}
         {step==="totp_setup"&&<TotpSetup secret={totpSecret} profileId={profileId} account={user?userLabel(user):null} onVerified={handleTotpSetupVerified}/>}
-        {step==="totp_verify"&&<TotpVerify profileId={profileId} storeKey={user?USER_TOTP_KEY(user):null} account={user?userLabel(user):null} onVerified={handleTotpVerified}/>}
+        {step==="totp_verify"&&<TotpVerify profileId={profileId} storeKey={user?USER_TOTP_KEY(user):null} account={user?userLabel(user):null} lockId={user?"u:"+user.id:"p:"+profileId} lockLabel={user?userLabel(user):profileId} onVerified={handleTotpVerified}/>}
       </div>
     </div>
   );
