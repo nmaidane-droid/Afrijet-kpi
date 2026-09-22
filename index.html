@@ -2793,7 +2793,7 @@ function sgsExportRegistre(H, A, nom){
       const strat=(SGS_STRATEGIES.find(s=>s.k===h.strategie)||{}).l;
       return { v:[h.ref, h.titre+(h.description?'\n'+h.description:''), ORI[h.origine]||'-',
           r1?r1.cell+' '+r1.l:'-', [strat,h.mesures].filter(Boolean).join(' : ')||'-', r2?r2.cell+' '+r2.l:'-',
-          (SGS_H_STATUTS.find(s=>s.k===(h.statut||'ouvert'))||{}).l, sgsFr(h.updatedAt||h.createdAt)],
+          (SGS_H_STATUTS.find(s=>s.k===(h.statut||'ouvert'))||{}).l, sgsFr(h.updatedAt||h.createdAt)+(h.statut==='clos'?((h.acceptation||{}).nom?'\nAccepté par '+h.acceptation.nom+' ('+h.acceptation.fonction+') le '+sgsFr(h.acceptation.date):'\nAcceptation non renseignée'):'')],
         style:{3:cell(r1),5:cell(r2)} };
     }));
 
@@ -3994,6 +3994,26 @@ function sgsCrPDF(e, evStatus, nom){
   sgsDocPDF({ref:F.k+'-'+String(e.date||'').replace(/-/g,'')+'-'+String(e.num||'HV').replace(/[^A-Z0-9]/gi,''),titre:F.l,sous:e.titre||safetyLabels(e).join(', '),meta,blocs,nom:nom||SGS_RESP_DEFAUT,fonction:'Responsable du Système de Gestion de la Sécurité'});
 }
 
+// ── Clôture d'un danger : acceptation du risque résiduel par le niveau compétent (SGS 02-02) ──
+// Rouge initial : Dirigeant Responsable (avisé immédiatement, décision finale) ; résiduel jaune : acceptation par la direction
+// ou le responsable désigné du processus ; résiduel vert : les mêmes, ou le responsable SGS.
+const SGS_ACC_FONCTIONS=['Dirigeant Responsable','Responsable désigné du processus','Responsable SGS'];
+function sgsAccAllowed(h){
+  const r1=sgsRisque(h.P,h.G), r2=sgsRisque(h.P2,h.G2);
+  if(r1&&r1.niv==='intolerable') return {f:['Dirigeant Responsable'],motif:"Danger initialement intolérable : le Dirigeant Responsable accepte le risque résiduel."};
+  if(r2&&r2.niv==='tolerable') return {f:['Dirigeant Responsable','Responsable désigné du processus'],motif:"Risque résiduel tolérable : acceptation par la direction ou le responsable désigné du processus."};
+  return {f:SGS_ACC_FONCTIONS,motif:"Risque résiduel acceptable : acceptation par le responsable SGS ou le responsable du processus."};
+}
+function sgsAccCheck(h){
+  const r2=sgsRisque(h.P2,h.G2);
+  if(!r2) return "Évaluez d'abord le risque résiduel (étape Résiduel) : on ne clôt pas un danger sans savoir ce qui reste.";
+  if(r2.niv==='intolerable') return "Le risque résiduel est encore intolérable ("+r2.cell+") : le danger ne peut pas être clos.";
+  const a=h.acceptation||{}, al=sgsAccAllowed(h);
+  if(!(a.nom||'').trim()||!a.fonction||!a.date) return "Indiquez qui accepte le risque résiduel : nom, fonction et date.";
+  if(!al.f.includes(a.fonction)) return al.motif;
+  return '';
+}
+
 function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, reg:regIn, onBack, onSecu, crew }){
   const reg=regIn||{};
   const nomResp=(responsable||'').trim()||SGS_RESP_DEFAUT;
@@ -4056,6 +4076,10 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const saveHazard=h=>{
     if(!h.titre||!h.titre.trim()){ uiAlert("⚠️ Le danger doit avoir un intitulé."); return false; }
     if(!h.P||!h.G){ uiAlert("⚠️ Évaluez le risque initial dans la matrice."); return false; }
+    if(h.statut==='clos'){
+      if(h.id&&A.some(a=>a.hazardId===h.id&&sgsActionOuverte(a))){ uiAlert("⚠️ Des actions liées sont encore ouvertes. Clôturez-les avant de clore le danger."); return false; }
+      const e=sgsAccCheck(h); if(e){ uiAlert("⚠️ "+e); return false; }
+    }
     const r=sgsRisque(h.P,h.G), now=new Date().toISOString();
     if(h.id) setHazards(l=>(l||[]).map(x=>x.id===h.id?{...h,updatedAt:now}:x));
     else {
@@ -4130,7 +4154,15 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
             <div style={{fontSize:12.5,color:C.text,lineHeight:1.5}}>Le <b>risque résiduel</b> se mesure une fois les mesures en place. Si elles ne le sont pas encore, laissez la matrice vide : vous y reviendrez plus tard.</div>
             <SgsMatrice P={h.P2} G={h.G2} onPick={(P2,G2)=>up({P2,G2})} small/>
             {r2&&<div style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>Résiduel : <SgsBadge r={r2}/><span role="button" onClick={()=>up({P2:null,G2:null})} style={{color:C.slate,textDecoration:"underline",...TAP}}>effacer</span></div>}
-            <SgsField label="Statut"><SgsPills value={h.statut||'ouvert'} onChange={v=>up({statut:v})} options={SGS_H_STATUTS} color="#0F766E"/></SgsField>
+            <SgsField label="Statut"><SgsPills value={h.statut||'ouvert'} onChange={v=>up({statut:v,...(v==='clos'&&!h.acceptation?{acceptation:{date:today}}:{})})} options={SGS_H_STATUTS} color="#0F766E"/></SgsField>
+            {h.statut==='clos'&&(()=>{ const al=sgsAccAllowed(h), a=h.acceptation||{}, setA=p=>up({acceptation:{...a,...p}});
+              return <div style={{background:"#F0FDFA",border:"1.5px solid #0F766E",borderRadius:10,padding:11,display:"flex",flexDirection:"column",gap:9}}>
+                <div style={{fontSize:12.5,fontWeight:800,color:"#0F766E"}}>Acceptation du risque résiduel</div>
+                <div style={{fontSize:11.5,color:C.text,lineHeight:1.45}}>{al.motif} Clore le danger signifie que la compagnie accepte le risque qui reste.</div>
+                <SgsField label="Fonction"><SgsPills value={a.fonction} onChange={v=>setA({fonction:v})} options={al.f.map(f=>({k:f,l:f}))} color="#0F766E"/></SgsField>
+                <SgsField label="Nom"><input aria-label="Nom de la personne qui accepte" value={a.nom||''} onChange={e=>setA({nom:e.target.value})} style={sgsInput}/></SgsField>
+                <SgsField label="Date de l'acceptation"><DateField value={a.date||''} onChange={v=>setA({date:v})} max={new Date().toISOString().slice(0,10)} style={sgsInput}/></SgsField>
+              </div>; })()}
           </>}
         </div>
         <div style={{display:"flex",gap:8,marginTop:18}}>
@@ -4260,6 +4292,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const hazardDetail=h=>{ if(!h) return null;
     const r1=sgsRisque(h.P,h.G), r2=sgsRisque(h.P2,h.G2), acts=A.filter(a=>a.hazardId===h.id), ev=h.eventKey&&(safety||[]).find(e=>sgsEventKey(e)===h.eventKey);
     const setSt=k=>{ if(k==='clos'&&acts.some(sgsActionOuverte)){ uiAlert("⚠️ Des actions liées sont encore ouvertes. Clôturez-les avant de clore le danger."); return; }
+      if(k==='clos'&&(h.statut||'ouvert')!=='clos'){ setEdit({kind:'hazard',data:{...h,statut:'clos',acceptation:h.acceptation||{date:today}},step:4}); return; }
       const avant=h.statut||'ouvert'; setHazards(l=>(l||[]).map(x=>x.id===h.id?{...x,statut:k,updatedAt:new Date().toISOString()}:x));
       sgsToast(h.ref+' : '+(SGS_H_STATUTS.find(x=>x.k===k)||{}).l.toLowerCase(),()=>setHazards(l=>(l||[]).map(x=>x.id===h.id?{...x,statut:avant}:x))); };
     return (<div style={cardS}>
@@ -4271,6 +4304,8 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
       <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12}}>
         <RiskBox lab="Risque initial" r={r1}/><SgsIcon n="chev" size={18} color={C.slate}/><RiskBox lab="Risque résiduel" r={r2} empty="À évaluer une fois les mesures en place"/></div>
       <div style={lblS}>Statut</div><SgsStepper steps={SGS_H_STATUTS} value={h.statut||'ouvert'} onPick={setSt}/>
+      {h.statut==='clos'&&<div style={{marginTop:8,borderLeft:"3px solid "+((h.acceptation||{}).nom?"#1D9E75":"#B45309"),background:(h.acceptation||{}).nom?"#EAF3DE":"#FAEEDA",padding:"7px 10px",fontSize:12,color:C.text}}>
+        {(h.acceptation||{}).nom?<>Risque résiduel accepté par <b>{h.acceptation.nom}</b> ({h.acceptation.fonction}) le {sgsFr(h.acceptation.date)}.</>:<>Clôture antérieure : acceptation du risque résiduel non renseignée.</>}</div>}
       <div style={wide?{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}:{}}>
         <div><div style={lblS}>Description</div><div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{h.description||'—'}</div>
           <div style={lblS}>Atténuation{h.strategie?' · '+((SGS_STRATEGIES.find(s=>s.k===h.strategie)||{}).l||'').toLowerCase():''}</div>
