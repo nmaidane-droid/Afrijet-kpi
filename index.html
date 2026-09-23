@@ -4921,7 +4921,7 @@ function FormFin({ onSubmit, saved }) {
   );
 }
 
-function ClientDetail({ c, flights, canEdit, onBack, onEdit, onDel }) {
+function ClientDetail({ c, flights, satis, canEdit, onBack, onEdit, onDel }) {
   const [histPer,setHistPer]=useState("Tout");
   const vols=flights.filter(f=>f.clientId===c.id&&f.status==="Termine");
   const totalH=vols.reduce((s,f)=>s+(f.dureeMin||0),0);
@@ -4945,7 +4945,8 @@ function ClientDetail({ c, flights, canEdit, onBack, onEdit, onDel }) {
       <div style={{fontWeight:800,fontSize:16,color:C.navy,marginBottom:4}}>{c.nom}</div>
       <div style={{fontSize:12,color:"#0891B2",fontWeight:600,marginBottom:12}}>{c.type} — {c.ville}, {c.pays}</div>
       <div style={{display:"flex",gap:10,marginBottom:14}}>
-        {[{v:vols.length,l:"Vols"},{v:Math.floor(totalH/60)+"h"+(totalH%60?String(totalH%60).padStart(2,"0"):""),l:"Total"},{v:totalPax,l:"PAX"}].map((k,i)=>(
+        {(()=>{ const enq=vols.map(f=>satDuVol(satis,f)).filter(Boolean), m=satMoyListe(enq);
+          return [{v:vols.length,l:"Vols"},{v:Math.floor(totalH/60)+"h"+(totalH%60?String(totalH%60).padStart(2,"0"):""),l:"Total"},{v:totalPax,l:"PAX"},{v:m!=null?m+"/5":"—",l:"Satisfaction"+(enq.length?" ("+enq.length+")":"")}]; })().map((k,i)=>(
           <div key={i} style={{flex:1,background:C.bg,borderRadius:10,padding:"10px",textAlign:"center"}}>
             <div style={{fontWeight:800,fontSize:18,color:C.navy}}>{k.v}</div>
             <div style={{fontSize:10,color:C.slate}}>{k.l}</div>
@@ -4981,7 +4982,7 @@ function ClientDetail({ c, flights, canEdit, onBack, onEdit, onDel }) {
     </Card>
   );
 }
-function FormClients({ clients, setClients, flights, canEdit }) {
+function FormClients({ clients, setClients, flights, satis, canEdit }) {
   const [selected,setSelected]=useState(null);
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
@@ -5040,7 +5041,7 @@ function FormClients({ clients, setClients, flights, canEdit }) {
   if(selected){
     const c=clients.find(x=>x.id===selected);
     if(!c){setSelected(null);return null;}
-    return <ClientDetail c={c} flights={flights} canEdit={canEdit}
+    return <ClientDetail satis={satis} c={c} flights={flights} canEdit={canEdit}
       onBack={()=>setSelected(null)}
       onEdit={()=>openEdit(c)}
       onDel={async()=>{ await del(c.id); setSelected(null); }}/>;
@@ -6829,11 +6830,99 @@ function ActionBar({ isAdmin, doExport, onRestore, onReset, onLogout }){
           );
 }
 
-function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
+// ══ Enquête de satisfaction : saisie par le PNC auprès du client principal ══
+// Une enquête par vol. Le choix du vol porte sur une fenêtre de 36 h en arrière et 12 h en avant
+// (heures GMT), pour couvrir un vol de nuit renseigné le lendemain matin.
+const SAT_SECTIONS=[
+  {num:"1",title:"Embarquement & Enregistrement",color:"#0F1F3D",items:["Accueil au sol","Rapidité de l'enregistrement","Information sur le vol","Processus d'embarquement"]},
+  {num:"2",title:"Confort à Bord",color:"#1D4ED8",items:["Confort du siège","Propreté de la cabine","Température & ventilation","Niveau sonore"]},
+  {num:"3",title:"Service Cabin Crew",color:"#00936A",items:["Accueil à bord","Courtoisie & professionnalisme","Réactivité aux demandes","Qualité du service en vol","Annonces & communication"]},
+  {num:"4",title:"Ponctualité & Opérations",color:"#7C3AED",items:["Respect de l'horaire","Communication en cas de retard"]},
+];
+const SAT_ITEMS=SAT_SECTIONS.flatMap(s=>s.items);
+const satMoyenne=n=>{ const v=Object.values(n||{}).map(Number).filter(x=>x>=1&&x<=5); return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null; };
+// Vols proposés : fenêtre glissante autour de l'heure courante, du plus récent au plus ancien
+function satVols(flights, tous){
+  const now=Date.now(), h=3600000;
+  const t=f=>{ const d=String(f.date||"")+"T"+String(f.dep||"00:00")+":00Z"; const x=Date.parse(d); return isNaN(x)?Date.parse(String(f.date||"")+"T00:00:00Z"):x; };
+  return (flights||[]).filter(f=>f.date&&["Planifie","En vol","Termine"].includes(f.status))
+    .filter(f=>tous||(t(f)>=now-36*h&&t(f)<=now+12*h))
+    .sort((a,b)=>t(b)-t(a));
+}
+const satKey=f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|");   // numéro, date, heure et route : deux rotations du même jour restent distinctes
+// L'enquête d'un vol, et la note sur 10 qui en découle (moyenne /5 × 2)
+const satDuVol=(satis,f)=>(satis||[]).find(s=>s.flightKey===satKey(f));
+const satNote10=s=>s&&s.moyenne!=null?Math.round(s.moyenne*2*10)/10:null;
+const satMoyListe=L=>{ const v=(L||[]).map(s=>s.moyenne).filter(x=>x!=null); return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null; };
+function FormSatisfactionSaisie({ flights, items, setItems, onClose, onNoteVol }){
+  // Fenêtre de 36 h en arrière et 12 h en avant ; si elle est vide, on élargit d'emblée à tous les vols
+  const proches=satVols(flights,false);
+  const [tous,setTous]=useState(proches.length===0);
+  const vols=satVols(flights,tous);
+  const [ed,setEd]=useState(()=>{ const v=proches.length?proches:satVols(flights,true); const now=Date.now();
+    const passe=v.filter(f=>Date.parse(String(f.date)+"T"+String(f.dep||"00:00")+":00Z")<=now);
+    const f=passe[0]||v[0]; return {notes:{},...(f?{flightKey:satKey(f),num:f.num,date:f.date,dep:f.dep,from:f.from,to:f.to,clientId:f.clientId}:{}),manuel:!f}; });
+  const up=p=>setEd(o=>({...o,...p}));
+  const moy=satMoyenne(ed.notes);
+  const choisir=v=>{ const f=vols.find(x=>satKey(x)===v); up(f?{flightKey:v,num:f.num,date:f.date,dep:f.dep,from:f.from,to:f.to,clientId:f.clientId,manuel:false}:{flightKey:""}); };
+  const save=()=>{
+    const n=Object.keys(ed.notes||{}).length;
+    if(!n){ uiAlert("⚠️ Notez au moins une rubrique."); return; }
+    if(!ed.flightKey&&!(ed.num||"").trim()){ uiAlert("⚠️ Indiquez le vol : choisissez-le dans la liste, ou saisissez son numéro et sa date."); return; }
+    if((items||[]).some(x=>x.flightKey&&x.flightKey===ed.flightKey)){ uiAlert("⚠️ Une enquête existe déjà pour ce vol."); return; }
+    const u=typeof sgsCurrentUser==="function"?sgsCurrentUser():null;
+    if(onNoteVol) onNoteVol(ed.flightKey||satKey(ed),Math.round(moy*2*10)/10);
+    setItems(l=>[...(l||[]),{...ed,id:"SAT"+Date.now(),flightKey:ed.flightKey||satKey(ed),moyenne:moy,repondues:n,
+      auteur:userLabel(u)||"", createdAt:new Date().toISOString(),}]);
+    sgsToast("Enquête enregistrée");
+    setEd({notes:{},manuel:true,num:"",date:""});
+  };
+  const note=(item,v)=>setEd(o=>({...o,notes:{...(o.notes||{}),[item]:v}}));
+  const inp={...sgsInput,padding:"9px 11px"};
+  return (<Card accent="#D97706"><FHeader icon="⭐" title="Enquête de satisfaction" subtitle="Une enquête par vol · saisie après le vol, d'après le questionnaire rempli à bord" color="#D97706"/>
+    <div style={{display:"flex",flexDirection:"column",gap:11}}>
+      <SgsField label={"Vol (heures GMT)"+(tous?(proches.length?"":" · aucun vol récent, tous les vols affichés"):" · 36 h en arrière, 12 h en avant")}>
+        <CustomSelect dense searchable value={ed.flightKey||""} placeholder="-- Choisir le vol --"
+          onChange={choisir}
+          options={vols.map(f=>({value:satKey(f),label:(f.num||"")+" · "+(f.from||"")+"→"+(f.to||""),sub:sgsFr(f.date)+(f.dep?" · "+f.dep+" GMT":"")}))}/>
+      </SgsField>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",fontSize:11.5}}>
+        <span role="button" onClick={()=>setTous(t=>!t)} style={{color:"#0369A1",textDecoration:"underline",...TAP}}>{tous?"Revenir aux vols récents":"Voir tous les vols"}</span>
+        <span role="button" onClick={()=>up({manuel:!ed.manuel,flightKey:""})} style={{color:"#0369A1",textDecoration:"underline",...TAP}}>{ed.manuel?"Choisir dans la liste":"Le vol n'est pas dans la liste"}</span>
+      </div>
+      {ed.manuel&&<div style={{display:"grid",gridTemplateColumns:"1fr 118px",gap:8}}>
+        <SgsField label="Numéro de vol"><input aria-label="Numéro de vol" value={ed.num||""} onChange={e=>up({num:e.target.value.toUpperCase()})} placeholder="AJS205" style={inp}/></SgsField>
+        <SgsField label="Date"><DateField value={ed.date||""} onChange={v=>up({date:v})} style={inp}/></SgsField></div>}
+      {SAT_SECTIONS.map(sec=><div key={sec.num} style={{border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+        <div style={{background:sec.color,color:"white",padding:"7px 11px",fontWeight:700,fontSize:11.5}}>{sec.num}. {sec.title.toUpperCase()}</div>
+        {sec.items.map(item=><div key={item} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"7px 10px",borderTop:"1px solid "+C.border}}>
+          <span style={{fontSize:12,color:C.text,flex:1,minWidth:0}}>{item}</span>
+          <div style={{display:"flex",gap:4,flexShrink:0}}>{[1,2,3,4,5].map(v=>{ const on=(ed.notes||{})[item]===v;
+            return <button key={v} aria-label={item+" : "+v} onClick={()=>note(item,v)} style={{width:28,height:28,borderRadius:7,fontSize:12,fontWeight:700,...TAP,
+              border:"1.5px solid "+(on?sec.color:C.border),background:on?sec.color:"white",color:on?"white":C.slate}}>{v}</button>; })}</div>
+        </div>)}
+      </div>)}
+      <SgsField label="Commentaire du client"><textarea aria-label="Commentaire du client" rows={3} value={ed.commentaire||""} onChange={e=>up({commentaire:e.target.value})} style={sgsInput}/></SgsField>
+      <div style={{background:C.bg,borderRadius:9,padding:"9px 11px",fontSize:12.5,color:C.text}}>
+        Moyenne : <b>{moy!=null?moy+" / 5":"—"}</b> · {Object.keys(ed.notes||{}).length} / {SAT_ITEMS.length} rubriques notées</div>
+      <div style={{display:"grid",gridTemplateColumns:onClose?"1fr 1fr":"1fr",gap:8}}>
+        {onClose&&<SgsBtn l="Fermer" onClick={onClose} full/>}
+        <SgsBtn l="Enregistrer l'enquête" onClick={save} prim full/></div>
+      {(items||[]).length>0&&<div>
+        <div style={{...sgsH,marginTop:4}}>Enquêtes saisies · moyenne {satMoyListe(items)}/5</div>
+        <div style={sgsCard}>{[...(items||[])].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,12).map(s=>
+          <SgsRow key={s.id} color="#D97706" titre={(s.num||"")+" · "+(s.from||"")+"→"+(s.to||"")+" · "+s.moyenne+"/5"}
+            sub={sgsFr(s.date)+" · "+s.repondues+" rubriques"+(s.auteur?" · "+s.auteur:"")+(s.commentaire?" · « "+String(s.commentaire).slice(0,40)+" »":"")}
+            onClick={()=>uiAlert(SAT_ITEMS.map(i=>i+" : "+((s.notes||{})[i]||"—")).join("\n"))}/>)}</div></div>}
+    </div></Card>);
+}
+
+function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
   const isAdmin = profileId === "rdoa";
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="comm"?"clients":profileId==="eqp"?"secu":null;   // Équipage : arrive sur le compte rendu · SGS : sur la grille
   const [active,setActive]=useState(defaultForm);
   const [saved,setSaved]=useState(false);
+  const [satSaisie,setSatSaisie]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
 
   const [progress,setProgress]=useState(null); // {title,icon,steps,currentStep,pct}
@@ -6855,7 +6944,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
       safetyData,
       clients,
       ndsArchive,
-      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,sgsMeda:sgs.reg.meda,sgsFdm:sgs.reg.fdm,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv}:{}),
+      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,sgsMeda:sgs.reg.meda,satisfaction:satis,sgsFdm:sgs.reg.fdm,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv}:{}),
     };
     setProgress(p=>({...p,currentStep:1,pct:40}));
     try{
@@ -6973,6 +7062,8 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
           </button>
           );
         })}
+        {satSaisie&&<div style={{position:"fixed",inset:0,zIndex:600,background:"rgba(15,31,61,.55)",overflowY:"auto",padding:"calc(14px + env(safe-area-inset-top,0px)) 12px 30px"}}>
+          <div style={{maxWidth:560,margin:"0 auto"}}><FormSatisfactionSaisie flights={flights} items={satis} setItems={setSatis} onNoteVol={onNoteVol} onClose={()=>setSatSaisie(false)}/></div></div>}
         {effectiveActive==="sat"&&(
           <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",flexDirection:"column",background:"#0F1F3D"}}>
             <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"2px solid #A0720A"}}>
@@ -6985,7 +7076,9 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
                 Fermer
               </button>
             </div>
-              <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0}}>
+              <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0,display:"flex",gap:8}}>
+                <button onClick={()=>setSatSaisie(true)}
+                  style={{flex:1,height:42,borderRadius:9,border:"none",background:"#D97706",color:"white",fontWeight:700,fontSize:13,...TAP}}>⭐ Saisir une enquête{(satis||[]).length?" ("+(satis||[]).length+")":""}</button>
                 <button onClick={()=>{
                   if(!window.jspdf){uiAlert("jsPDF non charge. Verifiez votre connexion.");return;}
                   try {
@@ -7217,7 +7310,7 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"}/>}
       {effectiveActive==="docavion" && <FormDocAvion readOnly={profileId==="ops"||profileId==="eqp"}/>}
       {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}/>}
-      {effectiveActive==="clients"  && <FormClients clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
+      {effectiveActive==="clients"  && <FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
   );
@@ -7318,7 +7411,7 @@ function FlightRow({ f, isLast, canEdit, onOpen, secEvts, compromis, clients }){
   );
 }
 
-function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, clients, crew, onDeleteFlight, isAdmin }) {
+function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, clients, crew, onDeleteFlight, isAdmin }) {
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
   const [opsSaved,setOpsSaved]=useState(false);
@@ -7562,10 +7655,9 @@ function ScreenOps({ flights, safetyData, aircraft, onUpdateFlight, onUpdateAirc
                       style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
                   </div>
                   <div>
-                    <FLabel>NPS client (0-10)</FLabel>
-                    <input type="number" min={0} max={10} step={0.1} value={edit.nps||""}
-                      onChange={e=>setEdit({...edit,nps:Math.min(10,Math.max(0,Number(e.target.value)||0))})}
-                      style={{width:"100%",height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+                    <FLabel>Satisfaction client</FLabel>
+                    {(()=>{ const s=satDuVol(satis,edit); return <div style={{height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",display:"flex",alignItems:"center",background:"#EEF2F6",fontSize:13,color:s?C.text:C.slateL}}>
+                      {s?<><b>{s.moyenne} / 5</b><span style={{color:C.slate,marginLeft:6,fontSize:11.5}}>· {s.repondues} rubriques</span></>:"Aucune enquête saisie"}</div>; })()}
                   </div>
                   <div style={{gridColumn:"1 / -1"}}>
                     <FLabel>Cause du retard</FLabel>
@@ -8090,8 +8182,8 @@ function ScreenPerf({ kpis, flights, finData }) {
         <KpiTile title="Tech Delay Rate" value={techDelayRate} unit="%" accent={techDelayRate<2?C.emerald:C.warn} icon="🔧"
           info={"Formule :\nVols retardés cause Technique / Total vols terminés × 100\n\n🟢 < 2%\n🟡 ≥ 2%"}/>
         {(()=>{
-          return <KpiTile title="NPS moyen" value={npsVal} unit="/10" accent={npsVal>=7?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}
-            info={"Formule :\nMoyenne NPS saisi post-vol (0-10)\n\n🟢 ≥ 7\n🟡 < 7"}/>;
+          return <KpiTile title="Satisfaction client" value={npsVal} unit="/10" accent={npsVal>=7?C.emerald:C.warn} icon="⭐" sub={volsNps.length>0?"Moy. "+volsNps.length+" vol(s)":"--"}
+            info={"Formule :\nMoyenne des enquêtes de satisfaction saisies après vol\n(moyenne sur 5 × 2 → note sur 10)\n\n🟢 ≥ 7\n🟡 < 7"}/>;
         })()}
       </div>
 
@@ -8148,7 +8240,7 @@ function ScreenPerf({ kpis, flights, finData }) {
             data={lfData} color={C.navy} target={80} maxVal={100} minVal={50} unit="%"/>
           <ChartCard title="Conso. carburant moyenne" icon="⛽"
             data={consoData} color={C.gold} target={900} maxVal={1100} minVal={600} unit="kg/h"/>
-          <ChartCard title="NPS client" icon="⭐"
+          <ChartCard title="Satisfaction client" icon="⭐"
             data={npsData} color="#7C3AED" target={70} maxVal={100} minVal={40} unit="%"/>
         </>
       ) : (
@@ -8492,7 +8584,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
       kpiLine("Retards moy.",rDelay+" min","15 min",rDelay<=15)+
       kpiLine("Tech Delay Rate",rTechRate+"%","2%",rTechRate<2)+
       kpiLine("Conso. carburant",rConso+" kg/h","900 kg/h",rConso<900)+
-      kpiLine("NPS client",rNps+"/10","7",rNps>=7)
+      kpiLine("Satisfaction client",rNps+"/10","7",rNps>=7)
     )+
     (rDelayCauses.length>0?card(sec("Retards par cause — "+rDelayVols.length+" vol(s) en retard","#0F1F3D")+
       rDelayCauses.map((c,i)=>(
@@ -10888,6 +10980,7 @@ function AppMain({ onLogout, profileId }) {
   const [sgsReco,setSgsReco] = usePersist("sgsReco",[]);
   const [sgsPlan,setSgsPlan] = usePersist("sgsPlan",[]);
   const [sgsOsv,setSgsOsv] = usePersist("sgsOsv",[]);
+  const [satis,setSatis] = usePersist("satisfaction",[]);   // enquêtes de satisfaction saisies après le vol
   // Correction des données enregistrées : CN-KTA est un EMB-140 LR (auparavant « EMB 135 »).
   // Idempotente : ne modifie que les enregistrements de CN-KTA dont le type diffère.
   useEffect(()=>{ const T="EMB-140 LR", K="CN-KTA";
@@ -10926,7 +11019,7 @@ function AppMain({ onLogout, profileId }) {
   const AUTO_BACKUP_MS = 30*60*1000;
   const stateRef = useRef({});
   stateRef.current = { flights, maintData, crew, finData, kpis, dismissed, safetyData, clients, ndsArchive,
-    sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings, sgsResponsable, sgsRevues, sgsChanges, sgsAudits, sgsFormations, sgsFrat, sgsMeda, sgsFdm, sgsItw, sgsReco, sgsPlan, sgsOsv };
+    sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings, sgsResponsable, sgsRevues, sgsChanges, sgsAudits, sgsFormations, sgsFrat, sgsMeda, sgsFdm, sgsItw, sgsReco, sgsPlan, sgsOsv, satisfaction:satis };
   const buildBackup = () => ({ version:"1.0", exportDate:new Date().toISOString(), auto:true, ...stateRef.current });
   const lastAutoRef = useRef(0);
   const autoBackup = async (reason) => {
@@ -10977,6 +11070,7 @@ function AppMain({ onLogout, profileId }) {
     if(data.sgsFormations) setSgsFormations(data.sgsFormations);
     if(data.sgsFrat) setSgsFrat(data.sgsFrat);
     if(data.sgsMeda) setSgsMeda(data.sgsMeda);
+    if(data.satisfaction) setSatis(data.satisfaction);
     if(data.sgsFdm) setSgsFdm(data.sgsFdm);
     if(data.sgsItw) setSgsItw(data.sgsItw); if(data.sgsReco) setSgsReco(data.sgsReco); if(data.sgsPlan) setSgsPlan(data.sgsPlan); if(data.sgsOsv) setSgsOsv(data.sgsOsv);
   };
@@ -11016,7 +11110,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);
     setClients(INIT_CLIENTS);setNdsArchive([]);   // sinon ces deux-là reviennent depuis le cloud
-    setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);setSgsRevues([]);setSgsChanges([]);setSgsAudits([]);setSgsFormations([]);setSgsFrat([]);setSgsMeda([]);setSgsFdm([]);setSgsItw([]);setSgsReco([]);setSgsPlan([]);setSgsOsv([]);
+    setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);setSgsRevues([]);setSgsChanges([]);setSgsAudits([]);setSgsFormations([]);setSgsFrat([]);setSgsMeda([]);setSgsFdm([]);setSgsItw([]);setSgsReco([]);setSgsPlan([]);setSgsOsv([]);setSatis([]);
     setReport(null);setReset(false);setTab("forms");
   };
 
@@ -11093,7 +11187,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
-        {tab==="forms"   && <ScreenForms
+        {tab==="forms"   && <ScreenForms satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
           sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,reg:{revues:sgsRevues,setRevues:setSgsRevues,changes:sgsChanges,setChanges:setSgsChanges,audits:sgsAudits,setAudits:setSgsAudits,formations:sgsFormations,setFormations:setSgsFormations,frat:sgsFrat,setFrat:setSgsFrat,meda:sgsMeda,setMeda:setSgsMeda,fdm:sgsFdm,setFdm:setSgsFdm,itw:sgsItw,setItw:setSgsItw,reco:sgsReco,setReco:setSgsReco,plan:sgsPlan,setPlan:setSgsPlan,osv:sgsOsv,setOsv:setSgsOsv},ndsArchive}}
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
           onSubmitMaint={d=>{
@@ -11121,7 +11215,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
         {tab==="alertes" && <ScreenAlertes sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew}/>}
-        {tab==="ops"     && <ScreenOps flights={flights} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
+        {tab==="ops"     && <ScreenOps flights={flights} satis={satis} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
@@ -11321,7 +11415,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
                 drawRow("Load Factor",pLf+"%",pLf>=80);
                 drawRow("Retards moyens",pDelay+" min",pDelay<=15);
                 drawRow("Consommation carburant",pConso+" kg/h",pConso<900);
-                drawRow("NPS client",pNps+"/10",pNps>=7,true);
+                drawRow("Satisfaction client",pNps+"/10",pNps>=7,true);
                 y+=4;
 
                 // ── Operations — current week only ──
@@ -11633,7 +11727,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 
                   drawChart(otpData,"Ponctualite OTP",[0,147,106],90,60,100,"%");                  drawChart(lfData,"Load Factor",[15,31,61],80,50,100,"%");
                   drawChart(consoData,"Consommation carburant",[160,114,10],900,600,1100," kg/h");
-                  drawChart(npsData2,"NPS client",[124,58,237],7,4,10,"");
+                  drawChart(npsData2,"Satisfaction client",[124,58,237],7,4,10,"");
                 }
 
                 // ── Footer on all pages ──
