@@ -8433,6 +8433,9 @@ function ScreenFin({ finData }) {
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
+// Échappement des valeurs saisies avant insertion dans le HTML du rapport :
+// une immatriculation ou un libellé ne doit jamais pouvoir être interprété comme du code.
+const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraft) {
   const ds=now.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
   const G="#00936A",O="#D97706",N="#0F1F3D";
@@ -8523,8 +8526,8 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
     const dateShort=f.date?f.date.slice(8)+"/"+f.date.slice(5,7):"--";
     const cm1Last=(f.cm1||"--").split(" ")[0];
     return "<div style='"+gridStyle+"background:"+(i%2?"#F8FAFC":"white")+"'>"
-      +"<div style='display:flex;align-items:center;gap:4px'><span style='width:7px;height:7px;border-radius:50%;background:"+dot+";display:inline-block;flex-shrink:0'></span><span style='font-weight:800;font-size:10px;color:#0F1F3D;white-space:nowrap'>"+f.num+"</span></div>"
-      +"<div style='font-size:10px;font-weight:700;white-space:nowrap;text-align:center'>"+f.from+"→"+f.to+"</div>"
+      +"<div style='display:flex;align-items:center;gap:4px'><span style='width:7px;height:7px;border-radius:50%;background:"+dot+";display:inline-block;flex-shrink:0'></span><span style='font-weight:800;font-size:10px;color:#0F1F3D;white-space:nowrap'>"+esc(f.num)+"</span></div>"
+      +"<div style='font-size:10px;font-weight:700;white-space:nowrap;text-align:center'>"+esc(f.from)+"→"+esc(f.to)+"</div>"
       +"<div style='font-size:8.5px;color:#64748B;white-space:nowrap;text-align:center'>"+blkTime+"</div>"
       +"<div style='font-size:8.5px;color:#94A3B8;white-space:nowrap'>"+dateShort+"</div>"
       +"<div style='font-size:10px;font-weight:700;color:"+durColor+";text-align:center'>"+durVal+"</div>"
@@ -8563,7 +8566,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
 
   const finRows=fd.map((f,i)=>{
     const m=f.revenus>0?Math.round((1-f.couts/f.revenus)*100):0;
-    return "<div style='display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'><div style='flex:1;font-size:12px;font-weight:600'>"+f.mois+"</div><div style='font-size:11px;color:#1E293B'>"+fmtMAD(f.revenus)+" MAD</div><div style='font-size:11px;color:#64748B;min-width:40px;text-align:right'>"+m+"%</div></div>";
+    return "<div style='display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #EEF2F8;background:"+(i%2?"#F8FAFC":"white")+"'><div style='flex:1;font-size:12px;font-weight:600'>"+esc(f.mois)+"</div><div style='font-size:11px;color:#1E293B'>"+fmtMAD(f.revenus)+" MAD</div><div style='font-size:11px;color:#64748B;min-width:40px;text-align:right'>"+m+"%</div></div>";
   }).join("");
 
   return (
@@ -8591,7 +8594,7 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
     (rDelayCauses.length>0?card(sec("Retards par cause — "+rDelayVols.length+" vol(s) en retard","#0F1F3D")+
       rDelayCauses.map((c,i)=>(
         "<div style='display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:"+(i<rDelayCauses.length-1?"1px solid #EEF2F8":"none")+";background:"+(i%2?"#F8FAFC":"white")+"'>"+
-        "<div style='font-weight:700;font-size:12px;color:#0F1F3D;width:90px;flex-shrink:0'>"+c.cause+"</div>"+
+        "<div style='font-weight:700;font-size:12px;color:#0F1F3D;width:90px;flex-shrink:0'>"+esc(c.cause)+"</div>"+
         "<div style='flex:1;background:#EEF2F8;border-radius:4px;height:8px;overflow:hidden'>"+
         "<div style='height:8px;border-radius:4px;background:"+(c.cause==="Technique"?"#DC2626":c.cause==="Météo"?"#3B82F6":c.cause==="ATC"?"#7C3AED":"#D97706")+";width:"+Math.round(c.count/rDelayVols.length*100)+"%'></div></div>"+
         "<div style='font-size:11px;color:#64748B;width:24px;text-align:right;flex-shrink:0'>"+c.count+"</div>"+
@@ -8604,12 +8607,12 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
       acList.map(ac=>{
         const acTitle="<div style='display:flex;align-items:center;gap:8px;padding:8px 12px;background:#EEF2F8;border-bottom:2px solid #00936A'>"+
           "<span style='font-size:16px'>🛩</span>"+
-          "<div><div style='font-size:13px;font-weight:800;color:#0F1F3D'>"+ac.immat+"</div>"+
-          "<div style='font-size:10px;color:#64748B'>"+ac.type+"</div></div></div>";
+          "<div><div style='font-size:13px;font-weight:800;color:#0F1F3D'>"+esc(ac.immat)+"</div>"+
+          "<div style='font-size:10px;color:#64748B'>"+esc(ac.type)+"</div></div></div>";
         const acMels=(ac.mels||[]);
         const melSection=acMels.length===0
           ?"<div style='padding:6px 12px 10px;font-size:10px;color:#94A3B8;font-style:italic'>Aucun MEL actif</div>"
-          : "<div style='padding:6px 12px 4px;font-size:10px;font-weight:800;color:#0F1F3D;text-transform:uppercase;letter-spacing:0.08em'>MEL Actifs — "+ac.immat+"</div>"+
+          : "<div style='padding:6px 12px 4px;font-size:10px;font-weight:800;color:#0F1F3D;text-transform:uppercase;letter-spacing:0.08em'>MEL Actifs — "+esc(ac.immat)+"</div>"+
             acMels.map(m=>{
               const today=new Date();
               const parts=(m.exp||"").split("/");
