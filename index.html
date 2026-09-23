@@ -103,10 +103,19 @@ const PROFILES = [
    pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
    forms:["avion","crew","vol","frat","docavion","regl","sat"],
    tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes"] },
+  {id:"eqp",   label:"Équipage",   icon:"👨‍✈️", color:"#0369A1",
+   pwdHash:"a52e38e3b5f9ef8b577b932c0377e1fe367325f900586baad157cfe688975d11",
+   forms:["secu","frat","docavion","regl","sat"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
+  {id:"sgs",   label:"SGS",  icon:"🛡", color:"#0F766E",
+   pwdHash:"e6a585f2870b2afbc4e0900a53d6b6b050781460d2d1eb575c347693b29b0d4e",
+   forms:["sgs","secu","frat","docavion","regl"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
    pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
    forms:["maint"],
    tabs:["forms"],       readOnly:["live","secu","ops","perf","alertes","maint"] },
+  {id:"comm",  label:"Commercial",     icon:"💼",  color:"#0891B2",
+   pwdHash:"d01acdec3a3b87b33882a0fb8959ffda858a0642f7f54190f67aa230e04d1547",
+   forms:["clients"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"], blocked:[] },
   {id:"fin",   label:"Finances",    icon:"💰",  color:"#7C3AED",
    pwdHash:"2bb078f176007917292c786bdc9fd0a51a88eebf9bfbae142455c0c652f9475c",
    forms:["fin"],
@@ -115,12 +124,6 @@ const PROFILES = [
    pwdHash:"ed494928275b93b897810bd7b090babaee8d4d92268cd96119eef7948b251184",
    forms:["rapport"],
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
-  {id:"comm",  label:"Commercial",     icon:"💼",  color:"#0891B2",
-   pwdHash:"d01acdec3a3b87b33882a0fb8959ffda858a0642f7f54190f67aa230e04d1547",
-   forms:["clients"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"], blocked:[] },
-  {id:"sgs",   label:"SGS",  icon:"🛡", color:"#0F766E",
-   pwdHash:"e6a585f2870b2afbc4e0900a53d6b6b050781460d2d1eb575c347693b29b0d4e",
-   forms:["sgs","secu","frat","docavion","regl"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
    forms:null, tabs:null, readOnly:[] },
@@ -2322,7 +2325,10 @@ function SgsAssessment({ rows, setRows, risk, setRisk }){
   </div>;
 }
 
-function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
+function FormSafety({ onSubmit, flights, aircraft, crew, saved, profil }) {
+  // Équipage : seuls les formulaires qui le concernent ; le SGS et l'Administrateur les ont tous
+  const FORMS_EQP=["SMS-19","SMS-09","SMS-13","SMS-16","SMS-17"];
+  const FORMS_VUS=profil==="eqp"?SGS_CR_FORMS.filter(f=>FORMS_EQP.includes(f.k)):SGS_CR_FORMS;
   const now=new Date();
   const today=now.toISOString().slice(0,10);
 
@@ -2473,7 +2479,7 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
 
         <FSection title="Formulaire officiel" color="#DC2626"/>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          {SGS_CR_FORMS.map(f=><button key={f.k} onClick={()=>pickForm(f.k)} style={{padding:"7px 10px",borderRadius:8,fontSize:11.5,fontWeight:700,...TAP,
+          {FORMS_VUS.map(f=><button key={f.k} onClick={()=>pickForm(f.k)} style={{padding:"7px 10px",borderRadius:8,fontSize:11.5,fontWeight:700,...TAP,
             border:"1.5px solid "+(form===f.k?"#DC2626":C.border),background:form===f.k?"#DC2626":"white",color:form===f.k?"white":C.slate}}>{f.court}</button>)}
         </div>
         <div style={{fontSize:11.5,color:C.slate,marginTop:-6}}>{FD.l} · formulaire ENR/SGS-FOR/{FD.k}</div>
@@ -2577,7 +2583,8 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved }) {
         <div style={{background:C.bg,borderRadius:9,padding:"9px 11px",fontSize:11.5,color:C.slate,lineHeight:1.45}}>
           Ce rapport est <b style={{color:C.text}}>{conf?'confidentiel':'non confidentiel'}</b> et <b style={{color:anon?"#B45309":C.text}}>{anon?'anonyme':'non anonyme'}</b> — choix faits en haut du formulaire.</div>
 
-        <FSubmit label="Enregistrer le compte rendu" onClick={submit} saved={saved}/>
+        <FSubmit label={profil==="eqp"?"Transmettre au responsable SGS":"Enregistrer le compte rendu"} onClick={submit} saved={saved}/>
+        {profil==="eqp"&&<div style={{fontSize:11,color:C.slate,textAlign:"center",marginTop:6,lineHeight:1.45}}>Votre compte rendu arrive aussitôt chez le responsable SGS, au statut « Reçu ». Il prend ensuite l'analyse en charge.</div>}
       </div>
     </Card>
   );
@@ -6821,7 +6828,7 @@ function ActionBar({ isAdmin, doExport, onRestore, onReset, onLogout }){
 
 function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
   const isAdmin = profileId === "rdoa";
-  const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="comm"?"clients":null;   // Qualité / SGS : arrive sur la grille des tuiles
+  const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="comm"?"clients":profileId==="eqp"?"secu":null;   // Équipage : arrive sur le compte rendu · SGS : sur la grille
   const [active,setActive]=useState(defaultForm);
   const [saved,setSaved]=useState(false);
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
@@ -7197,15 +7204,15 @@ function ScreenForms({ sgs, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSaf
       {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)} flights={flights}/>}
       {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
       {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
-      {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} crew={crew} saved={saved}/>}
+      {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} crew={crew} saved={saved} profil={profileId}/>}
       {effectiveActive==="journal" && <JournalView/>}
       {effectiveActive==="frat" && sgs && <Card accent="#0F766E"><FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="Manuel SGS 02-04 · à remplir par le CDB avant chaque étape" color="#0F766E"/>
         <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} crew={crew} standalone/></Card>}
       {effectiveActive==="sgs" && sgs && <SgsTile safety={safetyData} flights={flights} aircraft={aircraft} crew={crew} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {/* Opérations : consultation seule des documents */}
-      {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"}/>}
-      {effectiveActive==="docavion" && <FormDocAvion readOnly={profileId==="ops"}/>}
+      {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"}/>}
+      {effectiveActive==="docavion" && <FormDocAvion readOnly={profileId==="ops"||profileId==="eqp"}/>}
       {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}/>}
       {effectiveActive==="clients"  && <FormClients clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
@@ -8572,7 +8579,7 @@ const TOTP_KEY = PFX + "totp_secret";
 // Profils à comptes nominatifs : chaque personne a son nom, son mot de passe et sa double authentification.
 // Tant qu'aucun compte actif n'existe pour un profil, son mot de passe partagé reste valable (démarrage).
 // Tous les profils : comptes personnels avec double authentification ; mot de passe partagé du profil tant qu'aucun compte n'y a été créé
-const NOMINATIVE_PROFILES=["ops","maint","fin","comm","dir","sgs","rdoa"];
+const NOMINATIVE_PROFILES=["ops","eqp","maint","fin","comm","dir","sgs","rdoa"];
 const USERS_KEY=PFX+"users";
 async function sha256hex(s){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)); return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join(""); }
 const userHash=(pwd,salt)=>sha256hex(salt+":"+pwd);
@@ -8782,7 +8789,9 @@ function auditDiff(key, prev, next){
 
 // Gestion des comptes par l'Administrateur : création, mot de passe provisoire, réinitialisations, désactivation.
 // Un compte n'est jamais supprimé : il reste identifiable dans les enregistrements et le futur journal d'audit.
-function AccountsModal({ onClose }){
+function AccountsModal({ onClose, crew }){
+  // Profil Équipage : la personne est choisie dans le registre Équipage, jamais saisie à la main
+  const FRAT_ROLES=["CM1"];   // FRAT : rôle CM1 (commandant de bord) seulement
   const [list,setList]=useState(null), [form,setForm]=useState(null), [shown,setShown]=useState(null), [busy,setBusy]=useState(false);
   const [locks,setLocks]=useState({});
   useEffect(()=>{ usersLoad().then(setList); locksAll().then(setLocks); },[]);
@@ -8792,10 +8801,12 @@ function AccountsModal({ onClose }){
   const tempPwd=()=>randomToken(10);
   const create=async()=>{
     const f=form||{};
+    if(f.profil==="eqp"&&!f.crewId){ uiAlert("⚠️ Choisissez la personne dans le registre Équipage. Si elle n'y figure pas, créez-la d'abord dans la tuile Équipage."); return; }
     if(!(f.nom||"").trim()||!(f.prenom||"").trim()||!f.profil){ uiAlert("⚠️ Nom, prénom et profil sont obligatoires."); return; }
     if((list||[]).some(u=>u.actif&&u.profil===f.profil&&u.nom.trim().toLowerCase()===f.nom.trim().toLowerCase()&&u.prenom.trim().toLowerCase()===f.prenom.trim().toLowerCase())){ uiAlert("⚠️ Ce compte existe déjà pour ce profil."); return; }
     const pwd=tempPwd(), salt=randomToken(16), now=new Date().toISOString();
     const u={id:"U"+Date.now().toString(36)+randomToken(4,"abcdefghjkmnpqrstuvwxyz23456789"),nom:f.nom.trim().toUpperCase(),prenom:f.prenom.trim(),fonction:(f.fonction||"").trim(),profil:f.profil,
+      ...(f.crewId?{crewId:f.crewId,role:f.role}:{}),
       salt,hash:await userHash(pwd,salt),mustChange:true,actif:true,createdAt:now,createdBy:userLabel(me)||"Administrateur"};
     if(await persist([...(list||[]),u])){ setForm(null); setShown({u,pwd,motif:"Compte créé"}); auditLog("comptes",userLabel(u),"création de compte",{profil:[null,u.profil],fonction:[null,u.fonction||null]}); }
   };
@@ -8835,12 +8846,20 @@ function AccountsModal({ onClose }){
           </div>; })}
       {form?<div style={{border:"1.5px solid "+C.border,borderRadius:10,padding:11,display:"flex",flexDirection:"column",gap:8}}>
           <div style={{fontSize:12.5,fontWeight:800}}>Nouveau compte</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <input aria-label="Prénom" placeholder="Prénom" value={form.prenom||""} onChange={e=>setForm({...form,prenom:e.target.value})} style={inp}/>
-            <input aria-label="Nom" placeholder="Nom" value={form.nom||""} onChange={e=>setForm({...form,nom:e.target.value})} style={inp}/></div>
-          <input aria-label="Fonction" placeholder="Fonction (ex. Dirigeant Responsable, Responsable SGS)" value={form.fonction||""} onChange={e=>setForm({...form,fonction:e.target.value})} style={inp}/>
+          {form.profil==="eqp"
+            ? ((crew||[]).length
+                ? <><div style={{fontSize:11.5,color:C.slate}}>Personne du registre Équipage — le rôle détermine l'accès au FRAT (TRI et CDB seulement).</div>
+                    <CustomSelect value={form.crewId||""} searchable icon="👥" placeholder="-- Choisir dans le registre Équipage --"
+                      onChange={v=>{ const m=(crew||[]).find(x=>x.id===v)||{}; setForm({...form,crewId:v,nom:m.nom||"",prenom:m.prenom||"",role:m.role,fonction:SGS_ROLE_L[m.role]||""}); }}
+                      options={(crew||[]).filter(m=>!(list||[]).some(u=>u.actif&&u.crewId===m.id)).map(m=>({value:m.id,label:(m.nom+" "+m.prenom).trim(),sub:SGS_ROLE_L[m.role]||m.role}))}/>
+                    {form.crewId&&<div style={{fontSize:11.5,color:C.text}}>Fonction : <b>{form.fonction}</b>{FRAT_ROLES.includes(form.role)?" · accès au FRAT":" · pas d'accès au FRAT"}</div>}</>
+                : <div style={{fontSize:12,color:"#B45309",background:"#FAEEDA",borderRadius:9,padding:"9px 11px"}}>Le registre Équipage est vide. Créez d'abord la personne dans la tuile <b>Équipage</b>, puis revenez créer son compte.</div>)
+            : <><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <input aria-label="Prénom" placeholder="Prénom" value={form.prenom||""} onChange={e=>setForm({...form,prenom:e.target.value})} style={inp}/>
+                <input aria-label="Nom" placeholder="Nom" value={form.nom||""} onChange={e=>setForm({...form,nom:e.target.value})} style={inp}/></div>
+              <input aria-label="Fonction" placeholder="Fonction (ex. Dirigeant Responsable, Responsable SGS)" value={form.fonction||""} onChange={e=>setForm({...form,fonction:e.target.value})} style={inp}/></>}
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{NOMINATIVE_PROFILES.map(pid=>{ const P=PROFILES.find(p=>p.id===pid); const on=form.profil===pid;
-            return <button key={pid} onClick={()=>setForm({...form,profil:pid})} style={{padding:"7px 10px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",border:"1.5px solid "+(on?P.color:C.border),background:on?P.color:"white",color:on?"white":C.slate}}>{P.label}</button>; })}</div>
+            return <button key={pid} onClick={()=>setForm({...form,profil:pid,crewId:"",role:undefined,nom:"",prenom:"",fonction:""})} style={{padding:"7px 10px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",border:"1.5px solid "+(on?P.color:C.border),background:on?P.color:"white",color:on?"white":C.slate}}>{P.label}</button>; })}</div>
           <div style={{display:"flex",gap:8}}><button onClick={()=>setForm(null)} style={{flex:1,height:40,borderRadius:9,border:"1.5px solid "+C.border,background:"white",fontWeight:700,cursor:"pointer"}}>Annuler</button>
             <button onClick={create} disabled={busy} style={{flex:2,height:40,borderRadius:9,border:"none",background:"#0F766E",color:"white",fontWeight:700,cursor:"pointer"}}>Créer le compte</button></div></div>
         :<button onClick={()=>setForm({})} style={{width:"100%",height:44,borderRadius:10,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",fontWeight:700,cursor:"pointer"}}>+ Nouveau compte</button>}
@@ -10411,7 +10430,7 @@ function LoginGate({ onAuth }) {
   const finish=(u)=>{
     authOk(u?"u:"+u.id:"p:"+profileId);
     try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){ logSilent(_e); }
-    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); if(u) sessionStorage.setItem(PFX+"active_user",JSON.stringify({id:u.id,nom:u.nom,prenom:u.prenom,fonction:u.fonction,profil:u.profil})); else sessionStorage.removeItem(PFX+"active_user"); }catch(_e){ logSilent(_e); }
+    try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); if(u) sessionStorage.setItem(PFX+"active_user",JSON.stringify({id:u.id,nom:u.nom,prenom:u.prenom,fonction:u.fonction,profil:u.profil,role:u.role,crewId:u.crewId})); else sessionStorage.removeItem(PFX+"active_user"); }catch(_e){ logSilent(_e); }
     setOk(true); auditLog("connexion",u?userLabel(u):profileId,"connexion réussie",{profil:[null,profileId]}); setTimeout(()=>onAuth(profileId,u||null),400); };
   const goTotp=async(u)=>{
     const key=u?USER_TOTP_KEY(u):TOTP_KEY+"_"+profileId;
@@ -10799,6 +10818,8 @@ function AppMain({ onLogout, profileId }) {
   const canForm = (id) => id==="fin" ? profile.id==="fin"
                         : id==="sgs" ? (profile.id==="sgs"||profile.id==="rdoa")
                         : id==="journal" ? ["dir","sgs","rdoa"].includes(profile.id)
+                        // FRAT : rôle CM1 seulement, dès que la personne est identifiée (compte nominatif)
+                        : id==="frat" && profile.id==="eqp" && sgsCurrentUser() && sgsCurrentUser().role ? sgsCurrentUser().role==="CM1"
                         : (profile.forms===null || profile.forms.includes(id));
   // Onglet Finances : Administrateur, Finances et Direction uniquement
   const canTab = (id) => id!=="fin" || ["rdoa","fin","dir"].includes(profile.id);
@@ -11032,7 +11053,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:"Inter,-apple-system,system-ui,sans-serif",display:"flex",flexDirection:"column",position:"relative"}}>
       <style>{`*{box-sizing:border-box;margin:0;padding:0;}@keyframes dot-pulse{0%,100%{opacity:1}50%{opacity:.5}}input,select,button{-webkit-tap-highlight-color:transparent;font-family:inherit;}::-webkit-scrollbar{display:none;}`}</style>
 
-      {showAccounts&&profileId==='rdoa'&&<AccountsModal onClose={()=>setShowAccounts(false)}/>}
+      {showAccounts&&profileId==='rdoa'&&<AccountsModal crew={crew} onClose={()=>setShowAccounts(false)}/>}
       {/* TOP BAR */}
       <div style={{background:C.white,borderBottom:"1px solid "+C.border,padding:"0 12px",height:TOP,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 6px rgba(0,0,0,.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
