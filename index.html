@@ -534,17 +534,10 @@ function FSelect({ label, value, onChange, options, placeholder }) {
   return (
     <div>
       <FLabel>{label}</FLabel>
-      <select value={value} onChange={e=>onChange(e.target.value)}
-        style={{ width:"100%", height:48, boxSizing:"border-box", background:C.bg,
-                 border:"1.5px solid "+C.border, borderRadius:10, padding:"0 14px",
-                 color:value?C.text:C.slateL, fontSize:14, outline:"none", appearance:"none" }}>
-        {placeholder&&<option value="">-- Choisir --</option>}
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      <CustomSelect value={value} onChange={onChange} options={options} placeholder={placeholder||"-- Choisir --"}/>
     </div>
   );
 }
-
 function FGrid({ children }) {
   return <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{children}</div>;
 }
@@ -3672,9 +3665,9 @@ function SgsFratView({ items, setItems, flights, crew, standalone }){
     let g0='';
     return (<Card accent="#0F766E">{!standalone&&<FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="SGS 02-04 · à remplir par le CDB avant chaque étape" color="#0F766E"/>}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <SgsField label="Vol"><select value={ed.flightId||''} onChange={e=>{ const f=vols.find(x=>String(x.id||x.num+x.date)===e.target.value); up(f?{flightId:e.target.value,vol:(f.num||'')+' · '+(f.from||'')+'→'+(f.to||'')+' · '+sgsFr(f.date),date:f.date,cdb:ed.cdb||f.cm1||''}:{flightId:'',vol:''}); }} style={sgsInput}>
-          <option value="">-- Choisir un vol planifié --</option>{vols.map(f=><option key={String(f.id||f.num+f.date)} value={String(f.id||f.num+f.date)}>{(f.num||'')+' · '+(f.from||'')+'→'+(f.to||'')+' · '+sgsFr(f.date)}</option>)}</select></SgsField>
-        {!ed.flightId&&<input value={ed.vol||''} onChange={e=>up({vol:e.target.value})} placeholder="Ou saisir le vol : AJS201 VIL→CMN" style={sgsInput}/>}
+        <SgsField label="Vol"><CustomSelect dense searchable value={ed.flightId||''} placeholder="-- Choisir un vol planifié --"
+          onChange={v=>{ const f=vols.find(x=>String(x.id||x.num+x.date)===v); up(f?{flightId:v,vol:(f.num||'')+' · '+(f.from||'')+'→'+(f.to||'')+' · '+sgsFr(f.date),date:f.date,cdb:ed.cdb||f.cm1||''}:{flightId:'',vol:''}); }}
+          options={vols.map(f=>({value:String(f.id||f.num+f.date),label:(f.num||'')+' · '+(f.from||'')+'→'+(f.to||''),sub:sgsFr(f.date)}))}/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"118px 1fr",gap:8}}>
           <SgsField label="Date"><DateField value={ed.date||today} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
           <SgsField label="Commandant"><CustomSelect dense value={ed.cdb||''} onChange={v=>up({cdb:v})} searchable icon='👨‍✈️' placeholder='-- Choisir --' options={sgsCrewOpts(crew,'cdb',ed.cdb)}/></SgsField></div>
@@ -3783,7 +3776,7 @@ function SgsFdmView({ items, setItems, onDanger, aircraft }){
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <SgsField label="Appareil"><AircraftSelect aircraft={aircraft} value={ed.immat} onChange={(im,ty)=>up({immat:im,typeAv:ty})}/></SgsField>
             <SgsField label="Type d'aéronef"><SgsRoField v={ed.typeAv||sgsAcType(aircraft,ed.immat)} ph="Selon l'appareil"/></SgsField></div>
-        <SgsField label="Événement"><select value={ed.evenement||''} onChange={e=>up({evenement:e.target.value})} style={sgsInput}><option value="">—</option>{SGS_FDM_EV.map(x=><option key={x}>{x}</option>)}</select></SgsField>
+        <SgsField label="Événement"><CustomSelect dense searchable value={ed.evenement||''} onChange={v=>up({evenement:v})} placeholder="— Choisir —" options={SGS_FDM_EV.map(x=>({value:x,label:x}))}/></SgsField>
         <SgsField label="Phase de vol"><SgsPills value={ed.phase} onChange={v=>up({phase:v})} options={SGS_FDM_PH.map(x=>({k:x,l:x}))} color="#0F766E"/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <SgsField label="Valeur relevée"><input value={ed.valeur||''} onChange={e=>up({valeur:e.target.value})} placeholder="1 250 ft/min à 500 ft" style={sgsInput}/></SgsField>
@@ -3827,9 +3820,10 @@ function SgsInterviewsView({ items, setItems, safety, nomResp, crew:crewReg, fli
     const inp={...sgsInput,padding:"7px 9px",fontSize:12.5};
     return (<Card accent="#0F766E"><FHeader icon="🎙" title={ed.ref||'Nouvelle interview'} subtitle="SMS-04 · interview équipage, investigation événement" color="#0F766E"/>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <SgsField label="Compte rendu concerné (référence processus)"><select value={ed.eventKey||''} onChange={e=>{ const ev=evs.find(x=>sgsEventKey(x)===e.target.value); up({eventKey:e.target.value,...(ev&&!ed.id?{date:ev.date,vol:ev.num||ed.vol,dep:ev.from||ed.dep,dest:ev.to||ed.dest,immat:(ev.fx||{}).immat||ed.immat,
-          crew:(()=>{ const fl=(flights||[]).find(x=>x.num===ev.num&&x.date===ev.date), cr={...(ed.crew||{})}; if(fl){ [['cdb',fl.cm1],['opl',fl.cm2],['scm',fl.cc]].forEach(([k,n])=>{ if(n&&!(cr[k]||{}).nom) cr[k]={...(cr[k]||{}),nom:n}; }); } return cr; })()}:{})}); }} style={sgsInput}>
-          <option value="">— Aucun —</option>{evs.map(e=><option key={sgsEventKey(e)} value={sgsEventKey(e)}>{sgsEvLabel(e)}</option>)}</select></SgsField>
+        <SgsField label="Compte rendu concerné (référence processus)"><CustomSelect dense searchable value={ed.eventKey||''} placeholder="— Aucun —"
+          onChange={v=>{ const ev=evs.find(x=>sgsEventKey(x)===v); up({eventKey:v,...(ev&&!ed.id?{date:ev.date,vol:ev.num||ed.vol,dep:ev.from||ed.dep,dest:ev.to||ed.dest,immat:(ev.fx||{}).immat||ed.immat,
+          crew:(()=>{ const fl=(flights||[]).find(x=>x.num===ev.num&&x.date===ev.date), cr={...(ed.crew||{})}; if(fl){ [['cdb',fl.cm1],['opl',fl.cm2],['scm',fl.cc]].forEach(([k,n])=>{ if(n&&!(cr[k]||{}).nom) cr[k]={...(cr[k]||{}),nom:n}; }); } return cr; })()}:{})}); }}
+          options={evs.map(e=>({value:sgsEventKey(e),label:sgsEvLabel(e)}))}/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <SgsField label="Immatriculation"><AircraftSelect aircraft={aircraft} value={ed.immat} onChange={(im,ty)=>up({immat:im,type:ty})}/></SgsField>
           <SgsField label="Avion · type"><SgsRoField v={ed.type||sgsAcType(aircraft,ed.immat)} ph="Selon l'appareil"/></SgsField>
@@ -3878,8 +3872,8 @@ function SgsRecosView({ items, setItems, safety, H, onAction, nomResp }){
       setEd(null); sgsToast('Recommandation enregistrée'); return rec; };
     return (<Card accent="#0F766E"><FHeader icon="💡" title={ed.ref||'Nouvelle recommandation'} subtitle="SMS-07 · recommandation de sécurité" color="#0F766E"/>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <SgsField label="Danger concerné"><select value={ed.hazardId||''} onChange={e=>up({hazardId:e.target.value})} style={sgsInput}><option value="">— Aucun —</option>{(H||[]).map(h=><option key={h.id} value={h.id}>{h.ref} · {h.titre}</option>)}</select></SgsField>
-        <SgsField label="Compte rendu concerné"><select value={ed.eventKey||''} onChange={e=>up({eventKey:e.target.value})} style={sgsInput}><option value="">— Aucun —</option>{evs.map(e=><option key={sgsEventKey(e)} value={sgsEventKey(e)}>{sgsEvLabel(e)}</option>)}</select></SgsField>
+        <SgsField label="Danger concerné"><CustomSelect dense searchable value={ed.hazardId||''} onChange={v=>up({hazardId:v})} placeholder="— Aucun —" options={(H||[]).map(h=>({value:h.id,label:h.ref,sub:h.titre}))}/></SgsField>
+        <SgsField label="Compte rendu concerné"><CustomSelect dense searchable value={ed.eventKey||''} onChange={v=>up({eventKey:v})} placeholder="— Aucun —" options={evs.map(e=>({value:sgsEventKey(e),label:sgsEvLabel(e)}))}/></SgsField>
         <SgsField label="Autre référence processus"><input value={ed.refProc||''} onChange={e=>up({refProc:e.target.value})} placeholder="Audit, revue, retour d'expérience…" style={sgsInput}/></SgsField>
         <SgsField label="Recommandation"><textarea rows={7} value={ed.texte||''} onChange={e=>up({texte:e.target.value})} style={sgsInput}/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -3984,8 +3978,9 @@ function SgsOsvView({ items, setItems, flights, nomResp, aircraft }){
     return (<Card accent="#0F766E"><FHeader icon="🗂" title={ed.ref||'Nouveau contrôle OSV'} subtitle="SMS-18 · contenu des enveloppes de vol" color="#0F766E"/>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <SgsField label="Titre"><input value={ed.titre||''} onChange={e=>up({titre:e.target.value})} style={sgsInput}/></SgsField>
-        <SgsField label="Vol contrôlé"><select value={ed.flightKey||''} onChange={e=>{ const f=vols.find(x=>x.num+'|'+x.date===e.target.value); up({flightKey:e.target.value,...(f?{vol:f.num,dateVol:f.date,depO:f.from,arrO:f.to}:{})}); }} style={sgsInput}>
-          <option value="">— Choisir un vol, ou saisir ci-dessous —</option>{vols.map(f=><option key={f.num+f.date} value={f.num+'|'+f.date}>{f.num} · {f.from}→{f.to} · {sgsFr(f.date)}</option>)}</select></SgsField>
+        <SgsField label="Vol contrôlé"><CustomSelect dense searchable value={ed.flightKey||''} placeholder="— Choisir un vol, ou saisir ci-dessous —"
+          onChange={v=>{ const f=vols.find(x=>x.num+'|'+x.date===v); up({flightKey:v,...(f?{vol:f.num,dateVol:f.date,depO:f.from,arrO:f.to}:{})}); }}
+          options={vols.map(f=>({value:f.num+'|'+f.date,label:f.num+' · '+f.from+'→'+f.to,sub:sgsFr(f.date)}))}/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <SgsField label="Date du contrôle"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
           <SgsField label="Identification du vol"><input value={ed.vol||''} onChange={e=>up({vol:e.target.value})} style={sgsInput}/></SgsField>
@@ -8754,8 +8749,8 @@ function JournalView(){
       {pend>0&&<div style={{fontSize:11.5,color:"#B45309"}}>{pend} entrée(s) de cet appareil en attente d'envoi : elles partiront dès le retour du réseau.</div>}
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{pill("periode","1","24 h")}{pill("periode","7","7 jours")}{pill("periode","30","30 jours")}{pill("periode","365","12 mois")}{pill("periode","all","Tout")}</div>
       <div style={{display:"flex",gap:6}}>
-        <select aria-label="Personne" value={f.user} onChange={e=>setF({...f,user:e.target.value})} style={sel}><option value="">Toutes les personnes</option>{[...new Set([...users,f.user].filter(Boolean))].map(u=><option key={u}>{u}</option>)}</select>
-        <select aria-label="Module" value={f.module} onChange={e=>setF({...f,module:e.target.value})} style={sel}><option value="">Tous les modules</option>{Object.keys(AUDIT_MODULES).map(m=><option key={m} value={m}>{AUDIT_MODULES[m]}</option>)}</select></div>
+        <div style={{flex:1,minWidth:0}}><CustomSelect dense searchable value={f.user} onChange={v=>setF({...f,user:v})} placeholder="Toutes les personnes" options={[{value:"",label:"Toutes les personnes"},...[...new Set([...users,f.user].filter(Boolean))].map(u=>({value:u,label:u}))]}/></div>
+        <div style={{flex:1,minWidth:0}}><CustomSelect dense searchable value={f.module} onChange={v=>setF({...f,module:v})} placeholder="Tous les modules" options={[{value:"",label:"Tous les modules"},...Object.keys(AUDIT_MODULES).map(m=>({value:m,label:AUDIT_MODULES[m]}))]}/></div></div>
       <input aria-label="Rechercher un objet" value={f.objet} onChange={e=>setF({...f,objet:e.target.value})} placeholder="Rechercher un objet : DG-006, AC-001, CN-KTA…" style={{...sel,flex:"none",width:"100%",boxSizing:"border-box",padding:"0 11px"}}/>
       <div style={{fontSize:11.5,color:C.slate}}>{st.loading?"Chargement…":st.error?"Journal indisponible : "+st.error:st.count+" entrée(s)"+(st.rows.length<st.count?" · "+st.rows.length+" affichée(s)":"")}</div>
       <div>{st.rows.map(e=><AuditRow key={e.id} e={e}/>)}</div>
