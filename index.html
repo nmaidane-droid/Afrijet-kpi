@@ -7062,8 +7062,6 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
           </button>
           );
         })}
-        {satSaisie&&<div style={{position:"fixed",inset:0,zIndex:600,background:"rgba(15,31,61,.55)",overflowY:"auto",padding:"calc(14px + env(safe-area-inset-top,0px)) 12px 30px"}}>
-          <div style={{maxWidth:560,margin:"0 auto"}}><FormSatisfactionSaisie flights={flights} items={satis} setItems={setSatis} onNoteVol={onNoteVol} onClose={()=>setSatSaisie(false)}/></div></div>}
         {effectiveActive==="sat"&&(
           <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",flexDirection:"column",background:"#0F1F3D"}}>
             <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"2px solid #A0720A"}}>
@@ -7076,9 +7074,9 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
                 Fermer
               </button>
             </div>
-              <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0,display:"flex",gap:8}}>
-                <button onClick={()=>setSatSaisie(true)}
-                  style={{flex:1,height:42,borderRadius:9,border:"none",background:"#D97706",color:"white",fontWeight:700,fontSize:13,...TAP}}>⭐ Saisir une enquête{(satis||[]).length?" ("+(satis||[]).length+")":""}</button>
+              <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <button onClick={()=>setSatSaisie(s=>!s)}
+                  style={{height:42,borderRadius:9,border:"none",background:satSaisie?"#475569":"#D97706",color:"white",fontWeight:700,fontSize:13,...TAP}}>{satSaisie?"📋 Questionnaire":"⭐ Remplir"+((satis||[]).length?" ("+(satis||[]).length+")":"")}</button>
                 <button onClick={()=>{
                   if(!window.jspdf){uiAlert("jsPDF non charge. Verifiez votre connexion.");return;}
                   try {
@@ -7246,10 +7244,13 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
                     doc.save("Satisfaction_Passager_Afrijet.pdf");
                   } catch(e){uiAlert("Erreur: "+e.message);}
                 }}
-                style={{width:"100%",padding:"12px",background:"#7C3AED",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,...TAP}}>
-                  📥 Télécharger le formulaire PDF
+                style={{height:42,padding:"0 12px",background:"#7C3AED",border:"none",borderRadius:9,color:"white",fontSize:13,fontWeight:700,...TAP}}>
+                  📥 Télécharger
                 </button>
-            <div style={{flex:1,overflowY:"auto",background:"white",padding:"16px"}}>
+              </div>
+            <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",background:"white",padding:"16px"}}>
+              {satSaisie&&<FormSatisfactionSaisie flights={flights} items={satis} setItems={setSatis} onNoteVol={onNoteVol} onClose={()=>setSatSaisie(false)}/>}
+              <div style={{display:satSaisie?"none":"block"}}>
                 <div style={{background:"linear-gradient(135deg,#0F1F3D,#1D3461)",padding:"16px",borderRadius:10,marginBottom:16}}>
                   <div style={{color:"#A0720A",fontSize:9,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Afrijet Sahara</div>
                   <div style={{color:"white",fontSize:18,fontWeight:800}}>Enquête de Satisfaction Passager</div>
@@ -7292,9 +7293,9 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
                   </div>
                 </div>
                 <div style={{textAlign:"center",padding:"12px",fontSize:9,color:"#94A3B8"}}>Afrijet Sahara · Formulaire confidentiel</div>
+                </div>
               </div>
             </div>
-          </div>
         )}
       </div>
       {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)} flights={flights}/>}
