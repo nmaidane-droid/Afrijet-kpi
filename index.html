@@ -6871,7 +6871,12 @@ function FormSatisfactionSaisie({ flights, items, setItems, onClose, onNoteVol }
   const choisir=v=>{ const f=vols.find(x=>satKey(x)===v); up(f?{flightKey:v,num:f.num,date:f.date,dep:f.dep,from:f.from,to:f.to,clientId:f.clientId,manuel:false}:{flightKey:""}); };
   const save=()=>{
     const n=Object.keys(ed.notes||{}).length;
-    if(!n){ uiAlert("⚠️ Notez au moins une rubrique."); return; }
+    // Les 15 rubriques sont obligatoires : une enquête partielle fausserait la note du vol et les indicateurs
+    if(n<SAT_ITEMS.length){
+      const manque=SAT_ITEMS.filter(i=>(ed.notes||{})[i]==null);
+      uiAlert("⚠️ Enquête incomplète : "+n+" rubrique(s) sur "+SAT_ITEMS.length+".\n\nIl manque :\n· "+manque.slice(0,6).join("\n· ")+(manque.length>6?"\n· … et "+(manque.length-6)+" autre(s)":""));
+      return;
+    }
     if(!ed.flightKey&&!(ed.num||"").trim()){ uiAlert("⚠️ Indiquez le vol : choisissez-le dans la liste, ou saisissez son numéro et sa date."); return; }
     if((items||[]).some(x=>x.flightKey&&x.flightKey===ed.flightKey)){ uiAlert("⚠️ Une enquête existe déjà pour ce vol."); return; }
     const u=typeof sgsCurrentUser==="function"?sgsCurrentUser():null;
@@ -6909,7 +6914,10 @@ function FormSatisfactionSaisie({ flights, items, setItems, onClose, onNoteVol }
       </div>)}
       <SgsField label="Commentaire du client"><textarea aria-label="Commentaire du client" rows={3} value={ed.commentaire||""} onChange={e=>up({commentaire:e.target.value})} style={sgsInput}/></SgsField>
       <div style={{background:C.bg,borderRadius:9,padding:"9px 11px",fontSize:12.5,color:C.text}}>
-        Moyenne : <b style={{color:moy!=null?SAT_COUL(moy):C.slate}}>{moy!=null?sat10(moy)+" / 10":"—"}</b> · {Object.keys(ed.notes||{}).length} / {SAT_ITEMS.length} rubriques notées</div>
+        {(()=>{ const n=Object.keys(ed.notes||{}).length, complet=n===SAT_ITEMS.length;
+          return <>Moyenne : <b style={{color:moy!=null&&complet?SAT_COUL(moy):C.slate}}>{complet?sat10(moy)+" / 10":"—"}</b>
+            {" · "}<span style={{color:complet?"#047857":"#B45309",fontWeight:700}}>{n} / {SAT_ITEMS.length} rubriques notées</span>
+            {!complet&&<span style={{color:C.slate}}> · toutes sont nécessaires pour enregistrer</span>}</>; })()}</div>
       <div style={{display:"grid",gridTemplateColumns:onClose?"1fr 1fr":"1fr",gap:8}}>
         {onClose&&<SgsBtn l="Fermer" onClick={onClose} full/>}
         <SgsBtn l="Enregistrer" onClick={save} prim full/></div>
@@ -6928,6 +6936,10 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
   const [active,setActive]=useState(defaultForm);
   const [saved,setSaved]=useState(false);
   const [satSaisie,setSatSaisie]=useState(false);
+  // Remplir une enquête : personnel de cabine (rôle CC) et Administrateur seulement.
+  // Tant qu'un département n'a pas de comptes nominatifs, le rôle est inconnu : la saisie reste ouverte au profil Équipage.
+  const satUser=typeof sgsCurrentUser==="function"?sgsCurrentUser():null;
+  const satPeutRemplir=profileId==="rdoa"||(profileId==="eqp"&&(!satUser||!satUser.role||satUser.role==="CC"));
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
 
   const [progress,setProgress]=useState(null); // {title,icon,steps,currentStep,pct}
@@ -7079,9 +7091,10 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
                 Fermer
               </button>
             </div>
-              <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <button onClick={()=>setSatSaisie(s=>!s)}
-                  style={{height:42,borderRadius:9,border:"none",background:satSaisie?"#475569":"#D97706",color:"white",fontWeight:700,fontSize:13,...TAP}}>{satSaisie?"📋 Questionnaire":"⭐ Remplir"+((satis||[]).length?" ("+(satis||[]).length+")":"")}</button>
+              {/* Saisie réservée au personnel de cabine (rôle CC) et à l'Administrateur ; les autres profils téléchargent seulement */}
+              <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0,display:"grid",gridTemplateColumns:satPeutRemplir?"1fr 1fr":"1fr",gap:8}}>
+                {satPeutRemplir&&<button onClick={()=>setSatSaisie(s=>!s)}
+                  style={{height:42,borderRadius:9,border:"none",background:satSaisie?"#475569":"#D97706",color:"white",fontWeight:700,fontSize:13,...TAP}}>{satSaisie?"📋 Questionnaire":"⭐ Remplir"+((satis||[]).length?" ("+(satis||[]).length+")":"")}</button>}
                 <button onClick={()=>{
                   if(!window.jspdf){uiAlert("jsPDF non charge. Verifiez votre connexion.");return;}
                   try {
@@ -7206,7 +7219,7 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
                 </button>
               </div>
             <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",background:"white",padding:"16px"}}>
-              {satSaisie&&<FormSatisfactionSaisie flights={flights} items={satis} setItems={setSatis} onNoteVol={onNoteVol} onClose={()=>setSatSaisie(false)}/>}
+              {satSaisie&&satPeutRemplir&&<FormSatisfactionSaisie flights={flights} items={satis} setItems={setSatis} onNoteVol={onNoteVol} onClose={()=>setSatSaisie(false)}/>}
               <div style={{display:satSaisie?"none":"block"}}>
                 <div style={{background:"linear-gradient(135deg,#0F1F3D,#1D3461)",padding:"16px",borderRadius:10,marginBottom:16}}>
                   <div style={{color:"#A0720A",fontSize:9,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Afrijet Sahara</div>
