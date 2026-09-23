@@ -7366,7 +7366,16 @@ function FlightRow({ f, isLast, canEdit, onOpen, secEvts, compromis, clients }){
   );
 }
 
-function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, clients, crew, onDeleteFlight, isAdmin }) {
+function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, canClose, clients, crew, onDeleteFlight, isAdmin }) {
+  // Clôture par le pilote : seulement ses propres vols en cours, du jour ou de la veille.
+  // Il saisit les éléments réels et clôt ; il ne crée, ne replanifie ni ne rouvre aucun vol.
+  const pilote=typeof sgsCurrentUser==="function"?sgsCurrentUser():null;
+  const piloteNom=pilote?((pilote.prenom||"")+" "+(pilote.nom||"")).trim():"";
+  const norm=s=>String(s||"").toUpperCase().replace(/\s+/g," ").trim();
+  const hier=new Date(Date.now()-36*3600000).toISOString().slice(0,10);
+  const aClore=f=>canClose&&f.status==="En vol"&&String(f.date||"")>=hier&&
+    (!piloteNom||[f.cm1,f.cm2].map(norm).includes(norm(piloteNom))||[f.cm1,f.cm2].map(norm).includes(norm((pilote||{}).nom+" "+(pilote||{}).prenom)));
+  const peutOuvrir=f=>canEdit!==false||aClore(f);
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
   const [opsSaved,setOpsSaved]=useState(false);
@@ -7506,6 +7515,11 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
     if(Number(edit.carbDep)<0||Number(edit.carbArr)<0){ uiAlert("⚠️ Une quantité de carburant ne peut pas être négative."); return; }
     if(Number(edit.pax)>siegesVol){ uiAlert("⚠️ "+edit.pax+" passagers pour "+siegesVol+" sièges sur "+(acVol?acVol.immat:"cet appareil")+"."); return; }
 
+    // Pilote : il ne peut que clôturer l'un de ses vols en cours
+    if(canEdit===false){
+      if(!aClore(flights.find(f=>f.num===edit.num&&f.date===edit.date)||edit)){ uiAlert("⚠️ Vous ne pouvez clôturer que vos propres vols en cours, du jour ou de la veille."); return; }
+      if(edit.status!=="Termine"){ uiAlert("⚠️ Terminez le vol pour enregistrer : touchez « Vol terminé »."); return; }
+    }
     const c=calcEdit(edit);
     // Taux de remplissage sur le nombre de sièges réel de l'appareil (CN-KTB : 8)
     onUpdateFlight({...edit,load:Math.round((Number(edit.pax)||0)/siegesVol*100),...c});
@@ -7538,8 +7552,8 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {canEdit===false&&(
-        <div style={{background:"#FEF3C7",border:"1px solid #D97706",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#92400E",fontWeight:600,textAlign:"center"}}>
-          👁 Mode consultation — Modifications non autorisées
+        <div style={{background:"#FEF3C7",border:"1px solid #D97706",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#92400E",fontWeight:600,textAlign:"center",lineHeight:1.45}}>
+          {canClose?"✈️ Vous pouvez clôturer vos vols en cours : touchez le vol, saisissez les éléments réels, puis Terminé.":"👁 Mode consultation — Modifications non autorisées"}
         </div>
       )}
       {edit&&(
@@ -7747,7 +7761,7 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
         </div>
         {filtered.length===0&&<div style={{padding:20,textAlign:"center",color:C.slateL,fontSize:13}}>Aucun vol trouvé</div>}
         {filtered.map((f,i)=>(
-          <FlightRow key={i} f={f} isLast={i===filtered.length-1} canEdit={canEdit}
+          <FlightRow key={i} f={f} isLast={i===filtered.length-1} canEdit={peutOuvrir(f)}
             onOpen={v=>{setEdit({...v});setOrigStatus(v.status);}}
             secEvts={getSecEvents(f.num,f.date)}
             compromis={f.status==="Planifie" ? [...volCompromis(f, crew, aircraft), ...chevauchements(f, flights)] : []}
@@ -10873,6 +10887,8 @@ function AppMain({ onLogout, profileId }) {
                         : id==="journal" ? ["dir","sgs","rdoa"].includes(profile.id)
                         // FRAT : rôle CM1 seulement, dès que la personne est identifiée (compte nominatif)
                         : id==="frat" && profile.id==="eqp" && sgsCurrentUser() && sgsCurrentUser().role ? sgsCurrentUser().role==="CM1"
+                        // Doc Avion et Réglementation : personnel navigant technique seulement, pas les PNC
+                        : (id==="docavion"||id==="regl") && profile.id==="eqp" && (sgsCurrentUser()||{}).role==="CC" ? false
                         : (profile.forms===null || profile.forms.includes(id));
   // Onglet Finances : Administrateur, Finances et Direction uniquement
   const canTab = (id) => id!=="fin" || ["rdoa","fin","dir"].includes(profile.id);
@@ -11170,7 +11186,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
         {tab==="alertes" && <ScreenAlertes sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew}/>}
-        {tab==="ops"     && <ScreenOps flights={flights} satis={satis} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
+        {tab==="ops"     && <ScreenOps canClose={profileId==="eqp"&&["TRI","CM1","CM2"].includes((sgsCurrentUser()||{}).role||"CM1")} flights={flights} satis={satis} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>x.num===u.num?u:x))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
