@@ -7453,8 +7453,9 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
 
   const doUpdate=()=>{
     if(!edit)return;
-    // Pilote : clôture complète — tous les éléments du vol sont exigés
-    if(modePilote){
+    // Clôture d'un vol : tous les éléments sont exigés, pour tout le monde.
+    // Une correction ultérieure d'un vol déjà terminé reste libre (rattrapage d'un vol ancien).
+    if(modePilote || (origStatus==="En vol" && edit.status==="Termine")){
       const manque=[];
       if(!edit.depReal) manque.push("Off Block Time");
       if(!edit.takeOff) manque.push("Take Off Time");
@@ -7466,6 +7467,7 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
       const cc=calcEdit(edit);
       if((cc.delayMin||0)>0&&!edit.causeRetard) manque.push("Cause du retard ("+cc.delayMin+" min de retard)");
       if(manque.length){ uiAlert("⚠️ Clôture impossible : il manque\n· "+manque.join("\n· ")); return; }
+
     }
 
     // Validation des transitions de statut
