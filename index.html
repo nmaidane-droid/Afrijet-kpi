@@ -4946,7 +4946,7 @@ function ClientDetail({ c, flights, satis, canEdit, onBack, onEdit, onDel }) {
       <div style={{fontSize:12,color:"#0891B2",fontWeight:600,marginBottom:12}}>{c.type} — {c.ville}, {c.pays}</div>
       <div style={{display:"flex",gap:10,marginBottom:14}}>
         {(()=>{ const enq=vols.map(f=>satDuVol(satis,f)).filter(Boolean), m=satMoyListe(enq);
-          return [{v:vols.length,l:"Vols"},{v:Math.floor(totalH/60)+"h"+(totalH%60?String(totalH%60).padStart(2,"0"):""),l:"Total"},{v:totalPax,l:"PAX"},{v:m!=null?m+"/5":"—",l:"Satisfaction"+(enq.length?" ("+enq.length+")":"")}]; })().map((k,i)=>(
+          return [{v:vols.length,l:"Vols"},{v:Math.floor(totalH/60)+"h"+(totalH%60?String(totalH%60).padStart(2,"0"):""),l:"Total"},{v:totalPax,l:"PAX"},{v:m!=null?sat10(m)+"/10":"—",l:"Satisfaction"+(enq.length?" ("+enq.length+")":"")}]; })().map((k,i)=>(
           <div key={i} style={{flex:1,background:C.bg,borderRadius:10,padding:"10px",textAlign:"center"}}>
             <div style={{fontWeight:800,fontSize:18,color:C.navy}}>{k.v}</div>
             <div style={{fontSize:10,color:C.slate}}>{k.l}</div>
@@ -6840,6 +6840,10 @@ const SAT_SECTIONS=[
   {num:"4",title:"Ponctualité & Opérations",color:"#7C3AED",items:["Respect de l'horaire","Communication en cas de retard"]},
 ];
 const SAT_ITEMS=SAT_SECTIONS.flatMap(s=>s.items);
+// Couleur d'une note : 1 et 2 en rouge, 3 en orange, 4 et 5 en vert
+const SAT_COUL=v=>v<=2?"#DC2626":v===3?"#D97706":"#00936A";
+// Toutes les notes sont exprimées sur 10
+const sat10=m=>m==null?null:Math.round(m*2*10)/10;
 const satMoyenne=n=>{ const v=Object.values(n||{}).map(Number).filter(x=>x>=1&&x<=5); return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null; };
 // Vols proposés : fenêtre glissante autour de l'heure courante, du plus récent au plus ancien
 function satVols(flights, tous){
@@ -6871,6 +6875,7 @@ function FormSatisfactionSaisie({ flights, items, setItems, onClose, onNoteVol }
     if(!ed.flightKey&&!(ed.num||"").trim()){ uiAlert("⚠️ Indiquez le vol : choisissez-le dans la liste, ou saisissez son numéro et sa date."); return; }
     if((items||[]).some(x=>x.flightKey&&x.flightKey===ed.flightKey)){ uiAlert("⚠️ Une enquête existe déjà pour ce vol."); return; }
     const u=typeof sgsCurrentUser==="function"?sgsCurrentUser():null;
+    // Note du vol : moyenne des 15 rubriques, ramenée sur 10
     if(onNoteVol) onNoteVol(ed.flightKey||satKey(ed),Math.round(moy*2*10)/10);
     setItems(l=>[...(l||[]),{...ed,id:"SAT"+Date.now(),flightKey:ed.flightKey||satKey(ed),moyenne:moy,repondues:n,
       auteur:userLabel(u)||"", createdAt:new Date().toISOString(),}]);
@@ -6897,21 +6902,21 @@ function FormSatisfactionSaisie({ flights, items, setItems, onClose, onNoteVol }
         <div style={{background:sec.color,color:"white",padding:"7px 11px",fontWeight:700,fontSize:11.5}}>{sec.num}. {sec.title.toUpperCase()}</div>
         {sec.items.map(item=><div key={item} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"7px 10px",borderTop:"1px solid "+C.border}}>
           <span style={{fontSize:12,color:C.text,flex:1,minWidth:0}}>{item}</span>
-          <div style={{display:"flex",gap:4,flexShrink:0}}>{[1,2,3,4,5].map(v=>{ const on=(ed.notes||{})[item]===v;
+          <div style={{display:"flex",gap:4,flexShrink:0}}>{[1,2,3,4,5].map(v=>{ const on=(ed.notes||{})[item]===v, col=SAT_COUL(v);
             return <button key={v} aria-label={item+" : "+v} onClick={()=>note(item,v)} style={{width:28,height:28,borderRadius:7,fontSize:12,fontWeight:700,...TAP,
-              border:"1.5px solid "+(on?sec.color:C.border),background:on?sec.color:"white",color:on?"white":C.slate}}>{v}</button>; })}</div>
+              border:"1.5px solid "+(on?col:C.border),background:on?col:"white",color:on?"white":C.text}}>{v}</button>; })}</div>
         </div>)}
       </div>)}
       <SgsField label="Commentaire du client"><textarea aria-label="Commentaire du client" rows={3} value={ed.commentaire||""} onChange={e=>up({commentaire:e.target.value})} style={sgsInput}/></SgsField>
       <div style={{background:C.bg,borderRadius:9,padding:"9px 11px",fontSize:12.5,color:C.text}}>
-        Moyenne : <b>{moy!=null?moy+" / 5":"—"}</b> · {Object.keys(ed.notes||{}).length} / {SAT_ITEMS.length} rubriques notées</div>
+        Moyenne : <b style={{color:moy!=null?SAT_COUL(moy):C.slate}}>{moy!=null?sat10(moy)+" / 10":"—"}</b> · {Object.keys(ed.notes||{}).length} / {SAT_ITEMS.length} rubriques notées</div>
       <div style={{display:"grid",gridTemplateColumns:onClose?"1fr 1fr":"1fr",gap:8}}>
         {onClose&&<SgsBtn l="Fermer" onClick={onClose} full/>}
-        <SgsBtn l="Enregistrer l'enquête" onClick={save} prim full/></div>
+        <SgsBtn l="Enregistrer" onClick={save} prim full/></div>
       {(items||[]).length>0&&<div>
-        <div style={{...sgsH,marginTop:4}}>Enquêtes saisies · moyenne {satMoyListe(items)}/5</div>
+        <div style={{...sgsH,marginTop:4}}>Enquêtes saisies · moyenne {sat10(satMoyListe(items))}/10</div>
         <div style={sgsCard}>{[...(items||[])].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,12).map(s=>
-          <SgsRow key={s.id} color="#D97706" titre={(s.num||"")+" · "+(s.from||"")+"→"+(s.to||"")+" · "+s.moyenne+"/5"}
+          <SgsRow key={s.id} color="#D97706" titre={(s.num||"")+" · "+(s.from||"")+"→"+(s.to||"")+" · "+sat10(s.moyenne)+"/10"}
             sub={sgsFr(s.date)+" · "+s.repondues+" rubriques"+(s.auteur?" · "+s.auteur:"")+(s.commentaire?" · « "+String(s.commentaire).slice(0,40)+" »":"")}
             onClick={()=>uiAlert(SAT_ITEMS.map(i=>i+" : "+((s.notes||{})[i]||"—")).join("\n"))}/>)}</div></div>}
     </div></Card>);
@@ -7177,62 +7182,14 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
                     ratingRow("Communication en cas de retard","Information passagers");
                     yesnoRow("Avez-vous subi un retard ?");
                     y+=2;
-                    section("5. Satisfaction Globale & NPS",...RED);
-                    doc.setFillColor(...WHITE);doc.setDrawColor(221,227,237);doc.rect(M,y,CW,22,"FD");
-                    doc.setTextColor(...NAVY);doc.setFont("helvetica","bold");doc.setFontSize(8.5);
-                    doc.text("Sur une échelle de 0 à 10, recommanderiez-vous Afrijet Sahara à vos proches ?",M+3,y+5);
-                    doc.setFont("helvetica","normal");doc.setFontSize(7);doc.setTextColor(...SLATE);
-                    doc.text("0 = Pas du tout probable   |   10 = Très probable",M+3,y+9);
-                    const bw=(CW-6)/11;
-                    for(let i=0;i<=10;i++){
-                      const bx=M+3+i*bw;
-                      const col=i<=6?[254,226,226]:i<=8?[254,243,199]:[209,250,229];
-                      doc.setFillColor(...col);doc.setDrawColor(221,227,237);doc.rect(bx,y+11,bw-1,7,"FD");
-                      doc.setFillColor(...NAVY);doc.setFont("helvetica","bold");doc.setFontSize(9);
-                      doc.text(String(i),bx+(bw-1)/2,y+16,{align:"center"});
-                    }
-                    doc.setTextColor(...RED);doc.setFont("helvetica","normal");doc.setFontSize(6.5);doc.text("Détracteurs (0-6)",M+3,y+21);
-                    doc.setTextColor(217,119,6);doc.drawCentredString&&doc.text("Passifs (7-8)",M+CW/2,y+21,{align:"center"});
-                    doc.setTextColor(...EMERALD);doc.text("Promoteurs (9-10)",M+CW-3,y+21,{align:"right"});
-                    y+=26;
-                    // Note globale
-                    doc.setFillColor(...LIGHT);doc.rect(M,y,CW,8,"F");
-                    doc.setTextColor(...NAVY);doc.setFont("helvetica","bold");doc.setFontSize(8.5);
-                    doc.text("Note globale du vol",M+3,y+5);
-                    for(let i=0;i<5;i++){
-                      const bx=M+CW*0.62+i*13;
-                      doc.setFillColor(...WHITE);doc.setDrawColor(...NAVY);doc.setLineWidth(0.6);
-                      doc.rect(bx,y+2,4,4,"FD");
-                      doc.setFillColor(...GOLD);doc.setFont("helvetica","normal");doc.setFontSize(6);
-                      doc.text(String(i+1),bx+5,y+5.5);
-                    }
-                    y+=12;
                     // Commentaires
                     doc.setFillColor(...NAVY);doc.rect(M,y,CW,7,"F");
                     doc.setTextColor(...WHITE);doc.setFont("helvetica","bold");doc.setFontSize(8);
-                    doc.text("  6. COMMENTAIRES & SUGGESTIONS",M+2,y+5);
+                    doc.text("  5. COMMENTAIRES & SUGGESTIONS",M+2,y+5);
                     y+=9;
                     doc.setFillColor(...WHITE);doc.setDrawColor(221,227,237);doc.rect(M,y,CW,28,"FD");
                     for(let i=0;i<5;i++){doc.setDrawColor(238,242,248);doc.setLineWidth(0.2);doc.line(M+3,y+6+i*5,M+CW-3,y+6+i*5);}
                     y+=32;
-                    // Profil
-                    doc.setFillColor(71,85,105);doc.rect(M,y,CW,7,"F");
-                    doc.setTextColor(...WHITE);doc.setFont("helvetica","bold");doc.setFontSize(8);
-                    doc.text("  7. PROFIL VOYAGEUR (optionnel)",M+2,y+5);
-                    y+=9;
-                    doc.setFillColor(...LIGHT);doc.rect(M,y,CW,14,"F");
-                    ["Affaires","Tourisme","Famille","Autre"].forEach((m,i)=>{
-                      doc.setFillColor(...WHITE);doc.setDrawColor(...NAVY);doc.setLineWidth(0.6);
-                      doc.rect(M+3+i*38,y+2,3.5,3.5,"FD");
-                      doc.setTextColor(...NAVY);doc.setFont("helvetica","normal");doc.setFontSize(7.5);
-                      doc.text(m,M+8+i*38,y+5);
-                    });
-                    ["1er vol","Occasionnel","Régulier","Fréquent"].forEach((f,i)=>{
-                      doc.setFillColor(...WHITE);doc.setDrawColor(...NAVY);doc.setLineWidth(0.6);
-                      doc.rect(M+3+i*38,y+8,3.5,3.5,"FD");
-                      doc.setTextColor(...NAVY);doc.setFont("helvetica","normal");doc.setFontSize(7.5);
-                      doc.text(f,M+8+i*38,y+11);
-                    });
                     // Footer
                     const PH=doc.internal.pageSize.getHeight();
                     doc.setFillColor(...NAVY);doc.rect(0,PH-12,W,12,"F");
@@ -7276,22 +7233,6 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
                     ))}
                   </div>
                 ))}
-                <div style={{marginBottom:16}}>
-                  <div style={{background:"#DC2626",color:"white",padding:"8px 12px",borderRadius:"8px 8px 0 0",fontWeight:700,fontSize:12}}>5. SATISFACTION GLOBALE & NPS</div>
-                  <div style={{padding:"12px",background:"white",border:"1px solid #EEF2F8"}}>
-                    <div style={{fontSize:11,color:"#0F1F3D",fontWeight:600,marginBottom:8}}>Sur une échelle de 0 à 10, recommanderiez-vous Afrijet Sahara ?</div>
-                    <div style={{display:"flex",gap:4}}>
-                      {[0,1,2,3,4,5,6,7,8,9,10].map(n=>(
-                        <div key={n} style={{flex:1,padding:"6px 0",textAlign:"center",background:n<=6?"#FEE2E2":n<=8?"#FEF3C7":"#D1FAE5",borderRadius:4,fontSize:10,fontWeight:700,color:"#0F1F3D"}}>{n}</div>
-                      ))}
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-                      <span style={{fontSize:8,color:"#DC2626"}}>Détracteurs (0-6)</span>
-                      <span style={{fontSize:8,color:"#D97706"}}>Passifs (7-8)</span>
-                      <span style={{fontSize:8,color:"#00936A"}}>Promoteurs (9-10)</span>
-                    </div>
-                  </div>
-                </div>
                 <div style={{textAlign:"center",padding:"12px",fontSize:9,color:"#94A3B8"}}>Afrijet Sahara · Formulaire confidentiel</div>
                 </div>
               </div>
@@ -7658,7 +7599,7 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
                   <div>
                     <FLabel>Satisfaction client</FLabel>
                     {(()=>{ const s=satDuVol(satis,edit); return <div style={{height:48,borderRadius:10,border:"1.5px solid "+C.border,padding:"0 12px",display:"flex",alignItems:"center",background:"#EEF2F6",fontSize:13,color:s?C.text:C.slateL}}>
-                      {s?<><b>{s.moyenne} / 5</b><span style={{color:C.slate,marginLeft:6,fontSize:11.5}}>· {s.repondues} rubriques</span></>:"Aucune enquête saisie"}</div>; })()}
+                      {s?<><b style={{color:SAT_COUL(s.moyenne)}}>{sat10(s.moyenne)} / 10</b><span style={{color:C.slate,marginLeft:6,fontSize:11.5}}>· {s.repondues} rubriques</span></>:"Aucune enquête saisie"}</div>; })()}
                   </div>
                   <div style={{gridColumn:"1 / -1"}}>
                     <FLabel>Cause du retard</FLabel>
