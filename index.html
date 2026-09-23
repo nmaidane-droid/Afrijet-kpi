@@ -8818,7 +8818,9 @@ function JournalView(){
   const [f,setF]=useState({periode:"30",user:"",module:"",objet:""});
   const [st,setSt]=useState({rows:[],count:0,loading:true});
   const [ver,setVer]=useState(null);
-  const pend=auditQueueGet().length;
+  // Entrées en attente : recalculées régulièrement, car la file se vide en arrière-plan
+  const [pend,setPend]=useState(auditQueueGet().length);
+  useEffect(()=>{ const t=setInterval(()=>setPend(auditQueueGet().length),1000); return ()=>clearInterval(t); },[]);
   const since=f.periode==="all"?null:new Date(Date.now()-Number(f.periode)*86400000).toISOString();
   const load=async(append)=>{ setSt(s=>({...s,loading:true}));
     const r=await auditFetch({since,user:f.user,module:f.module,objet:f.objet.trim(),offset:append?st.rows.length:0});
