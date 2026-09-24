@@ -7465,71 +7465,109 @@ function FlightRow({ f, isLast, canEdit, onOpen, secEvts, compromis, clients }){
 // Checklist ENR/OPS-FOR/PREP-01, remplie par les Opérations sur un vol planifié.
 // Un point non coché exige un motif : on saura toujours pourquoi il manque.
 const PREP_SECTIONS=[
- {t:"Documentation de route",items:[
-   ["plan_exp","Plan de vol exploitation établi"],["plan_ats","Plan de vol ATS déposé"],
-   ["meteo","Dossier météo complet"],["notam","NOTAM consultés"],
-   ["cartes","Cartes et documentation de navigation à jour"]]},
- {t:"Performances et chargement",items:[
-   ["mc","Devis de masse et centrage établi et signé"],["perfdec","Performances décollage vérifiées"],
-   ["perfatt","Performances atterrissage vérifiées"],["carb","Calcul carburant effectué"],
-   ["avit","Avitaillement contrôlé"],["repart","Répartition passagers et fret conforme au devis"]]},
- {t:"Aéronef",items:[
-   ["docs","Documents de bord présents et valides"],["manex","MANEX et MEL à bord, à jour"],
-   ["carnet","Carnet de route et compte rendu matériel à bord"],["mel","MEL et CDL en cours vérifiés"],
-   ["prevol","Visite prévol effectuée"],["secours","Équipements de secours vérifiés"]]},
- {t:"Équipage",items:[
-   ["licences","Licences, qualifications de type et médicaux valides"],["lang","Compétences linguistiques et CRM à jour"],
-   ["tsv","Temps de service et repos conformes"],["brief","Briefing équipage réalisé"]]},
- {t:"Exploitation et sûreté",items:[
-   ["autor","Autorisations obtenues pour un vol international"],["manif","Manifeste passagers établi"],
-   ["notoc","Manifeste fret et NOTOC si marchandises dangereuses"],["surete","Fouille de sûreté de l\'aéronef effectuée"],
-   ["escale","Services en escale confirmés"]]},
+ {n:"1",t:"Documentation de route",items:[
+   ["plan_exp","Plan de vol exploitation établi","Route, niveaux, temps de vol, dégagements"],
+   ["plan_ats","Plan de vol ATS déposé","Accusé de dépôt obtenu"],
+   ["meteo","Dossier météo complet","METAR, TAF, TEMSI, vents et températures en altitude — départ, destination, dégagements"],
+   ["notam","NOTAM consultés","Départ, destination, dégagements, route et espaces traversés"],
+   ["cartes","Cartes et documentation de navigation à jour","Cycle AIRAC en vigueur"]]},
+ {n:"2",t:"Performances et chargement",items:[
+   ["mc","Devis de masse et centrage établi et signé","Masses au décollage et à l\u2019atterrissage dans les limites"],
+   ["perfdec","Performances décollage vérifiées","Piste, altitude, température, vent, état de piste, obstacles"],
+   ["perfatt","Performances atterrissage vérifiées","Destination et dégagements"],
+   ["carb","Calcul carburant effectué","Roulage, étape, dégagement, réserve finale, supplémentaire, extra"],
+   ["avit","Avitaillement contrôlé","Quantité embarquée conforme au calcul, bon de livraison"],
+   ["repart","Répartition passagers et fret conforme au devis",""]]},
+ {n:"3",t:"Aéronef",items:[
+   ["docs","Documents de bord présents et valides","Immatriculation, CDN, CEN, nuisances, station d\u2019aéronef, assurance, CTA et specs"],
+   ["manex","MANEX et MEL à bord, à jour",""],
+   ["carnet","Carnet de route et compte rendu matériel à bord",""],
+   ["mel","MEL et CDL en cours vérifiés","Échéances non dépassées, conditions de report respectées — contrôle automatique dans l\u2019application"],
+   ["prevol","Visite prévol effectuée","Tour de l\u2019avion, quantités, niveaux"],
+   ["secours","Équipements de secours vérifiés","Extincteurs, ELT, gilets, oxygène, trousse de premiers secours"]]},
+ {n:"4",t:"Équipage",items:[
+   ["licences","Licences, qualifications de type et médicaux valides","Alerte automatique dans l\u2019application ; badge INAPTE bloquant"],
+   ["lang","Compétences linguistiques et CRM à jour",""],
+   ["tsv","Temps de service et repos conformes","TSV, repos minimum, limitations mensuelles et annuelles"],
+   ["brief","Briefing équipage réalisé","Route, météo, carburant, menaces, répartition des tâches, PF et PM"]]},
+ {n:"6",t:"Exploitation et sûreté",items:[
+   ["autor","Autorisations obtenues pour un vol international","Survol, atterrissage, créneaux, GENDEC"],
+   ["manif","Manifeste passagers établi","Nombre et identités conformes"],
+   ["notoc","Manifeste fret et NOTOC si marchandises dangereuses",""],
+   ["surete","Fouille de sûreté de l\u2019aéronef effectuée","Liste de contrôle signée"],
+   ["escale","Services en escale confirmés","Assistance, avitaillement, handling, immigration"]]},
 ];
-// Checklist vierge, à remplir à la main : en-tête du vol, cases vides, signatures
-function prepVierge(f, clients, aircraft){
-  try{
-    const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4"});
-    const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=14;
-    const cl=(clients||[]).find(x=>x.id===(f||{}).clientId), ac=(aircraft||[]).find(a=>a.id===(f||{}).acId);
-    const entete=()=>sgsPdfHeader(doc,{titre:"CHECKLIST — PRÉPARATION DU VOL",ref:"ENR/OPS-FOR/PREP-01",MX:M});
-    let y=entete();
-    const w4=(W-2*M-6)/4;
-    const cell=(x,w,l,v)=>{ doc.setDrawColor(203,213,225); doc.setLineWidth(.2); doc.roundedRect(x,y,w,12,1.5,1.5);
-      doc.setFont("helvetica","normal"); doc.setFontSize(6.4); doc.setTextColor(100,116,139); doc.text(String(l).toUpperCase(),x+2,y+4);
-      doc.setFont("helvetica","bold"); doc.setFontSize(9.5); doc.setTextColor(15,31,61); doc.text(String(v||""),x+2,y+9); };
-    cell(M,w4,"Vol / immatriculation",(f&&f.num)||""); cell(M+w4+2,w4,"Date",f&&f.date?sgsFr(f.date):"");
-    cell(M+2*(w4+2),w4,"Route",f?((f.from||"")+(f.to?"→"+f.to:"")):""); cell(M+3*(w4+2),w4,"Départ (GMT)",(f&&f.dep)||"");
-    y+=15;
-    if(f){ doc.setFont("helvetica","normal"); doc.setFontSize(7.6); doc.setTextColor(100,116,139);
-      doc.text("Client : "+(cl?cl.nom:"—")+"   ·   Appareil : "+(ac?ac.immat+" "+ac.type:(f.num||"—"))+"   ·   CDB : "+(f.cm1||"—")+"   ·   OPL : "+(f.cm2||"—"),M,y); y+=5; }
-    PREP_SECTIONS.forEach(sec=>{
-      if(y>H-34){ doc.addPage(); y=entete(); }
-      doc.setFillColor(15,31,61); doc.roundedRect(M,y,W-2*M,5.6,1.4,1.4,"F");
-      doc.setFont("helvetica","bold"); doc.setFontSize(8.4); doc.setTextColor(255,255,255);
-      doc.text(sec.t.toUpperCase(),M+2.5,y+3.9); y+=8;
-      sec.items.forEach(([k,lib])=>{
-        if(y>H-26){ doc.addPage(); y=entete(); }
-        doc.setDrawColor(71,85,105); doc.setLineWidth(.25); doc.roundedRect(M,y-3.1,3.6,3.6,.6,.6);
-        doc.setFont("helvetica","normal"); doc.setFontSize(8.6); doc.setTextColor(15,31,61);
-        doc.text(lib,M+6,y);
-        doc.setDrawColor(226,232,240); doc.setLineWidth(.15); doc.line(M+6,y+1.6,W-M,y+1.6);
-        y+=6.2;
-      });
-      y+=1.5;
-    });
-    if(y>H-28){ doc.addPage(); y=entete(); }
-    const wS=(W-2*M-4)/2;
-    doc.setDrawColor(203,213,225); doc.setLineWidth(.2);
-    doc.roundedRect(M,y,wS,16,1.5,1.5); doc.roundedRect(M+wS+4,y,wS,16,1.5,1.5);
-    doc.setFontSize(6.4); doc.setTextColor(100,116,139);
-    doc.text("COMMANDANT DE BORD — NOM, DATE, SIGNATURE",M+2,y+4);
-    doc.text("CONTRÔLE OPÉRATIONS — NOM, DATE, SIGNATURE",M+wS+6,y+4);
-    y+=20;
-    doc.setFontSize(6.6); doc.setTextColor(148,163,184);
-    doc.text("À remplir à la main lorsque l application n est pas accessible, puis à reporter dans la fiche du vol.",M,y);
-    doc.save("Preparation_vierge"+(f&&f.num?"_"+f.num:"")+(f&&f.date?"_"+String(f.date).replace(/-/g,""):"")+".pdf");
-  }catch(e){ uiAlert("PDF impossible : "+(e.message||e)); }
+const PREP_DECISION="La sécurité du vol relève en dernier ressort du commandant de bord et de la Compagnie. Un point non satisfait ne se contourne pas : il se traite, se reporte selon la MEL, ou conduit au report du vol.";
+// Checklist de préparation en PDF — même présentation que le document ENR/OPS-FOR/PREP-01.
+// mode "vierge" : cases vides, à remplir à la main ; mode "rempli" : états et motifs de l application.
+function prepPdfDoc(f, fr, clients, aircraft, prep, vierge){
+  const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4"});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=14;
+  const cl=(clients||[]).find(x=>x.id===(f||{}).clientId), ac=(aircraft||[]).find(a=>a.id===(f||{}).acId);
+  const entete=()=>sgsPdfHeader(doc,{titre:"CHECKLIST — PRÉPARATION DU VOL",ref:"ENR/OPS-FOR/PREP-01",MX:M});
+  let y=entete();
+  const w4=(W-2*M-6)/4;
+  const cell=(x,w,l,v)=>{ doc.setDrawColor(203,213,225); doc.setLineWidth(.2); doc.roundedRect(x,y,w,11,1.5,1.5);
+    doc.setFont("helvetica","normal"); doc.setFontSize(6.2); doc.setTextColor(100,116,139); doc.text(String(l).toUpperCase(),x+2,y+3.6);
+    doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(15,31,61); doc.text(String(v||""),x+2,y+8.4); };
+  cell(M,w4,"Vol / immatriculation",(f&&f.num)||"");
+  cell(M+w4+2,w4,"Date",f&&f.date?sgsFr(f.date):"");
+  cell(M+2*(w4+2),w4,"Route",f?((f.from||"")+(f.to?" - "+f.to:"")):"");
+  cell(M+3*(w4+2),w4,"Départ (GMT)",(f&&f.dep)||"");
+  y+=14;
+  if(f){ doc.setFont("helvetica","normal"); doc.setFontSize(7.2); doc.setTextColor(100,116,139);
+    doc.text("Client : "+(cl?cl.nom:"—")+"   ·   Appareil : "+(ac?(ac.immat+" "+ac.type):(f.num||"—"))+"   ·   CDB : "+(f.cm1||"—")+"   ·   OPL : "+(f.cm2||"—"),M,y); y+=5; }
+  const bandeau=(num,titre,rouge)=>{
+    if(y>H-34){ doc.addPage(); y=entete(); }
+    if(rouge) doc.setFillColor(139,0,0); else doc.setFillColor(15,31,61);
+    doc.roundedRect(M,y,W-2*M,5.6,1.4,1.4,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(8.4); doc.setTextColor(255,255,255);
+    doc.text(num+" - "+titre,M+2.5,y+3.9); y+=10.4;
+  };
+  const ligne=(lib,sub,etat,motif)=>{
+    if(y>H-26){ doc.addPage(); y=entete(); }
+    doc.setDrawColor(71,85,105); doc.setLineWidth(.25); doc.roundedRect(M,y-3.1,3.6,3.6,.6,.6);
+    if(!vierge&&etat===true){ doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(0,147,106); doc.text("X",M+.75,y-.25); }
+    if(!vierge&&etat==="non"){ doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(180,83,9); doc.text("—",M+.6,y-.4); }
+    doc.setFont("helvetica","bold"); doc.setFontSize(8.4); doc.setTextColor(15,31,61); doc.text(lib,M+6,y);
+    let dy=3.2;
+    const bas=(!vierge&&etat==="non"&&String(motif||"").trim())?("Motif : "+motif):sub;
+    if(bas){ doc.setFont("helvetica",(!vierge&&etat==="non"&&motif)?"italic":"normal"); doc.setFontSize(6.8);
+      doc.setTextColor((!vierge&&etat==="non"&&motif)?180:100,(!vierge&&etat==="non"&&motif)?83:116,(!vierge&&etat==="non"&&motif)?9:139);
+      const li=doc.splitTextToSize(bas,W-2*M-8); doc.text(li,M+6,y+dy); dy+=(li.length-1)*3; }
+    doc.setDrawColor(226,232,240); doc.setLineWidth(.12); doc.line(M,y+dy+1.2,W-M,y+dy+1.2);
+    y+=dy+4.4;
+  };
+  PREP_SECTIONS.forEach(sec=>{
+    if(sec.n==="6"){ // la rubrique 5 (SGS) s intercale, comme dans le document
+      bandeau("5","Sécurité des vols (SGS)",true);
+      ligne("FRAT rempli par le commandant de bord","Manuel SGS 02-04 — avant chaque étape ; barrières si jaune, NO GO si rouge", vierge?undefined:(fr?true:undefined), null);
+      ligne("Résultat du FRAT reporté au dossier", fr?("Résultat "+(fr.couleur2||fr.couleur||"—")+" · "+(fr.cdb||"")):"Vert / jaune / rouge, et barrières retenues", vierge?undefined:(fr?true:undefined), null);
+    }
+    bandeau(sec.n,sec.t,false);
+    sec.items.forEach(([k,lib,sub])=>ligne(lib,sub,(prep||{})[k],((prep||{}).motifs||{})[k]));
+  });
+  if(y>H-34){ doc.addPage(); y=entete(); }
+  doc.setFillColor(251,243,243); doc.setDrawColor(139,0,0); doc.setLineWidth(.6);
+  const hN=12; doc.rect(M,y,W-2*M,hN,"F"); doc.line(M,y,M,y+hN);
+  doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(122,20,20); doc.text("DÉCISION FINALE",M+3,y+4);
+  doc.setFont("helvetica","normal"); doc.setFontSize(7);
+  doc.text(doc.splitTextToSize(PREP_DECISION,W-2*M-6),M+3,y+7.4);
+  y+=hN+5;
+  const wS=(W-2*M-4)/2;
+  doc.setDrawColor(203,213,225); doc.setLineWidth(.2);
+  doc.roundedRect(M,y,wS,16,1.5,1.5); doc.roundedRect(M+wS+4,y,wS,16,1.5,1.5);
+  doc.setFontSize(6.2); doc.setTextColor(100,116,139);
+  doc.text("COMMANDANT DE BORD — NOM, DATE, SIGNATURE",M+2,y+4);
+  doc.text("CONTRÔLE OPÉRATIONS — NOM, DATE, SIGNATURE",M+wS+6,y+4);
+  y+=20;
+  doc.setFontSize(6.2); doc.setTextColor(148,163,184);
+  doc.text("ENR/OPS-FOR/PREP-01 · Édition 01 · Révision 00"+(vierge?" · à remplir à la main, puis à reporter dans la fiche du vol":""),M,y);
+  const nom="Preparation"+(vierge?"_vierge":"")+(f&&f.num?"_"+f.num:"")+(f&&f.date?"_"+String(f.date).replace(/-/g,""):"")+".pdf";
+  doc.save(nom);
 }
+function prepVierge(f, clients, aircraft){ try{ prepPdfDoc(f,null,clients,aircraft,{},true); }catch(e){ uiAlert("PDF impossible : "+(e.message||e)); } }
+function prepRempli(f, fr, clients, aircraft, prep){ try{ prepPdfDoc(f,fr,clients,aircraft,prep,false); }catch(e){ uiAlert("PDF impossible : "+(e.message||e)); } }
 const PREP_ITEMS=PREP_SECTIONS.flatMap(s=>s.items.map(i=>i[0]));
 const prepFaits=p=>PREP_ITEMS.filter(k=>(p||{})[k]===true).length;
 // Trois états par point : non traité, coché, non coché avec motif
@@ -7784,46 +7822,40 @@ function ScreenOps({ flights, satis, safetyData, aircraft, frats, onUpdateFlight
                 </div>
                 {prepOuvert&&<div style={{padding:"8px 10px"}}>
                   {/* Le FRAT est rempli par le commandant : son état est repris automatiquement */}
-                  <div style={{background:f?(f.couleur==="rouge"?"#FCEBEB":f.couleur==="jaune"?"#FAEEDA":"#E7F6F0"):"#F1F5F9",borderRadius:9,padding:"8px 10px",marginBottom:8,fontSize:11.5,lineHeight:1.4}}>
-                    <b>FRAT</b> — {f?("résultat "+(f.couleur||"—")+", rempli par "+(f.cdb||"—")):"non rempli par le commandant"}
-                    <div style={{fontSize:10,color:C.slate}}>Manuel SGS 02-04 · rempli par le CDB, repris ici automatiquement</div>
-                  </div>
-                  {PREP_SECTIONS.map(sec=><div key={sec.t} style={{marginBottom:8}}>
-                    <div style={{fontSize:10,fontWeight:800,color:C.gold,textTransform:"uppercase",margin:"4px 0"}}>{sec.t}</div>
-                    {sec.items.map(([k,lib])=>{ const et=p[k];   // undefined · true · "non"
+
+                  {PREP_SECTIONS.map(sec=><div key={sec.t} style={{marginBottom:9}}>
+                    <div style={{background:C.navy,color:"white",borderRadius:6,padding:"4px 9px",fontSize:10.5,fontWeight:800,letterSpacing:.2,marginBottom:2}}>{sec.n} — {sec.t}</div>
+                    {sec.items.map(([k,lib,sub])=>{ const et=p[k];   // undefined · true · "non"
                       const suiv=et===true?"non":et==="non"?undefined:true;
-                      const col=et===true?"#00936A":et==="non"?"#D97706":C.border;
-                      return <div key={k} style={{borderTop:"1px solid "+C.border,padding:"5px 0"}}>
+                      const col=et===true?"#00936A":et==="non"?"#D97706":"#475569";
+                      return <div key={k} style={{borderBottom:"1px dotted "+C.border,padding:"6px 0"}}>
                         <div role="button" onClick={()=>setP(k,suiv)} style={{display:"flex",gap:8,alignItems:"flex-start",...TAP}}>
                           <div style={{width:18,height:18,borderRadius:5,flexShrink:0,marginTop:1,border:"1.5px solid "+col,background:et?col:"white",color:"white",fontSize:12,textAlign:"center",lineHeight:"16px"}}>{et===true?"✓":et==="non"?"—":""}</div>
-                          <div style={{fontSize:12,color:C.text,flex:1,minWidth:0}}>{lib}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,color:C.navy,fontWeight:700}}>{lib}</div>
+                            {sub&&<div style={{fontSize:10,color:C.slateL,marginTop:1,lineHeight:1.35}}>{sub}</div>}
+                          </div>
                         </div>
                         {et==="non"&&<input aria-label={"Motif — "+lib} value={motifs[k]||""} onChange={e=>setMotif(k,e.target.value)}
                           placeholder="Motif : MEL, sans objet, traité autrement…"
                           style={{...sgsInput,marginTop:4,fontSize:11.5,borderColor:String(motifs[k]||"").trim().length>2?C.border:"#D97706"}}/>}
                       </div>; })}
                   </div>)}
+                  {/* Rubrique 5 — Sécurité des vols : le FRAT vient du commandant */}
+                  <div style={{marginBottom:9}}>
+                    <div style={{background:"#8B0000",color:"white",borderRadius:6,padding:"4px 9px",fontSize:10.5,fontWeight:800,marginBottom:2}}>5 — Sécurité des vols (SGS)</div>
+                    <div style={{borderBottom:"1px dotted "+C.border,padding:"6px 0",display:"flex",gap:8,alignItems:"flex-start"}}>
+                      <div style={{width:18,height:18,borderRadius:5,flexShrink:0,marginTop:1,border:"1.5px solid "+(f?"#00936A":"#475569"),background:f?"#00936A":"white",color:"white",fontSize:12,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{f?"✓":""}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,color:C.navy,fontWeight:700}}>FRAT rempli par le commandant de bord</div>
+                        <div style={{fontSize:10,color:C.slateL,marginTop:1,lineHeight:1.35}}>Manuel SGS 02-04 — avant chaque étape · {f?("résultat "+(f.couleur2||f.couleur||"—")+", "+(f.cdb||"")):"non rempli à ce jour"}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{background:"#FBF3F3",borderLeft:"3px solid #8B0000",borderRadius:"0 8px 8px 0",padding:"8px 10px",fontSize:10.5,color:"#7A1414",lineHeight:1.45,margin:"2px 0 8px"}}>
+                    <b>Décision finale.</b> {PREP_DECISION}</div>
                   <div style={{marginTop:8}}>
-                    <SgsBtn l="📄 PDF pour le dossier de vol" full onClick={()=>{
-                      const cl=(clients||[]).find(x=>x.id===edit.clientId);
-                      const CP=[{l:"Point",w:118},{l:"État",w:64}];
-                      const blocs=[{t:"Vol",cols:[{l:"Élément",w:60},{l:"Valeur",w:122}],rows:[
-                        ["Immatriculation",edit.num||""],["Date",sgsFr(edit.date)],
-                        ["Route",(edit.from||"")+" → "+(edit.to||"")],["Départ prévu (GMT)",edit.dep||""],
-                        ["Client",cl?cl.nom:"—"],["Commandant",edit.cm1||"—"],["Copilote",edit.cm2||"—"],
-                        ["FRAT",f?("résultat "+(f.couleur||"—")+" · "+(f.cdb||"")):"non rempli"]]}];
-                      PREP_SECTIONS.forEach(sec=>blocs.push({t:sec.t,cols:CP,rows:sec.items.map(([k,lib])=>[
-                        (p[k]===true?"[X] ":p[k]==="non"?"[—] ":"[  ] ")+lib,
-                        p[k]===true?"fait":p[k]==="non"?("non applicable : "+(motifs[k]||"")):"à traiter"])}));
-                      blocs.push({t:"Validation",cols:[{l:"Élément",w:60},{l:"Valeur",w:122}],rows:[
-                        ["Préparation",complet?"complète — tous les points cochés ou motivés":"incomplète"],
-                        ["Établie par",userLabel(sgsCurrentUser())||"—"],
-                        ["Le",new Date().toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})],
-                        ["Commandant de bord","signature : ______________________"]]});
-                      sgsDocPDF_({ref:"PREP-"+(edit.num||"")+"-"+String(edit.date||"").replace(/-/g,""),
-                        titre:"Préparation du vol", sous:"ENR/OPS-FOR/PREP-01 · Édition 01 · Révision 00",
-                        meta:[], blocs, nom:userLabel(sgsCurrentUser())||"", fonction:"Opérations"});
-                    }}/>
+                    <SgsBtn l="📄 PDF pour le dossier de vol" full onClick={()=>prepRempli(edit,f,clients,aircraft,p)}/>
                   </div>
                   <div style={{fontSize:11,color:complet?"#047857":C.slate,marginTop:6,lineHeight:1.45}}>
                     {complet?<b style={{color:"#047857"}}>Préparation complète : tous les points sont cochés ou motivés.</b>
