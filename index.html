@@ -8697,6 +8697,21 @@ async function usersSave(list){ const ok=await sbSet(USERS_KEY,list); try{ local
 // Personne connectée pendant la session (null pour les profils encore à mot de passe partagé)
 function sgsCurrentUser(){ try{ return JSON.parse(sessionStorage.getItem(PFX+"active_user")||"null"); }catch(_e){ return null; } }
 const USER_TOTP_KEY=u=>TOTP_KEY+"_u_"+u.id;
+// ── Connexion vérifiée par le serveur (lot S1) ──
+// La page envoie le nom, le mot de passe puis le code ; le serveur vérifie et renvoie un jeton
+// de session signé, valable 12 h. Si le serveur n'est pas joignable — fichier ouvert seul, ou
+// profil encore à mot de passe partagé — on revient au fonctionnement précédent.
+const SESSION_KEY=PFX+"session_token";
+async function authApi(action, body){
+  try{
+    const r=await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...body})});
+    if(r.status===404) return null;
+    const j=await r.json().catch(()=>({}));
+    return {status:r.status, ...j};
+  }catch(e){ logSilent(e); return null; }
+}
+const sessionToken=()=>{ try{ return sessionStorage.getItem(SESSION_KEY)||""; }catch(e){ return ""; } };
+const sessionSet=t=>{ try{ t?sessionStorage.setItem(SESSION_KEY,t):sessionStorage.removeItem(SESSION_KEY); }catch(e){ logSilent(e); } };
 // ── Limitation des tentatives de connexion ──
 // 3 et 4 échecs : 30 s d'attente ; 5 échecs : blocage 15 min (journalisé). Réussite : compteur remis à zéro.
 // Compteur dans Supabase (clé auth_locks), par compte (« u:<id> ») ou par profil à mot de passe partagé (« p:<profil> »).
@@ -8735,8 +8750,26 @@ function auditQueueGet(){ try{ return JSON.parse(localStorage.getItem(AUDIT_QKEY
 function auditQueueSet(q){ try{ localStorage.setItem(AUDIT_QKEY,JSON.stringify(q.slice(-5000))); }catch(_e){ logSilent(_e); } }
 let AUDIT_FLUSHING=false;
 async function auditFlush(){
-  if(AUDIT_FLUSHING||!supabase) return; AUDIT_FLUSHING=true;
-  try{ let q=auditQueueGet();
+  if(AUDIT_FLUSHING) return; AUDIT_FLUSHING=true;
+  try{
+    // Session ouverte : le serveur inscrit l'entrée sous l'identité qu'il a vérifiée
+    const t=sessionToken();
+    if(t){
+      let q=auditQueueGet();
+      while(q.length){
+        const lot=q.slice(0,50);
+        const r=await fetch("/api/journal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:t,entries:lot})});
+        if(r.status===404) break;                       // serveur absent : on garde la file
+        const j=await r.json().catch(()=>({}));
+        if(!r.ok){ SYNC.auditError=j.error||("erreur "+r.status); break; }
+        const n=j.ecrites||lot.length;
+        q=auditQueueGet(); q.splice(0,n); auditQueueSet(q); SYNC.auditError=null;
+      }
+      if(!auditQueueGet().length){ AUDIT_FLUSHING=false; return; }
+    }
+    // Sans session serveur : ancien fonctionnement
+    if(!supabase){ AUDIT_FLUSHING=false; return; }
+    let q=auditQueueGet();
     while(q.length){ const {error}=await supabase.rpc("audit_append",{p:q[0]}); if(error){ SYNC.auditError=error.message||String(error); break; }
       q=auditQueueGet(); q.shift(); auditQueueSet(q); SYNC.auditError=null; }
   }catch(e){ SYNC.auditError=e.message||String(e); } finally { AUDIT_FLUSHING=false; }
@@ -10338,7 +10371,7 @@ function TotpSetup({ secret, onVerified, profileId, account:accountLabel }) {
   );
 }
 
-function TotpVerify({ profileId, onVerified, storeKey, account, lockId, lockLabel }) {
+function TotpVerify({ profileId, onVerified, storeKey, account, lockId, lockLabel, verifServeur }) {
   const [code,setCode]=useState("");
   const [waitMs,setUntil]=useCountdown();
   const lid=lockId||"p:"+(profileId||"rdoa");
@@ -10379,8 +10412,10 @@ function TotpVerify({ profileId, onVerified, storeKey, account, lockId, lockLabe
   }
 
   const verify=async()=>{
-    if(await blocked()) return;
     if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
+    // Vérification par le serveur quand la connexion en vient
+    if(verifServeur){ const r=await verifServeur(code); if(r&&r.ok) return; setErr((r&&r.erreur)||"Code incorrect."); setCode(""); return; }
+    if(await blocked()) return;
     const key=storeKey||TOTP_KEY+"_"+(profileId||"rdoa");
     const stored=await sbGet(key);
     if(!stored){setErr("TOTP non configuré");return;}
@@ -10529,14 +10564,19 @@ function LoginGate({ onAuth }) {
   const [totpSecret,setTotpSecret]=useState("");
   const [users,setUsers]=useState([]), [user,setUser]=useState(null);
   const [waitMs,setUntil]=useCountdown();
-  useEffect(()=>{ usersLoad().then(setUsers); },[]);
+  const [jeton,setJeton]=useState("");
+  const [attenteTotp,setAttenteTotp]=useState("");
+  useEffect(()=>{ (async()=>{ const r=await authApi("profils",{});
+    if(r&&r.status===200&&Array.isArray(r.users)) setUsers(r.users); else setUsers(await usersLoad()); })(); },[]);
   const TOTP_REQUIRED = ["dir","rdoa","sgs"]; // double authentification : Direction, Administrateur, SGS
-  const actifs=pid=>(users||[]).filter(u=>u.actif&&u.profil===pid).sort((a,b)=>userLabel(a).localeCompare(userLabel(b)));
-  const selectProfile=async(id)=>{ setProfileId(id); setErr(""); setPwd(""); setUser(null);
-    const fresh=await usersLoad(); setUsers(fresh);
+  const actifs=pid=>(users||[]).filter(u=>(u.actif!==false)&&u.profil===pid).sort((a,b)=>userLabel(a).localeCompare(userLabel(b)));
+  const selectProfile=async(id)=>{ setProfileId(id); setErr(""); setPwd(""); setUser(null); setAttenteTotp(""); setJeton("");
+    const s=await authApi("profils",{});
+    const fresh=(s&&s.status===200&&Array.isArray(s.users))?s.users:await usersLoad(); setUsers(fresh);
     // Dès qu'un compte nominatif a existé pour ce profil, même désactivé, le mot de passe partagé n'est plus accepté
     setStep(NOMINATIVE_PROFILES.includes(id)&&fresh.some(u=>u.profil===id)?"user":"pwd"); };
-  const finish=(u)=>{
+  const finish=(u,token)=>{
+    sessionSet(token||jeton||"");
     authOk(u?"u:"+u.id:"p:"+profileId);
     try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){ logSilent(_e); }
     try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); if(u) sessionStorage.setItem(PFX+"active_user",JSON.stringify({id:u.id,nom:u.nom,prenom:u.prenom,fonction:u.fonction,profil:u.profil,role:u.role,crewId:u.crewId})); else sessionStorage.removeItem(PFX+"active_user"); }catch(_e){ logSilent(_e); }
@@ -10557,6 +10597,24 @@ function LoginGate({ onAuth }) {
   };
   // Compte nominatif : mot de passe personnel
   const submitUser=async()=>{
+    // Vérification par le serveur : la page n'a plus accès aux empreintes ni aux clés
+    const s=await authApi("login",{userId:user.id,password:pwd});
+    if(s){
+      if(s.status===429||s.status===401){
+        if(s.attente) setUntil(Date.now()+s.attente);
+        setErr(s.status===429?"Trop d'essais : patientez.":failMsg({fails:s.fails||1,until:s.attente?Date.now()+s.attente:0},"Mot de passe incorrect"));
+        setPwd(""); auditLog("connexion",userLabel(user),"échec de connexion",{motif:[null,"mot de passe incorrect"]}); return;
+      }
+      if(s.status!==200){ setErr(s.error||"Connexion impossible."); return; }
+      setPwd("");
+      if(s.besoin==="totp"){ setAttenteTotp(s.attente_totp); setUser({...user,...(s.user||{})}); setStep("totp_verify"); return; }
+      const u={...user,...(s.user||{})};
+      setUser(u); setJeton(s.token||"");
+      if(u.mustChange){ setStep("newpwd"); return; }
+      if(s.totpAActiver){ await goTotp(u); return; }
+      finish(u,s.token); return;
+    }
+    // Serveur absent : ancien fonctionnement
     const fresh=(await usersLoad()).find(x=>x.id===user.id);
     if(!fresh||!fresh.actif){ setErr("Ce compte est désactivé. Contactez l'Administrateur."); return; }
     { const w=await authWait("u:"+fresh.id); if(w){ setUntil(Date.now()+w); setErr("Trop d'essais : patientez."); return; } }
@@ -10574,7 +10632,15 @@ function LoginGate({ onAuth }) {
     if(!(await usersSave(L.map(x=>x.id===u.id?u:x)))){ setErr("Enregistrement impossible : vérifiez la connexion."); return; }
     setUser(u); setPwd(""); setPwd2(""); setErr(""); await goTotp(u);
   };
-  const handleTotpVerified=async()=>finish(user);
+  const handleTotpVerified=async(token)=>finish(user,token);
+  // Code Authenticator vérifié par le serveur
+  const verifTotpServeur=async(code)=>{
+    const s=await authApi("totp",{attente_totp:attenteTotp,code});
+    if(!s) return {erreur:"Serveur indisponible."};
+    if(s.status===200){ setJeton(s.token||""); finish({...user,...(s.user||{})},s.token); return {ok:true}; }
+    if(s.attente) setUntil(Date.now()+s.attente);
+    return {erreur:s.status===429?"Trop d'essais : patientez.":"Code incorrect."};
+  };
   const handleTotpSetupVerified=async()=>{ await sbSet(user?USER_TOTP_KEY(user):TOTP_KEY+"_"+profileId,[totpSecret]); finish(user); };
   if(step==="select") return <ProfileSelectScreen onSelect={selectProfile}/>;
   const profile=PROFILES.find(p=>p.id===profileId);
@@ -10616,7 +10682,7 @@ function LoginGate({ onAuth }) {
           <button onClick={submitNew} style={main}>Enregistrer et continuer</button>
         </>)}
         {step==="totp_setup"&&<TotpSetup secret={totpSecret} profileId={profileId} account={user?userLabel(user):null} onVerified={handleTotpSetupVerified}/>}
-        {step==="totp_verify"&&<TotpVerify profileId={profileId} storeKey={user?USER_TOTP_KEY(user):null} account={user?userLabel(user):null} lockId={user?"u:"+user.id:"p:"+profileId} lockLabel={user?userLabel(user):profileId} onVerified={handleTotpVerified}/>}
+        {step==="totp_verify"&&<TotpVerify verifServeur={attenteTotp?verifTotpServeur:null} profileId={profileId} storeKey={user?USER_TOTP_KEY(user):null} account={user?userLabel(user):null} lockId={user?"u:"+user.id:"p:"+profileId} lockLabel={user?userLabel(user):profileId} onVerified={handleTotpVerified}/>}
       </div>
     </div>
   );
