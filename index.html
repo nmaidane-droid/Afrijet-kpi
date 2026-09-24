@@ -109,7 +109,7 @@ const PROFILES = [
    forms:["secu","frat","docavion","regl","sat"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"sgs",   label:"SGS",  icon:"🛡", color:"#0F766E",
    pwdHash:"e6a585f2870b2afbc4e0900a53d6b6b050781460d2d1eb575c347693b29b0d4e",
-   forms:["sgs","secu","frat","docavion","regl"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
+   forms:["sgs","secu","nds","frat","docavion","regl"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
    pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
    forms:["maint"],
@@ -4258,6 +4258,15 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
   const ch365=[...(M.changes||[]).filter(c=>sgsJours(c.date)<=365),...(reg.changes||[]).filter(c=>sgsJours(String(c.createdAt||'').slice(0,10))<=365).map(c=>({date:String(c.createdAt).slice(0,10),analyse:sgsChgAnalyse(c)}))];
   const tauxAnalyse=ch365.length?Math.round(ch365.filter(c=>c.analyse).length/ch365.length*100):100;
   const crmMois=today.slice(0,7), crmN=((M.crm||[]).find(c=>c.mois===crmMois)||{}).n||0;
+  // Une notification DGAC rédigée vaut transmission : la case se coche d'elle-même
+  useEffect(()=>{
+    const maj={};
+    (ndsArchive||[]).filter(r=>r.mode==="dgac"&&r.evKey).forEach(r=>{
+      const k=r.evKey, d=String(r.savedAt||"").slice(0,10);
+      if(d&&!((evStatus||{})[k]||{}).dac) maj[k]={...((evStatus||{})[k]||{}),dac:d,updatedAt:new Date().toISOString()};
+    });
+    if(Object.keys(maj).length) setEvStatus(s=>({...(s||{}),...maj}));
+  },[ndsArchive]);
   const bullAuto=(ndsArchive||[]).filter(r=>/^NS-SEC-/.test(r.ref||'')).map(r=>({date:(String(r.ref).match(/-(\d{4})(\d{2})(\d{2})-/)||[]).slice(1).join('-'),titre:r.objet||r.ref,auto:true}));
   const bulls=[...bullAuto,...(M.bulletins||[])].filter(b=>b.date&&sgsJours(b.date)<=365);
   const dernierBull=bulls.map(b=>b.date).sort().pop();
@@ -4609,6 +4618,29 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
               return <div style={{marginTop:6,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:d?"#EAF3DE":late?"#FCEBEB":"#FAEEDA",borderRadius:8,padding:"7px 9px",fontSize:12,color:d?"#27500A":late?"#791F1F":"#633806"}}>
                 <span style={{flex:1}}>{d?'Copie transmise à la DAC le '+sgsFr(d):'Copie à la DAC avant le '+sgsFr(L)+(late?' — délai dépassé':' ('+sgsRel(L)+')')}</span>
                 {!d&&<button onClick={()=>{ setEvStatus(s=>({...(s||{}),[k]:{...((s||{})[k]||{}),dac:today,updatedAt:new Date().toISOString()}})); sgsToast('Transmission à la DAC enregistrée',()=>setEvStatus(s=>({...(s||{}),[k]:{...((s||{})[k]||{}),dac:null}}))); }} style={{border:"1px solid currentColor",background:"white",color:"inherit",borderRadius:7,padding:"4px 8px",fontSize:11.5,fontWeight:700,...TAP}}>Transmise aujourd'hui</button>}</div>; })()}
+            {(()=>{ // Documents rédigés dans le Générateur IA pour ce compte rendu
+              const k=sgsEventKey(e);
+              const docs=(ndsArchive||[]).filter(r=>r.evKey===k).sort((a,b)=>String(b.savedAt||"").localeCompare(String(a.savedAt||"")));
+              const dgac=docs.find(r=>r.mode==="dgac");
+              const ET={re:{l:"RAPPORT",bg:"#EFF6FF",c:"#1D4ED8"},dgac:{l:"DGAC",bg:"#FCEBEB",c:"#B91C1C"},as:{l:"ANALYSE",bg:"#F3E8FF",c:"#7C3AED"},nds:{l:"NOTE",bg:"#F1F5F9",c:"#475569"}};
+              return <div style={{marginTop:8}}>
+                <div style={{fontSize:9.5,fontWeight:800,color:"#0F766E",textTransform:"uppercase",letterSpacing:.4,marginBottom:5}}>Documents produits</div>
+                {docs.length===0
+                  ? <div style={{border:"1px solid "+C.border,borderRadius:9,padding:"8px 10px",fontSize:11,color:C.slateL}}>Aucun document rédigé pour ce compte rendu.</div>
+                  : docs.map(r=>{ const t=ET[r.mode]||ET.nds;
+                      return <div key={r.id} style={{border:"1px solid "+C.border,borderRadius:9,padding:"8px 10px",marginBottom:6}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                          <span style={{fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:6,background:t.bg,color:t.c}}>{t.l}</span>
+                          <b style={{fontSize:12,color:C.navy}}>{r.ref}</b></div>
+                        <div style={{fontSize:10.5,color:C.slate,marginTop:2}}>{r.category||""}{r.savedAt?" · rédigé le "+sgsFr(String(r.savedAt).slice(0,10)):""}{r.auteur?" par "+r.auteur:""}</div>
+                      </div>; })}
+                {dgac&&<>
+                  <div style={{fontSize:9.5,fontWeight:800,color:"#0F766E",textTransform:"uppercase",letterSpacing:.4,margin:"8px 0 5px"}}>Transmission à l'autorité</div>
+                  <div style={{background:"#E7F6F0",border:"1px solid #00936A",borderRadius:9,padding:"8px 10px",fontSize:11.5,color:"#065F46",lineHeight:1.45}}>
+                    ✓ <b style={{color:"#047857"}}>Notification DGAC rédigée le {sgsFr(String(dgac.savedAt).slice(0,10))}</b>
+                    <div style={{fontSize:10.5}}>Référence {dgac.ref} · transmission enregistrée automatiquement</div></div>
+                </>}
+              </div>; })()}
             {e.description&&<div style={{fontSize:12,color:C.text,marginTop:6,lineHeight:1.45,background:C.bg,borderRadius:8,padding:"7px 9px"}}>{e.description}</div>}
             <div style={{display:"flex",gap:10,marginTop:10,flexWrap:"wrap",alignItems:"flex-start"}}>
               <div style={{flex:1,minWidth:170}}><div style={{fontSize:10.5,fontWeight:700,color:C.slate,marginBottom:4}}>Statut de ce compte rendu</div><SgsStepper steps={SGS_EV_STATUTS} value={st} onPick={k=>{ if(k===st) return; setEvSt(e,k); sgsToast('Compte rendu : '+(SGS_EV_STATUTS.find(x=>x.k===k)||{}).l.toLowerCase(),()=>setEvSt(e,st)); }}/></div>
@@ -5806,7 +5838,9 @@ function ArchiveCard({ r, onOpen, onDelete }){
   );
 }
 
-function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive }){
+function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive, modesOK, respSgs }){
+  // Le responsable SGS rédige les documents de sécurité ; les notes de service restent à l Administrateur
+  const MODES = modesOK ? NDS_MODES.filter(m=>modesOK.includes(m.id)) : NDS_MODES;
   const [tab,setTab]=useState("editor");           // editor | archive
   const [cat,setCat]=useState(NDS_CATEGORIES[2]);
   const [ref,setRef]=useState(ndsNextRef('NS-OPS'));
@@ -5816,7 +5850,10 @@ function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive })
   const [diffusion,setDiffusion]=useState(["Ensemble des Pilotes (PNT)","Encadrement Opérations"]);
   const [from,setFrom]=useState("Direction des Opérations Aériennes");
   const [approbNom,setApprobNom]=useState("CDB Noureddine ERRAZI");
-  const [mode,setMode]=useState("nds");              // nds | re | as
+  const [mode,setMode]=useState(modesOK?modesOK[0]:"nds");   // nds | re | dgac | as — le SGS démarre sur le rapport d’événement
+  const fonctionSign = mode==="nds" ? "Responsable Désigné Opérations Aériennes" : "Responsable du Système de Gestion de la Sécurité";
+  // Documents de sécurité : signés par le responsable SGS ; notes de service : par le RDOA
+  useEffect(()=>{ setApprobNom(mode==="nds" ? "CDB Noureddine ERRAZI" : (respSgs||SGS_RESP_DEFAUT)); },[mode,respSgs]);
   const [reEvent,setReEvent]=useState("");           // événement sélectionné
   const [reNarratif,setReNarratif]=useState("");     // récit des faits
   const [rePhase,setRePhase]=useState("");
@@ -5919,6 +5956,10 @@ function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive })
       // écrase le nouvel identifiant et deux archives partagent la même clé.
       id: idx>=0?arch[idx].id:(cur.ref+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),
       category: mode==="nds" ? (cat?cat.label:'') : (NDS_MODES.find(m=>m.id===mode)||{}).label || '',
+      mode,                       // nds · re · dgac · as
+      // Clé du compte rendu au format du SGS, pour que la fiche retrouve ses documents
+      evKey: (()=>{ const ev=selectedEvent(); return ev?sgsEventKey(ev):""; })(),
+      auteur: userLabel(sgsCurrentUser())||"",
       savedAt: new Date().toISOString()
     };
     if(idx>=0){ arch[idx]=record; flash('Note mise à jour — '+record.ref); }
@@ -6118,7 +6159,7 @@ ${subject.trim()?'\nPRÉCISIONS COMPLÉMENTAIRES :\n'+subject:''}
 ${keyPoints.trim()?'\nPOINTS À INTÉGRER IMPÉRATIVEMENT :\n'+keyPoints:''}
 
 Exploitant : Sahara Aviation S.A.S. — Afrijet Sahara, base de Dakhla (GMMH).
-Déclarant : ${approbNom}, Responsable Désigné Opérations Aériennes.
+Déclarant : ${approbNom}, ${fonctionSign}.
 Diffusion prévue : ${to||'Non précisée'}`;
     }
 
@@ -6248,7 +6289,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
       setNote({
         ref, date:new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}),
         from, to, classification, revision,
-        approbNom,
+        approbNom, approbFonction:fonctionSign,
         docType:(NDS_MODES.find(m=>m.id===mode)||NDS_MODES[0]).docType,
         objet:parsed.objet||'', intro:parsed.intro||'',
         sections:ndsRenumber(parsed.sections||[]),
@@ -6432,7 +6473,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
         <div>
           <FLabel>Type de document</FLabel>
           <CustomSelect value={mode} onChange={selectMode} icon="📋" required
-            options={NDS_MODES.map(m=>({value:m.id,label:m.label,sub:m.hint}))}/>
+            options={MODES.map(m=>({value:m.id,label:m.label,sub:m.hint}))}/>
         </div>
 
         {/* ── Événement : rapport interne et notification DGAC ── */}
@@ -7359,7 +7400,8 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
       {/* Opérations : consultation seule des documents */}
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"}/>}
       {effectiveActive==="docavion" && <FormDocAvion readOnly={profileId==="ops"||profileId==="eqp"}/>}
-      {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}/>}
+      {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}
+        modesOK={profileId==="sgs"?["re","dgac","as"]:null} respSgs={sgs?sgs.responsable:null}/>}
       {effectiveActive==="clients"  && <FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
