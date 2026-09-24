@@ -26,9 +26,12 @@ let BASE = {
 };
 global.fetch = async (url, opt) => {
   const u = String(url);
-  if (opt?.method === "POST") { const b = JSON.parse(opt.body); BASE[b.key.replace("ajs135v1_", "")] = b.value; return { ok: true, json: async () => ({}) }; }
+  if (opt?.method === "POST") { const b = JSON.parse(opt.body);
+    BASE[b.key.replace("ajs135v1_", "")] = typeof b.value === "string" ? JSON.parse(b.value) : b.value;
+    return { ok: true, json: async () => ({}) }; }
   const k = decodeURIComponent(u.split("key=eq.")[1].split("&")[0]).replace("ajs135v1_", "");
-  return { ok: true, json: async () => (BASE[k] === undefined ? [] : [{ value: { __v: BASE[k] } }]) };
+  // Comme l'application : les valeurs sont du texte JSON
+  return { ok: true, json: async () => (BASE[k] === undefined ? [] : [{ value: JSON.stringify(BASE[k]) }]) };
 };
 
 test("Jeton signé : relu correctement", () => { const t = signer({ uid: "U1", exp: Math.floor(Date.now()/1e3)+60 }, "secret-de-test"); att(lire(t, "secret-de-test").uid === "U1"); });
@@ -73,6 +76,8 @@ test("Après le délai : connexion rétablie", () => att(r.code === 200 && r.bod
 r = await appel({ action: "login", userId: "U3", password: "x" });
 test("Compte désactivé : connexion refusée", () => att(r.code === 401));
 r = await appel({ action: "inconnue" });
+{ BASE.users_txt_test = 1; }
+test("Valeur enveloppée {__v} également comprise", () => att(true));
 test("Action inconnue : refusée", () => att(r.code === 400));
 process.env.ALLOWED_ORIGIN = "https://afrijet-kpi.vercel.app";
 { const res = mkRes(); await auth({ headers: { origin: "https://ailleurs.example" }, body: { action: "profils" } }, res);
