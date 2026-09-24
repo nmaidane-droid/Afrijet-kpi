@@ -11003,36 +11003,65 @@ function AppInner() {
 
 // Modal de restauration : choix entre la sauvegarde cloud et un fichier local.
 // Extrait d'AppMain ; ne dépend que de ses trois props.
+// Reconnaît les deux formats : export de l application (listes à la racine)
+// et sauvegarde automatique du dépôt GitHub (listes sous la clé « donnees »).
+function restoreNormaliser(data){
+  if(!data||typeof data!=="object") return null;
+  if(data.donnees&&typeof data.donnees==="object")
+    return {donnees:{exportDate:data.genere||data.exportDate,...data.donnees}, origine:"sauvegarde automatique · dépôt GitHub", date:data.genere||data.exportDate};
+  if(Array.isArray(data.flights)||Array.isArray(data.crew)||data.sgsHazards)
+    return {donnees:data, origine:data.source||"export manuel", date:data.exportDate};
+  return null;
+}
+// Résumé lisible : ce que contient la copie, avant de confirmer
+function restoreResume(d){
+  const n=(k)=>Array.isArray(d[k])?d[k].length:0;
+  const pl=(v,s,p)=>v+" "+(v>1?(p||s+"s"):s);
+  return [pl(n("flights"),"vol"), pl(n("sgsHazards"),"danger"), pl(n("sgsActions"),"action"),
+          pl(n("satisfaction"),"enquête"), pl(n("crew"),"membre d'équipage","membres d'équipage")].join(" · ");
+}
+const restoreDate=v=>v?new Date(v).toLocaleString("fr-FR",{day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"}):"date inconnue";
+
 function RestoreModal({ onClose, setRestoreProgress, onImport }){
+  // Sept copies glissantes écrites chaque nuit par le serveur, une par jour de la semaine
+  const [copies,setCopies]=useState(null);
+  useEffect(()=>{ (async()=>{
+    const out=[];
+    for(let j=0;j<7;j++){
+      try{ const d=await sbGet(PFX+"backup_j"+j); if(d&&d.exportDate) out.push(d); }catch(e){ logSilent(e); }
+    }
+    if(!out.length){ try{ const d=await sbGet(PFX+"lastBackupData"); if(d) out.push(d); }catch(e){ logSilent(e); } }
+    out.sort((a,b)=>String(b.exportDate).localeCompare(String(a.exportDate)));
+    setCopies(out);
+  })(); },[]);
   const rSleep=(ms)=>new Promise(r=>setTimeout(r,ms));   // courte pause entre les étapes affichées
   return (
         <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div style={{background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
             <div style={{fontSize:32,textAlign:"center",marginBottom:12}}>📦</div>
             <div style={{fontWeight:800,fontSize:16,color:C.navy,textAlign:"center",marginBottom:8}}>Restaurer les données</div>
-            <div style={{fontSize:13,color:C.slate,textAlign:"center",lineHeight:1.6,marginBottom:20}}>Choisissez la source de restauration.</div>
+            <div style={{fontSize:12.5,color:C.slate,textAlign:"center",lineHeight:1.5,marginBottom:16}}>Choisissez la copie à recharger. Rien n'est modifié tant que vous n'avez pas confirmé.</div>
+            {copies===null&&<div style={{fontSize:12,color:C.slateL,textAlign:"center",marginBottom:12}}>Lecture des copies…</div>}
+            {copies&&copies.length===0&&<div style={{fontSize:12,color:"#B45309",background:"#FAEEDA",borderRadius:9,padding:"9px 11px",marginBottom:12,lineHeight:1.45}}>Aucune copie dans Supabase. La sauvegarde automatique s'exécute chaque nuit ; vous pouvez aussi utiliser un fichier.</div>}
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <button onClick={async()=>{
-                onClose();
-                const steps=["Récupération depuis Supabase","Restauration des données","Finalisation"];
-                setRestoreProgress({title:"Restauration en cours",icon:"📦",steps,currentStep:0,pct:15});
-                const data=await sbGet(PFX+"lastBackupData");
-                if(!data){setRestoreProgress(null);uiAlert("Aucun backup trouvé dans le cloud.");return;}
-                setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
-                const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
-                if(await uiConfirm("Backup Supabase du "+dateStr+".\n\nConfirmer la restauration ?")){
-                  if(onImport){onImport(data);}
-                  setRestoreProgress(p=>({...p,currentStep:2,pct:85}));
-                  await rSleep(400);
-                  setRestoreProgress(p=>({...p,currentStep:3,pct:100}));
-                  await rSleep(600);
-                  setRestoreProgress(null);
-                } else {
-                  setRestoreProgress(null);
-                }
-              }} style={{height:48,background:"#EFF6FF",border:"1.5px solid #0369A1",borderRadius:10,color:"#0369A1",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                ☁️ Depuis Supabase (cloud)
-              </button>
+              {(copies||[]).slice(0,7).map((d,k)=>(
+                <button key={k} onClick={async()=>{
+                  onClose();
+                  const steps=["Lecture de la copie","Restauration des données","Finalisation"];
+                  setRestoreProgress({title:"Restauration en cours",icon:"☁️",steps,currentStep:0,pct:15});
+                  await rSleep(200);
+                  setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
+                  if(await uiConfirm("Copie du "+restoreDate(d.exportDate)+"\n"+restoreResume(d)+"\n\nLes données actuelles seront remplacées. Le journal d'audit reste intact.\n\nConfirmer la restauration ?")){
+                    if(onImport){onImport(d);}
+                    setRestoreProgress(p=>({...p,currentStep:2,pct:85})); await rSleep(400);
+                    setRestoreProgress(p=>({...p,currentStep:3,pct:100})); await rSleep(600);
+                    setRestoreProgress(null);
+                  } else setRestoreProgress(null);
+                }} style={{textAlign:"left",padding:"11px 12px",background:k===0?"#EFF6FF":"white",border:"1.5px solid "+(k===0?"#0369A1":C.border),borderRadius:12,cursor:"pointer",...TAP}}>
+                  <div style={{fontSize:13.5,fontWeight:800,color:C.navy}}>☁️ {k===0?"Copie la plus récente":"Copie du "+restoreDate(d.exportDate).split(" à ")[0]}</div>
+                  <div style={{fontSize:11.5,color:"#0369A1",fontWeight:700,marginTop:3}}>{restoreDate(d.exportDate)}{d.source?" · "+d.source:""}</div>
+                  <div style={{fontSize:11,color:C.slate,marginTop:2}}>{restoreResume(d)}</div>
+                </button>))}
               <button onClick={()=>{
                 onClose();
                 const input=document.createElement("input");
@@ -11044,10 +11073,12 @@ function RestoreModal({ onClose, setRestoreProgress, onImport }){
                     try{
                       const steps=["Lecture du fichier","Restauration des données","Finalisation"];
                       setRestoreProgress({title:"Restauration en cours",icon:"📂",steps,currentStep:0,pct:20});
-                      const data=JSON.parse(ev.target.result);
+                      const brut=JSON.parse(ev.target.result);
+                      const lu=restoreNormaliser(brut);
+                      if(!lu){ setRestoreProgress(null); uiAlert("⚠️ Ce fichier n'est ni un export de l'application, ni une sauvegarde automatique. Rien n'a été modifié."); return; }
+                      const data=lu.donnees;
                       setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
-                      const dateStr=data.exportDate?new Date(data.exportDate).toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}):"date inconnue";
-                      if(await uiConfirm("Fichier local du "+dateStr+".\n\nConfirmer la restauration ?")){
+                      if(await uiConfirm("Fichier du "+restoreDate(lu.date)+"\n"+lu.origine+"\n"+restoreResume(data)+"\n\nLes données actuelles seront remplacées. Le journal d'audit reste intact.\n\nConfirmer la restauration ?")){
                         if(onImport){onImport(data);}
                         setRestoreProgress(p=>({...p,currentStep:2,pct:85}));
                         await rSleep(400);
@@ -11063,7 +11094,8 @@ function RestoreModal({ onClose, setRestoreProgress, onImport }){
                 };
                 input.click();
               }} style={{height:48,background:"#F0FDF4",border:"1.5px solid #00936A",borderRadius:10,color:"#00936A",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                📂 Depuis fichier local (JSON)
+                📂 Depuis un fichier
+                <div style={{fontSize:10.5,fontWeight:400,marginTop:2,opacity:.85}}>Export manuel, ou sauvegarde téléchargée depuis GitHub</div>
               </button>
               <button onClick={()=>onClose()}
                 style={{height:44,background:"#F1F5F9",border:"1.5px solid #CBD5E1",borderRadius:10,color:"#64748B",fontSize:13,fontWeight:600,cursor:"pointer"}}>
