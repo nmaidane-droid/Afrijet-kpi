@@ -8787,8 +8787,11 @@ const AUDIT_MAXV=240;
 const auditV=v=>{ if(v==null||v==="") return null; const s=typeof v==="string"?v:JSON.stringify(v); return s.length>AUDIT_MAXV?s.slice(0,AUDIT_MAXV)+"…":s; };
 const auditId=(o,i)=>o&&typeof o==="object"?(o.id||o.ref||(o.num&&o.date?o.num+" "+o.date:null)||o.immat||o.timestamp||o.demoId||("#"+i)):("#"+i);
 const auditName=o=>o&&typeof o==="object"?(o.ref||o.immat||o.num&&o.date&&(o.num+" "+o.date)||(o.nom&&(o.nom+" "+(o.prenom||"")).trim())||o.titre||o.id||""):"";
+// Champs recalculés par l'application à partir de la saisie : ils ne disent rien de l'intention
+// de la personne et brouillent la lecture du journal. Seule la saisie d'origine est retenue.
+const AUDIT_CALCULES=new Set(["updatedAt","consoH","fuelPct","load","dureeMin","flightMin","delayMin","consomme","moyenne","repondues","ttaf","cycles","nextCheckH","bCheckH","cCheckH"]);
 function auditFields(a,b){ const ch={}; const ks=new Set([...Object.keys(a||{}),...Object.keys(b||{})]);
-  ks.forEach(k=>{ if(k==="updatedAt") return; const x=auditV((a||{})[k]), y=auditV((b||{})[k]); if(x!==y) ch[k]=[x,y]; }); return ch; }
+  ks.forEach(k=>{ if(AUDIT_CALCULES.has(k)) return; const x=auditV((a||{})[k]), y=auditV((b||{})[k]); if(x!==y) ch[k]=[x,y]; }); return ch; }
 
 // ══ Consultation du journal d'audit (lot 3) ═════════════════════════
 const AUDIT_MODULES={sgsHazards:"Dangers",sgsActions:"Actions",sgsEvStatus:"Statut et analyse des comptes rendus",safety:"Comptes rendus",flights:"Vols",crew:"Équipage",aircraft:"Avions",
@@ -8799,7 +8802,11 @@ const AUDIT_MODULES={sgsHazards:"Dangers",sgsActions:"Actions",sgsEvStatus:"Stat
   alertHist:"Alertes (automatique)",journal:"Journal d'audit",export:"Exports",installation:"Installation"};
 const AUDIT_FIELDS={statut:"Statut",titre:"Intitulé",description:"Description",P:"Probabilité",G:"Gravité",P2:"Probabilité résiduelle",G2:"Gravité résiduelle",mesures:"Mesures",strategie:"Stratégie",
   echeance:"Échéance",responsable:"Responsable",critere:"Critère d'efficacité",preuve:"Preuve",acceptation:"Acceptation du risque",annulation:"Annulation",hazardId:"Danger lié",type:"Type",
-  analyse:"Fiche d'analyse",recu:"Réception",dac:"Transmission DAC",date:"Date",num:"Vol",immat:"Immatriculation",valeur:"Valeur",profil:"Profil",fonction:"Fonction",motif:"Motif",document:"Document",elements:"Éléments"};
+  analyse:"Fiche d'analyse",recu:"Réception",dac:"Transmission DAC",date:"Date",num:"Vol",immat:"Immatriculation",valeur:"Valeur",profil:"Profil",fonction:"Fonction",motif:"Motif",document:"Document",elements:"Éléments",
+  status:"Statut",pax:"Passagers réels",depReal:"Off Block (GMT)",takeOff:"Take Off (GMT)",landing:"Landing (GMT)",arrReal:"On Block (GMT)",
+  carbDep:"Carburant départ (kg)",carbArr:"Carburant arrivée (kg)",causeRetard:"Cause du retard",from:"Départ",to:"Arrivée",dep:"Heure de départ",arr:"Heure d'arrivée",
+  clientId:"Client",acId:"Appareil",cm1:"Commandant",cm2:"Copilote",cc:"Chef de cabine",sieges:"Sièges",nps:"Satisfaction (sur 10)",
+  mels:"MEL",exp:"Échéance",sev:"Catégorie",sys:"Système",notes:"Notes de l'enquête",commentaire:"Commentaire"};
 const auditMod=m=>AUDIT_MODULES[m]||m;
 const auditFld=f=>AUDIT_FIELDS[f]||f;
 const auditTs=s=>{ try{ const d=new Date(s); return d.toLocaleDateString('fr-FR')+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }catch(_e){ return s; } };
