@@ -201,6 +201,46 @@ function unwrapEnv(raw){
 
 const PERSIST_DEBOUNCE_MS = 400;
 
+// ── Fusion élément par élément ────────────────────────────────────────────
+// Chaque type de donnée est rangé dans une seule case (tous les vols ensemble, par exemple).
+// Renvoyer la liste entière ferait disparaître le travail d'un autre appareil effectué
+// entre-temps. On compare donc trois états : la base (dernière version connue du serveur),
+// le local (ce que la personne a modifié) et le distant (ce qui s'y trouve maintenant),
+// et l'on n'applique au distant que ce qui a réellement changé ici.
+const SYNC_CONFLITS = [];
+function itemId(o,i){
+  if(!o||typeof o!=="object") return "i"+i;
+  const base=String((o.id!=null?o.id:(o.ref!=null?o.ref:(o.key!=null?o.key:(o.num!=null?o.num:"")))))
+    + (o.date?"|"+o.date:"") + (o.dep?"|"+o.dep:"") + (o.from?"|"+o.from:"") + (o.to?"|"+o.to:"");
+  return base || ("i"+i);
+}
+const memeValeur=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function fusionner(base, local, distant, cle){
+  // Listes : fusion par element
+  if(Array.isArray(local)&&Array.isArray(distant)){
+    const B=new Map((Array.isArray(base)?base:[]).map((o,i)=>[itemId(o,i),o]));
+    const L=new Map(local.map((o,i)=>[itemId(o,i),o]));
+    const D=new Map(distant.map((o,i)=>[itemId(o,i),o]));
+    const out=new Map(D);
+    L.forEach((o,id)=>{
+      const b=B.get(id), d=D.get(id);
+      if(memeValeur(o,b)) return;                       // rien change ici
+      if(d&&b&&!memeValeur(d,b)&&!memeValeur(d,o)) SYNC_CONFLITS.push({cle,id});  // touche des deux cotes
+      out.set(id,o);                                    // notre version prime
+    });
+    B.forEach((o,id)=>{ if(!L.has(id)&&D.has(id)&&memeValeur(D.get(id),o)) out.delete(id); });  // supprime ici
+    return [...out.values()];
+  }
+  // Dictionnaires : fusion par cle
+  if(local&&distant&&typeof local==="object"&&typeof distant==="object"&&!Array.isArray(local)&&!Array.isArray(distant)){
+    const out={...distant}, b=base&&typeof base==="object"?base:{};
+    Object.keys(local).forEach(k=>{ if(!memeValeur(local[k],b[k])) out[k]=local[k]; });
+    Object.keys(b).forEach(k=>{ if(!(k in local)&&memeValeur(distant[k],b[k])) delete out[k]; });
+    return out;
+  }
+  return local;   // valeur simple : derniere saisie retenue
+}
+
 // État de synchronisation partagé : nombre d'écritures en attente et
 // fonctions de renvoi, pour l'indicateur du bandeau et le retour du réseau.
 const SYNC = { pending:new Set(), flushers:new Set(), listeners:new Set(), lastError:null };
@@ -227,6 +267,8 @@ function usePersist(key, init) {
   const timer    = useRef(null);   // anti-rebond
   const pending  = useRef(null);   // enveloppe en attente d'envoi
 
+  const baseRef  = useRef(null);   // dernière version connue du serveur, point de comparaison de la fusion
+  const setValRef = useRef(null);
   const valRef = useRef(null);      // valeur courante, pour comparer avant / après (journal d'audit)
   const [val, setVal] = useState(() => {
     const s = lsGet(fk);
@@ -244,13 +286,32 @@ function usePersist(key, init) {
     const env = pending.current;
     if (!env) return;
     pending.current = null;
+    // Relecture juste avant d'écrire : on n'applique que nos propres changements
+    (async () => {
+      try{
+        const brut = await sbGet(fk);
+        if(brut!==null){
+          const d = unwrapEnv(brut);
+          if(!memeValeur(d.v, baseRef.current)){
+            const fusion = fusionner(baseRef.current, env.__v, d.v, fk);
+            env.__v = fusion;
+            valRef.current = fusion; localT.current = env.__t;
+            lsSet(fk, JSON.stringify(env));
+            if(setValRef.current) setValRef.current(fusion);
+          }
+        }
+      }catch(e){ logSilent(e); }
+      ecrire();
+    })();
+    function ecrire(){
     sbSet(fk, env).then(ok => {
       // Échec : on garde l'enveloppe pour réessayer au retour du réseau,
       // au prochain changement ou à la prochaine ouverture.
       if (!ok) { if (!pending.current) pending.current = env; SYNC.lastError = fk; }
-      else { SYNC.pending.delete(fk); if (SYNC.lastError===fk) SYNC.lastError=null; }
+      else { SYNC.pending.delete(fk); baseRef.current = env.__v; if (SYNC.lastError===fk) SYNC.lastError=null; }
       SYNC.notify();
     });
+    }
   };
   const schedule = env => {
     pending.current = env;
@@ -273,6 +334,7 @@ function usePersist(key, init) {
       if (adopt) {
         localT.current = u.t;
         valRef.current = u.v;
+        baseRef.current = u.v;
         setVal(u.v);
         lsSet(fk, JSON.stringify({__v:u.v, __t:u.t}));
       } else {
@@ -282,6 +344,27 @@ function usePersist(key, init) {
       }
     });
     return () => { alive = false; };
+  }, [fk]);
+
+  // Relecture régulière : un écran resté ouvert ne travaille plus sur des données périmées.
+  // On n'adopte que si rien n'est en attente d'envoi ici, pour ne pas effacer une saisie en cours.
+  useEffect(() => {
+    let vivant=true;
+    const relire=async()=>{
+      if(!vivant||pending.current||timer.current||document.visibilityState==="hidden") return;
+      try{
+        const brut=await sbGet(fk); if(!vivant||brut===null) return;
+        const u=unwrapEnv(brut);
+        if(u.t>localT.current&&!memeValeur(u.v,valRef.current)){
+          localT.current=u.t; baseRef.current=u.v; valRef.current=u.v; setVal(u.v);
+          lsSet(fk, JSON.stringify({__v:u.v, __t:u.t}));
+        }
+      }catch(e){ logSilent(e); }
+    };
+    const t=setInterval(relire,30000);
+    const onShow=()=>{ if(document.visibilityState==="visible") relire(); };
+    document.addEventListener("visibilitychange",onShow);
+    return ()=>{ vivant=false; clearInterval(t); document.removeEventListener("visibilitychange",onShow); };
   }, [fk]);
 
   // Vider la file avant que la page ne disparaisse
@@ -295,7 +378,7 @@ function usePersist(key, init) {
     };
   }, [fk]);
 
-  valRef.current = val;
+  valRef.current = val; setValRef.current = setVal;
   // Modification locale : calculée tout de suite (et non pendant le rendu), pour la journaliser
   // avec la personne connectée. Les données reçues d'un autre appareil ne passent pas par ici.
   const set = v => {
