@@ -8725,7 +8725,7 @@ function useCountdown(){ const [until,setUntil]=useState(0), [,tick]=useState(0)
 // dans l'ordre, vers la fonction Supabase audit_append (horodatage serveur, chaînage SHA-256,
 // table inaltérable). Sans réseau, elles attendent dans une file locale.
 const AUDIT_QKEY=PFX+"audit_queue";
-const AUDIT_SKIP=/demo|backup|lastBackup|pref|draft|filter|period|users|totp|audit/i;   // réglages et données techniques : non journalisés
+const AUDIT_SKIP=/demo|backup|lastBackup|pref|draft|filter|period|users|totp|audit|alertHist|dismissed|kpis/i;   // réglages, calculs et alertes automatiques : non journalisés
 let AUDIT_SYSTEM=0;   // > 0 : opérations automatiques (corrections, démonstration), attribuées au « système »
 function auditAsSystem(fn){ AUDIT_SYSTEM++; try{ return fn(); } finally { AUDIT_SYSTEM--; } }
 function auditDevice(){ try{ const u=navigator.userAgent||""; return (/iPhone|iPad/.test(u)?"iOS":/Android/.test(u)?"Android":/Windows/.test(u)?"Windows":/Mac/.test(u)?"Mac":"Autre")+(window.innerWidth<700?" · téléphone":" · grand écran"); }catch(_e){ return ""; } }
@@ -8759,7 +8759,9 @@ function auditFields(a,b){ const ch={}; const ks=new Set([...Object.keys(a||{}),
 const AUDIT_MODULES={sgsHazards:"Dangers",sgsActions:"Actions",sgsEvStatus:"Statut et analyse des comptes rendus",safety:"Comptes rendus",flights:"Vols",crew:"Équipage",aircraft:"Avions",
   clients:"Clients",sgsManual:"Indicateurs saisis",sgsMeetings:"Safety Meetings",sgsRevues:"Revues de sécurité",sgsChanges:"Changements",sgsAudits:"Audits",sgsFormations:"Formations",
   sgsFrat:"FRAT",sgsMeda:"MEDA",sgsFdm:"FDM",sgsItw:"Interviews",sgsReco:"Recommandations",sgsPlan:"Planning SGS",sgsOsv:"Contrôles OSV",sgsResponsable:"Signataire SGS",
-  connexion:"Connexions",comptes:"Comptes",["export PDF"]:"Exports PDF",essai:"Installation"};
+  connexion:"Connexions",comptes:"Comptes",["export PDF"]:"Exports PDF",essai:"Installation",
+  melHist:"Historique des MEL",fin:"Finances",maint:"Maintenance",satisfaction:"Enquêtes de satisfaction",
+  alertHist:"Alertes (automatique)",journal:"Journal d'audit",export:"Exports",installation:"Installation"};
 const AUDIT_FIELDS={statut:"Statut",titre:"Intitulé",description:"Description",P:"Probabilité",G:"Gravité",P2:"Probabilité résiduelle",G2:"Gravité résiduelle",mesures:"Mesures",strategie:"Stratégie",
   echeance:"Échéance",responsable:"Responsable",critere:"Critère d'efficacité",preuve:"Preuve",acceptation:"Acceptation du risque",annulation:"Annulation",hazardId:"Danger lié",type:"Type",
   analyse:"Fiche d'analyse",recu:"Réception",dac:"Transmission DAC",date:"Date",num:"Vol",immat:"Immatriculation",valeur:"Valeur",profil:"Profil",fonction:"Fonction",motif:"Motif",document:"Document",elements:"Éléments"};
