@@ -35,15 +35,17 @@ async function kvGet(key) {
     { headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` } });
   if (!r.ok) throw new Error("lecture " + key + " : " + r.status);
   const rows = await r.json();
-  const v = rows?.[0]?.value;
-  return v && typeof v === "object" && "__v" in v ? v.__v : v;
+  let v = rows?.[0]?.value;
+  // L'application enregistre les valeurs en texte JSON ; certaines portent une enveloppe {__v}
+  if (typeof v === "string") { try { v = JSON.parse(v); } catch { /* valeur brute */ } }
+  return v && typeof v === "object" && !Array.isArray(v) && "__v" in v ? v.__v : v;
 }
 async function kvSet(key, value) {
   await fetch(`${process.env.SUPABASE_URL}/rest/v1/kv_store`, {
     method: "POST",
     headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
       "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-    body: JSON.stringify({ key: PFX + key, value }),
+    body: JSON.stringify({ key: PFX + key, value: JSON.stringify(value) }),
   });
 }
 
