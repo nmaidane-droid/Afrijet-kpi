@@ -24,7 +24,7 @@ function extract(name){
     else if(!fm&&depth===0&&(ch===';'||ch==='\n')) return code.slice(i,k+1);
   }
 }
-const names=['AUDIT_MAXV','auditV','auditId','auditName','auditFields','SGS_ACC_FONCTIONS','sgsAccAllowed','sgsAccCheck','sgsPlanAuto','sgsDureeMin','sgsCrtsvDac','sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['AUDIT_MAXV','AUDIT_CALCULES','auditV','auditId','auditName','auditFields','SGS_ACC_FONCTIONS','sgsAccAllowed','sgsAccCheck','sgsPlanAuto','sgsDureeMin','sgsCrtsvDac','sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -157,6 +157,7 @@ console.log('\nClôture d\'un danger : acceptation du risque résiduel');
 
 console.log('\nJournal d\'audit : comparaison avant / après');
 test('champ modifié : valeur avant et après', ()=>{ const c=T.auditFields({statut:'ouvert',titre:'A'},{statut:'maitrise',titre:'A'}); attendu(JSON.stringify(c)==='{"statut":["ouvert","maitrise"]}','obtenu '+JSON.stringify(c)); });
+test('valeurs recalculées écartées du journal', ()=>attendu(Object.keys(T.auditFields({pax:5,consoH:800,fuelPct:70,load:30},{pax:9,consoH:900,fuelPct:60,load:50})).join()==='pax','obtenu '+Object.keys(T.auditFields({pax:5,consoH:800},{pax:9,consoH:900})).join()));
 test('updatedAt ignoré', ()=>attendu(Object.keys(T.auditFields({updatedAt:'1'},{updatedAt:'2'})).length===0,'faux'));
 test('valeur longue tronquée', ()=>attendu(T.auditV('x'.repeat(500)).length===T.AUDIT_MAXV+1,'faux'));
 test('identifiant stable : id, puis réf., puis vol et date', ()=>attendu(T.auditId({id:'H1',ref:'DG-1'},0)==='H1'&&T.auditId({ref:'DG-2'},0)==='DG-2'&&T.auditId({num:'CN-KTA',date:'2026-09-01'},0)==='CN-KTA 2026-09-01','faux'));
