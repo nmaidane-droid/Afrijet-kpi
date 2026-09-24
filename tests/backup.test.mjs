@@ -1,5 +1,5 @@
 // Tests de la sauvegarde hors site (api/backup.js), avec Supabase et l'envoi de courriel simulés.
-import { buildBackup, sbFetchAll, cheminDuJour, deposerGitHub, aSupprimer } from "../api/backup.js";
+import { buildBackup, sbFetchAll, cheminDuJour, deposerGitHub, aSupprimer, cleDuJour } from "../api/backup.js";
 import handler from "../api/backup.js";
 let ok = 0, ko = 0;
 const test = (n, f) => { try { f(); console.log("  ✓", n); ok++; } catch (e) { console.log("  ✗", n, "\n     ", e.message); ko++; } };
@@ -34,7 +34,7 @@ const rows = await sbFetchAll("https://x", "k", "kv_store", "key,value");
 test("lecture paginée complète (1001 lignes)", () => att(rows.length === 1001, "obtenu " + rows.length));
 
 // Dépôt simulé dans le dépôt GitHub, puis appel complet du point d'entrée
-let depots = [];
+let depots = []; let ecrits = [];
 global.fetch = async (url, opt) => {
   const u = String(url);
   if (u.includes("api.github.com")) {
@@ -42,6 +42,7 @@ global.fetch = async (url, opt) => {
     depots.push({ url: u, corps: JSON.parse(opt.body) });
     return { ok: true, status: 201, json: async () => ({}), text: async () => "" };
   }
+  if (u.includes("/rest/v1/kv_store") && opt?.method === "POST") { ecrits.push(JSON.parse(opt.body)); return { ok: true, json: async () => ({}) }; }
   if (u.includes("audit_log")) return { ok: true, json: async () => audit };
   return { ok: true, json: async () => kv };
 };
@@ -79,6 +80,27 @@ test("sans jeton GitHub : sauvegarde produite, dépôt signalé impossible", () 
   test("les fichiers de plus de 30 jours sont retirés", () => att(vieux.join() === "2026-08-20,2026-07-02", vieux.join()));
   test("les 30 derniers jours sont gardés", () => att(!vieux.includes("2026-09-01") && !vieux.includes("2026-09-24")));
   test("un nom sans date est ignoré", () => att(aSupprimer([{ name: "README.md", path: "x", sha: "s" }], "2026-09-24").length === 0));
+}
+
+// ── Copie dans Supabase : sept exemplaires glissants ──
+test("clé du jour : un exemplaire par jour de la semaine", () => {
+  const c = cleDuJour("2026-09-24T03:00:00Z");   // jeudi
+  att(c === "backup_j4", c);
+  att(cleDuJour("2026-09-27T03:00:00Z") === "backup_j0");   // dimanche
+});
+{
+  ecrits = []; depots = [];
+  process.env.GITHUB_TOKEN = "jeton";
+  const r = mkRes(); await handler({ headers: { authorization: "Bearer s3cret" } }, r);
+  const cles = ecrits.map(e => e.key);
+  test("la copie du jour est écrite dans Supabase", () => att(cles.some(k => /backup_j\d$/.test(k)), cles.join()));
+  test("la copie la plus récente est mise à jour", () => att(cles.includes("ajs135v1_lastBackupData")));
+  test("elle est au format de l export, directement restaurable", () => {
+    const v = JSON.parse(ecrits[0].value);
+    att(v.exportDate && Array.isArray(v.flights) && v.flights.length === 2, Object.keys(v).join());
+  });
+  test("le journal n est pas recopié dans cette copie", () => att(!("journal" in JSON.parse(ecrits[0].value))));
+  test("le résultat signale la copie Supabase", () => att(r.body.copieSupabase === true));
 }
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko ? 1 : 0);
