@@ -24,7 +24,7 @@ function extract(name){
     else if(!fm&&depth===0&&(ch===';'||ch==='\n')) return code.slice(i,k+1);
   }
 }
-const names=['AUDIT_MAXV','AUDIT_CALCULES','auditV','auditId','auditName','auditFields','SGS_ACC_FONCTIONS','sgsAccAllowed','sgsAccCheck','sgsPlanAuto','sgsDureeMin','sgsCrtsvDac','sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
+const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','auditV','auditId','auditName','auditFields','SGS_ACC_FONCTIONS','sgsAccAllowed','sgsAccCheck','sgsPlanAuto','sgsDureeMin','sgsCrtsvDac','sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
 const ctx={console}; vm.createContext(ctx);
@@ -162,6 +162,38 @@ test('updatedAt ignoré', ()=>attendu(Object.keys(T.auditFields({updatedAt:'1'},
 test('valeur longue tronquée', ()=>attendu(T.auditV('x'.repeat(500)).length===T.AUDIT_MAXV+1,'faux'));
 test('identifiant stable : id, puis réf., puis vol et date', ()=>attendu(T.auditId({id:'H1',ref:'DG-1'},0)==='H1'&&T.auditId({ref:'DG-2'},0)==='DG-2'&&T.auditId({num:'CN-KTA',date:'2026-09-01'},0)==='CN-KTA 2026-09-01','faux'));
 test('libellé lisible : réf. d\'abord', ()=>attendu(T.auditName({id:'H1',ref:'DG-006'})==='DG-006','faux'));
+
+// ── Fusion élément par élément (travail simultané de plusieurs personnes) ──
+console.log('\nEnregistrements simultanés');
+{
+  const base=[{id:"A",status:"En vol"},{id:"B",status:"Planifie"}];
+  const local=[{id:"A",status:"Termine"},{id:"B",status:"Planifie"}];      // le pilote clôture A
+  const distant=[{id:"A",status:"En vol"},{id:"B",status:"En vol"}];       // les Ops passent B en vol
+  const f=T.fusionner(base,local,distant,"flights");
+  test("clôture du pilote conservée", ()=>attendu(f.find(x=>x.id==="A").status==="Termine","A écrasé"));
+  test("modification des Ops conservée", ()=>attendu(f.find(x=>x.id==="B").status==="En vol","B écrasé"));
+}
+{
+  const base=[{id:"A",pax:5}];
+  const local=[{id:"A",pax:5},{id:"C",pax:9}];        // ajout ici
+  const distant=[{id:"A",pax:5},{id:"D",pax:3}];      // ajout ailleurs
+  const f=T.fusionner(base,local,distant,"flights");
+  test("les deux ajouts coexistent", ()=>attendu(f.length===3&&f.some(x=>x.id==="C")&&f.some(x=>x.id==="D"),"perdu"));
+}
+{
+  const base=[{id:"A"},{id:"B"}];
+  const local=[{id:"A"}];                             // suppression ici
+  const distant=[{id:"A"},{id:"B"}];
+  const f=T.fusionner(base,local,distant,"flights");
+  test("suppression locale appliquée", ()=>attendu(f.length===1&&f[0].id==="A","suppression perdue"));
+}
+{
+  const base={a:1,b:2}, local={a:9,b:2}, distant={a:1,b:7};
+  const f=T.fusionner(base,local,distant,"kpis");
+  test("dictionnaire : chaque clé garde sa dernière valeur", ()=>attendu(f.a===9&&f.b===7,"écrasé"));
+}
+test("identifiant stable d'un vol", ()=>attendu(T.itemId({num:"CN-KTA",date:"2026-09-24",dep:"09:00",from:"CMN",to:"FEZ"},0)===T.itemId({num:"CN-KTA",date:"2026-09-24",dep:"09:00",from:"CMN",to:"FEZ",pax:9},0),"instable"));
+
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
