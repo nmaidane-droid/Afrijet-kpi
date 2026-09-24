@@ -95,7 +95,8 @@ class ErrorBoundary extends React.Component {
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://zulwubuzuylmwkittnbg.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1bHd1YnV6dXlsbXdraXR0bmJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3Mjk5MjQsImV4cCI6MjA5ODMwNTkyNH0.Bt2MXASzrqWPaxTxo7ImZu-FtdjahLG9FLOMIgz9SWA";
-const FR24_TOKEN = "019f19a2-3af8-7196-b26a-9868009082bc|u8VFOrSqd0euZF0c9CZk0e8gCbQcE0GE6UPMhLRib8f2c0cf";
+// Position et météo passent par le serveur (api/fr24.js, api/wx.js) : aucune clé dans la page.
+const API_FR24 = "/api/fr24", API_WX = "/api/wx";
 const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813f67ec439268";
 
 const PROFILES = [
@@ -824,9 +825,7 @@ function useMetar(iata) {
     if(!iata||iata.length<3) return;
     setFc("?"); setRaw("");
     const icao = IATA_TO_ICAO[iata.toUpperCase()] || iata.toUpperCase();
-    fetch(`https://api.checkwx.com/metar/${icao}/decoded`, {
-      headers: {"X-API-Key":"add2685cda494119a5465ec664852fed","Accept":"application/json"}
-    })
+    fetch(`${API_WX}?icao=${icao}`, { headers: {"Accept":"application/json"} })
       .then(r=>r.json())
       .then(data=>{
         const m = data?.data?.[0];
@@ -966,8 +965,7 @@ function parseState(s) {
 async function fetchByIcao24(registration) {
   try {
     const r = await Promise.race([
-      fetch(`https://fr24api.flightradar24.com/api/live/flight-positions/full?registrations=${encodeURIComponent(registration)}`,
-        {headers:{"Accept":"application/json","Accept-Version":"v1","Authorization":"Bearer "+FR24_TOKEN}}),
+      fetch(`${API_FR24}?registrations=${encodeURIComponent(registration)}`, {headers:{"Accept":"application/json"}}),
       new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
     ]);
     if (r.ok) {
@@ -983,8 +981,7 @@ async function fetchRegionalTraffic(lat, lon) {
   const bounds = `${lat+d},${lat-d},${lon-d},${lon+d}`;
   try {
     const r = await Promise.race([
-      fetch(`https://fr24api.flightradar24.com/api/live/flight-positions/full?bounds=${bounds}`,
-        {headers:{"Accept":"application/json","Accept-Version":"v1","Authorization":"Bearer "+FR24_TOKEN}}),
+      fetch(`${API_FR24}?bounds=${encodeURIComponent(bounds)}`, {headers:{"Accept":"application/json"}}),
       new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 4000))
     ]);
     if (r.ok) {
@@ -1005,7 +1002,12 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
   const pendingAc  = useRef(null);
   const [status, setStatus] = useState("loading");
 
-  const TOKEN = "pk.eyJ1Ijoibm1haWRhbmUiLCJhIjoiY21xd2dwZm9lMTNicjJzcjQ0Z2thNmJtdiJ9.x1S5ogXqsfjCbgmm9-9vtQ";
+  // Jeton de carte fourni par le serveur (api/mapbox.js) : il se change dans Vercel, sans toucher au code.
+  const [TOKEN,setToken] = React.useState(null);
+  React.useEffect(()=>{ let vivant=true;
+    fetch("/api/mapbox").then(r=>r.json()).then(j=>{ if(vivant&&j&&j.token) setToken(j.token); })
+      .catch(e=>logSilent(e));
+    return ()=>{ vivant=false; }; },[]);
 
   const AIRPORTS = [
     {code:"CMN",lat:33.368,lon:-7.590,name:"Casablanca Mohammed V"},
@@ -1033,7 +1035,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
     }
     // Load Mapbox JS
     const initMap = () => {
-      if (!mapDiv.current || mapRef.current) return;
+      if (!mapDiv.current || mapRef.current || !TOKEN) return;   // on attend le jeton
       try {
         window.mapboxgl.accessToken = TOKEN;
         const map = new window.mapboxgl.Map({
@@ -1078,7 +1080,7 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
       document.head.appendChild(s);
     }
     return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
-  }, []);
+  }, [TOKEN]);   // la carte démarre dès que le jeton est reçu
 
   // Helper to place CN-KTA marker
   const placeMarker = (map, acData) => {

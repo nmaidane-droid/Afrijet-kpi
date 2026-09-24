@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "node build.js",
-    "test": "node tests/regles.test.js index.html"
+    "test": "node tests/regles.test.js index.html && node tests/backup.test.mjs && node tests/api.test.mjs"
   },
   "devDependencies": {
     "@babel/standalone": "7.23.6"
