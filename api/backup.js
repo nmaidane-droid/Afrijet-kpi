@@ -107,6 +107,29 @@ export async function menage({ token, repo, branche, dossier, now }) {
   return retires;
 }
 
+// Copie dans Supabase : sept exemplaires glissants, un par jour de la semaine.
+// Ils sont écrits au format de l export de l application, pour que le bouton Restore
+// les recharge directement, sans conversion.
+export function cleDuJour(now) { return "backup_j" + new Date(String(now)).getUTCDay(); }
+
+async function kvEcrire(key, valeur) {
+  const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/kv_store`, {
+    method: "POST",
+    headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
+      "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+    body: JSON.stringify({ key: PFX + key, value: JSON.stringify(valeur) }),
+  });
+  return r.ok;
+}
+
+export async function copieSupabase(backup, now) {
+  const donnees = { exportDate: now, source: "sauvegarde automatique", ...backup.donnees };
+  const cle = cleDuJour(now);
+  const a = await kvEcrire(cle, donnees);
+  const b = await kvEcrire("lastBackupData", donnees);   // la plus récente, pour le bouton Restore
+  return a && b;
+}
+
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers?.authorization || "";
@@ -126,7 +149,10 @@ export default async function handler(req, res) {
     const filename = `afrijet-sauvegarde-${now.slice(0, 10)}.json`;
 
     if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_REPO) {
-      res.status(200).json({ ok: true, depose: false, motif: "GITHUB_TOKEN ou GITHUB_REPO manquant", taille: json.length, compteurs: backup.compteurs });
+      // Sans dépôt GitHub, la copie Supabase est écrite quand même
+      let copie = false;
+      try { copie = await copieSupabase(backup, now); } catch (e) { /* signalé ci-dessous */ }
+      res.status(200).json({ ok: true, depose: false, copieSupabase: copie, motif: "GITHUB_TOKEN ou GITHUB_REPO manquant", taille: json.length, compteurs: backup.compteurs });
       return;
     }
     const nb = Object.values(backup.compteurs).reduce((s, n) => s + (Number(n) || 0), 0);
@@ -139,6 +165,8 @@ export default async function handler(req, res) {
       contenu: json,
       message: `Sauvegarde du ${now.slice(0, 10)} — ${nb} enregistrements, ${audit.length} entrées de journal`,
     });
+    let copieSb = false;
+    try { copieSb = await copieSupabase(backup, now); } catch (e) { /* la copie Supabase ne doit pas empêcher le dépôt */ }
     let retires = 0;
     try {
       retires = await menage({
@@ -147,7 +175,7 @@ export default async function handler(req, res) {
         dossier: (process.env.GITHUB_PATH || "sauvegardes").replace(/^\/+|\/+$/g, ""), now,
       });
     } catch (e) { /* le ménage ne doit jamais empêcher la sauvegarde */ }
-    res.status(200).json({ ok: true, depose: true, chemin, remplace, retires, taille: json.length, entrees_journal: audit.length });
+    res.status(200).json({ ok: true, depose: true, chemin, remplace, retires, copieSupabase: copieSb, taille: json.length, entrees_journal: audit.length });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
