@@ -7461,7 +7461,82 @@ function FlightRow({ f, isLast, canEdit, onOpen, secEvts, compromis, clients }){
   );
 }
 
-function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpdateAircraft, canEdit, canClose, clients, crew, onDeleteFlight, isAdmin }) {
+// ── Préparation du vol ────────────────────────────────────────────────────
+// Checklist ENR/OPS-FOR/PREP-01, remplie par les Opérations sur un vol planifié.
+// Un point non coché exige un motif : on saura toujours pourquoi il manque.
+const PREP_SECTIONS=[
+ {t:"Documentation de route",items:[
+   ["plan_exp","Plan de vol exploitation établi"],["plan_ats","Plan de vol ATS déposé"],
+   ["meteo","Dossier météo complet"],["notam","NOTAM consultés"],
+   ["cartes","Cartes et documentation de navigation à jour"]]},
+ {t:"Performances et chargement",items:[
+   ["mc","Devis de masse et centrage établi et signé"],["perfdec","Performances décollage vérifiées"],
+   ["perfatt","Performances atterrissage vérifiées"],["carb","Calcul carburant effectué"],
+   ["avit","Avitaillement contrôlé"],["repart","Répartition passagers et fret conforme au devis"]]},
+ {t:"Aéronef",items:[
+   ["docs","Documents de bord présents et valides"],["manex","MANEX et MEL à bord, à jour"],
+   ["carnet","Carnet de route et compte rendu matériel à bord"],["mel","MEL et CDL en cours vérifiés"],
+   ["prevol","Visite prévol effectuée"],["secours","Équipements de secours vérifiés"]]},
+ {t:"Équipage",items:[
+   ["licences","Licences, qualifications de type et médicaux valides"],["lang","Compétences linguistiques et CRM à jour"],
+   ["tsv","Temps de service et repos conformes"],["brief","Briefing équipage réalisé"]]},
+ {t:"Exploitation et sûreté",items:[
+   ["autor","Autorisations obtenues pour un vol international"],["manif","Manifeste passagers établi"],
+   ["notoc","Manifeste fret et NOTOC si marchandises dangereuses"],["surete","Fouille de sûreté de l\'aéronef effectuée"],
+   ["escale","Services en escale confirmés"]]},
+];
+// Checklist vierge, à remplir à la main : en-tête du vol, cases vides, signatures
+function prepVierge(f, clients, aircraft){
+  try{
+    const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4"});
+    const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=14;
+    const cl=(clients||[]).find(x=>x.id===(f||{}).clientId), ac=(aircraft||[]).find(a=>a.id===(f||{}).acId);
+    const entete=()=>sgsPdfHeader(doc,{titre:"CHECKLIST — PRÉPARATION DU VOL",ref:"ENR/OPS-FOR/PREP-01",MX:M});
+    let y=entete();
+    const w4=(W-2*M-6)/4;
+    const cell=(x,w,l,v)=>{ doc.setDrawColor(203,213,225); doc.setLineWidth(.2); doc.roundedRect(x,y,w,12,1.5,1.5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(6.4); doc.setTextColor(100,116,139); doc.text(String(l).toUpperCase(),x+2,y+4);
+      doc.setFont("helvetica","bold"); doc.setFontSize(9.5); doc.setTextColor(15,31,61); doc.text(String(v||""),x+2,y+9); };
+    cell(M,w4,"Vol / immatriculation",(f&&f.num)||""); cell(M+w4+2,w4,"Date",f&&f.date?sgsFr(f.date):"");
+    cell(M+2*(w4+2),w4,"Route",f?((f.from||"")+(f.to?"→"+f.to:"")):""); cell(M+3*(w4+2),w4,"Départ (GMT)",(f&&f.dep)||"");
+    y+=15;
+    if(f){ doc.setFont("helvetica","normal"); doc.setFontSize(7.6); doc.setTextColor(100,116,139);
+      doc.text("Client : "+(cl?cl.nom:"—")+"   ·   Appareil : "+(ac?ac.immat+" "+ac.type:(f.num||"—"))+"   ·   CDB : "+(f.cm1||"—")+"   ·   OPL : "+(f.cm2||"—"),M,y); y+=5; }
+    PREP_SECTIONS.forEach(sec=>{
+      if(y>H-34){ doc.addPage(); y=entete(); }
+      doc.setFillColor(15,31,61); doc.roundedRect(M,y,W-2*M,5.6,1.4,1.4,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(8.4); doc.setTextColor(255,255,255);
+      doc.text(sec.t.toUpperCase(),M+2.5,y+3.9); y+=8;
+      sec.items.forEach(([k,lib])=>{
+        if(y>H-26){ doc.addPage(); y=entete(); }
+        doc.setDrawColor(71,85,105); doc.setLineWidth(.25); doc.roundedRect(M,y-3.1,3.6,3.6,.6,.6);
+        doc.setFont("helvetica","normal"); doc.setFontSize(8.6); doc.setTextColor(15,31,61);
+        doc.text(lib,M+6,y);
+        doc.setDrawColor(226,232,240); doc.setLineWidth(.15); doc.line(M+6,y+1.6,W-M,y+1.6);
+        y+=6.2;
+      });
+      y+=1.5;
+    });
+    if(y>H-28){ doc.addPage(); y=entete(); }
+    const wS=(W-2*M-4)/2;
+    doc.setDrawColor(203,213,225); doc.setLineWidth(.2);
+    doc.roundedRect(M,y,wS,16,1.5,1.5); doc.roundedRect(M+wS+4,y,wS,16,1.5,1.5);
+    doc.setFontSize(6.4); doc.setTextColor(100,116,139);
+    doc.text("COMMANDANT DE BORD — NOM, DATE, SIGNATURE",M+2,y+4);
+    doc.text("CONTRÔLE OPÉRATIONS — NOM, DATE, SIGNATURE",M+wS+6,y+4);
+    y+=20;
+    doc.setFontSize(6.6); doc.setTextColor(148,163,184);
+    doc.text("À remplir à la main lorsque l application n est pas accessible, puis à reporter dans la fiche du vol.",M,y);
+    doc.save("Preparation_vierge"+(f&&f.num?"_"+f.num:"")+(f&&f.date?"_"+String(f.date).replace(/-/g,""):"")+".pdf");
+  }catch(e){ uiAlert("PDF impossible : "+(e.message||e)); }
+}
+const PREP_ITEMS=PREP_SECTIONS.flatMap(s=>s.items.map(i=>i[0]));
+const prepFaits=p=>PREP_ITEMS.filter(k=>(p||{})[k]===true).length;
+// Trois états par point : non traité, coché, non coché avec motif
+const prepComplete=p=>PREP_ITEMS.every(k=>(p||{})[k]===true||((p||{})[k]==="non"&&String(((p||{}).motifs||{})[k]||"").trim().length>2));
+const prepManquants=p=>PREP_ITEMS.filter(k=>!((p||{})[k]===true||((p||{})[k]==="non"&&String(((p||{}).motifs||{})[k]||"").trim().length>2)));
+
+function ScreenOps({ flights, satis, safetyData, aircraft, frats, onUpdateFlight, onUpdateAircraft, canEdit, canClose, clients, crew, onDeleteFlight, isAdmin }) {
   // Clôture par le pilote : seulement ses propres vols en cours, du jour ou de la veille.
   // Il saisit les éléments réels et clôt ; il ne crée, ne replanifie ni ne rouvre aucun vol.
   const pilote=typeof sgsCurrentUser==="function"?sgsCurrentUser():null;
@@ -7473,6 +7548,7 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
   const peutOuvrir=f=>canEdit!==false||aClore(f);
   const [edit,setEdit]=useState(null);
   const [origStatus,setOrigStatus]=useState(null);
+  const [prepOuvert,setPrepOuvert]=useState(false);   // la préparation reste repliée tant qu on ne la remplit pas
   // Mode pilote : il clôture son vol en saisissant tous les éléments ; le statut passe à « Terminé » à l'enregistrement
   const modePilote=canEdit===false&&!!canClose&&origStatus==="En vol";
   const [opsSaved,setOpsSaved]=useState(false);
@@ -7558,11 +7634,12 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
     // Validation des transitions de statut
     const orig = origStatus;   // statut d'origine du vol ouvert
     const next = modePilote ? "Termine" : edit.status;   // le pilote clôture : la cible est « Terminé »
-    if(orig==="Planifie" && next!=="En vol" && next!=="Annule"){
+    // Enregistrer sans changer de statut est permis : c'est le cas de la préparation du vol
+    if(orig==="Planifie" && next!==orig && next!=="En vol" && next!=="Annule"){
       uiAlert("Transition invalide : un vol planifié ne peut passer qu'à « En vol » ou « Annulé ».");
       return;
     }
-    if(orig==="En vol" && next!=="Termine" && !modePilote){   // le pilote clôture : le statut est posé à l'enregistrement
+    if(orig==="En vol" && next!==orig && next!=="Termine" && !modePilote){   // le pilote clôture : le statut est posé à l'enregistrement
       uiAlert("Transition invalide : un vol en cours ne peut passer qu'à « Terminé ».");
       return;
     }
@@ -7633,7 +7710,10 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
     }
     const c=calcEdit(edit);
     // Taux de remplissage sur le nombre de sièges réel de l'appareil (CN-KTB : 8)
-    onUpdateFlight({...edit,...(modePilote?{status:"Termine"}:{}),load:Math.round((Number(edit.pax)||0)/siegesVol*100),...c});
+    const prepSignee=edit.prep&&prepFaits(edit.prep)>0
+      ? {...edit.prep, par:userLabel(sgsCurrentUser())||"", le:new Date().toISOString(), complete:prepComplete(edit.prep)}
+      : edit.prep;
+    onUpdateFlight({...edit,...(prepSignee?{prep:prepSignee}:{}),...(modePilote?{status:"Termine"}:{}),load:Math.round((Number(edit.pax)||0)/siegesVol*100),...c});
 
     // Mise à jour automatique du TTAF et A/B/C-Check avec le Flight Time (Take Off → Landing)
     // Correction d'un vol déjà clôturé : on n'applique que l'écart, et le cycle n'est compté qu'une fois
@@ -7682,6 +7762,75 @@ function ScreenOps({ flights, satis, safetyData, aircraft, onUpdateFlight, onUpd
               </div>
               <button onClick={()=>setEdit(null)} style={{background:"none",border:"none",fontSize:22,color:C.slate,cursor:"pointer"}}>x</button>
             </div>
+            {/* Préparation du vol : Opérations et Administrateur, sur un vol planifié */}
+            {canEdit!==false && origStatus==="Planifie" && (()=>{
+              const p=edit.prep||{}, motifs=p.motifs||{};
+              const setP=(k,v)=>setEdit(e=>({...e,prep:{...(e.prep||{}),[k]:v}}));
+              const setMotif=(k,v)=>setEdit(e=>({...e,prep:{...(e.prep||{}),motifs:{...((e.prep||{}).motifs||{}),[k]:v}}}));
+              const f=(frats||[]).filter(x=>x.flightId&&edit.id&&String(x.flightId).includes(String(edit.num))).slice(-1)[0]
+                    ||(frats||[]).filter(x=>String(x.vol||"").includes(String(edit.num||""))&&x.date===edit.date).slice(-1)[0];
+              const faits=prepFaits(p), tot=PREP_ITEMS.length, complet=prepComplete(p);
+              return <div style={{marginBottom:16,border:"1.5px solid "+(complet?"#00936A":C.border),borderRadius:12,overflow:"hidden"}}>
+                <div style={{background:complet?"#E7F6F0":C.bg,padding:"9px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div><div style={{fontSize:13,fontWeight:800,color:C.navy}}>📋 Préparation du vol</div>
+                    <div style={{fontSize:10.5,color:C.slate}}>ENR/OPS-FOR/PREP-01 · {faits} / {tot} points cochés{complet?" · complète":""}</div></div>
+                  {complet&&<span style={{fontSize:11,fontWeight:800,color:"#047857"}}>✓</span>}
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,padding:"8px 10px 0"}}>
+                  <button onClick={()=>setPrepOuvert(o=>!o)} style={{height:38,borderRadius:9,border:"none",background:prepOuvert?"#475569":C.navy,color:"white",fontWeight:700,fontSize:12.5,...TAP}}>
+                    {prepOuvert?"▲ Replier":"✏️ Remplir"}</button>
+                  <button onClick={()=>prepVierge(edit,clients,aircraft)} style={{height:38,borderRadius:9,border:"1.5px solid "+C.navy,background:"white",color:C.navy,fontWeight:700,fontSize:12.5,...TAP}}>
+                    📥 Télécharger</button>
+                </div>
+                {prepOuvert&&<div style={{padding:"8px 10px"}}>
+                  {/* Le FRAT est rempli par le commandant : son état est repris automatiquement */}
+                  <div style={{background:f?(f.couleur==="rouge"?"#FCEBEB":f.couleur==="jaune"?"#FAEEDA":"#E7F6F0"):"#F1F5F9",borderRadius:9,padding:"8px 10px",marginBottom:8,fontSize:11.5,lineHeight:1.4}}>
+                    <b>FRAT</b> — {f?("résultat "+(f.couleur||"—")+", rempli par "+(f.cdb||"—")):"non rempli par le commandant"}
+                    <div style={{fontSize:10,color:C.slate}}>Manuel SGS 02-04 · rempli par le CDB, repris ici automatiquement</div>
+                  </div>
+                  {PREP_SECTIONS.map(sec=><div key={sec.t} style={{marginBottom:8}}>
+                    <div style={{fontSize:10,fontWeight:800,color:C.gold,textTransform:"uppercase",margin:"4px 0"}}>{sec.t}</div>
+                    {sec.items.map(([k,lib])=>{ const et=p[k];   // undefined · true · "non"
+                      const suiv=et===true?"non":et==="non"?undefined:true;
+                      const col=et===true?"#00936A":et==="non"?"#D97706":C.border;
+                      return <div key={k} style={{borderTop:"1px solid "+C.border,padding:"5px 0"}}>
+                        <div role="button" onClick={()=>setP(k,suiv)} style={{display:"flex",gap:8,alignItems:"flex-start",...TAP}}>
+                          <div style={{width:18,height:18,borderRadius:5,flexShrink:0,marginTop:1,border:"1.5px solid "+col,background:et?col:"white",color:"white",fontSize:12,textAlign:"center",lineHeight:"16px"}}>{et===true?"✓":et==="non"?"—":""}</div>
+                          <div style={{fontSize:12,color:C.text,flex:1,minWidth:0}}>{lib}</div>
+                        </div>
+                        {et==="non"&&<input aria-label={"Motif — "+lib} value={motifs[k]||""} onChange={e=>setMotif(k,e.target.value)}
+                          placeholder="Motif : MEL, sans objet, traité autrement…"
+                          style={{...sgsInput,marginTop:4,fontSize:11.5,borderColor:String(motifs[k]||"").trim().length>2?C.border:"#D97706"}}/>}
+                      </div>; })}
+                  </div>)}
+                  <div style={{marginTop:8}}>
+                    <SgsBtn l="📄 PDF pour le dossier de vol" full onClick={()=>{
+                      const cl=(clients||[]).find(x=>x.id===edit.clientId);
+                      const CP=[{l:"Point",w:118},{l:"État",w:64}];
+                      const blocs=[{t:"Vol",cols:[{l:"Élément",w:60},{l:"Valeur",w:122}],rows:[
+                        ["Immatriculation",edit.num||""],["Date",sgsFr(edit.date)],
+                        ["Route",(edit.from||"")+" → "+(edit.to||"")],["Départ prévu (GMT)",edit.dep||""],
+                        ["Client",cl?cl.nom:"—"],["Commandant",edit.cm1||"—"],["Copilote",edit.cm2||"—"],
+                        ["FRAT",f?("résultat "+(f.couleur||"—")+" · "+(f.cdb||"")):"non rempli"]]}];
+                      PREP_SECTIONS.forEach(sec=>blocs.push({t:sec.t,cols:CP,rows:sec.items.map(([k,lib])=>[
+                        (p[k]===true?"[X] ":p[k]==="non"?"[—] ":"[  ] ")+lib,
+                        p[k]===true?"fait":p[k]==="non"?("non applicable : "+(motifs[k]||"")):"à traiter"])}));
+                      blocs.push({t:"Validation",cols:[{l:"Élément",w:60},{l:"Valeur",w:122}],rows:[
+                        ["Préparation",complet?"complète — tous les points cochés ou motivés":"incomplète"],
+                        ["Établie par",userLabel(sgsCurrentUser())||"—"],
+                        ["Le",new Date().toLocaleString("fr-FR",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})],
+                        ["Commandant de bord","signature : ______________________"]]});
+                      sgsDocPDF_({ref:"PREP-"+(edit.num||"")+"-"+String(edit.date||"").replace(/-/g,""),
+                        titre:"Préparation du vol", sous:"ENR/OPS-FOR/PREP-01 · Édition 01 · Révision 00",
+                        meta:[], blocs, nom:userLabel(sgsCurrentUser())||"", fonction:"Opérations"});
+                    }}/>
+                  </div>
+                  <div style={{fontSize:11,color:complet?"#047857":C.slate,marginTop:6,lineHeight:1.45}}>
+                    {complet?<b style={{color:"#047857"}}>Préparation complète : tous les points sont cochés ou motivés.</b>
+                     :<>Touchez un point : <b>✓ fait</b>, puis <b>— non applicable</b> (motif demandé), puis à traiter.
+                        <br/>Reste {prepManquants(p).length} point(s) à traiter.</>}</div>
+                </div>}
+              </div>; })()}
             {modePilote
               ? <div style={{marginBottom:16,background:"#FEF3C7",border:"1px solid #D97706",borderRadius:10,padding:"10px 12px",fontSize:12,color:"#92400E",lineHeight:1.45}}>
                   Renseignez tous les éléments du vol, puis touchez <b>Clôturer le vol</b> : le statut passera à « Terminé ».</div>
@@ -11416,7 +11565,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
         {tab==="alertes" && <ScreenAlertes sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew}/>}
-        {tab==="ops"     && <ScreenOps canClose={profileId==="eqp"&&["TRI","CM1","CM2"].includes((sgsCurrentUser()||{}).role||"CM1")} flights={flights} satis={satis} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>(x.id&&u.id)?(x.id===u.id?u:x):((x.num===u.num&&x.date===u.date&&x.dep===u.dep)?u:x)))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>(x.id&&f.id)?x.id!==f.id:!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
+        {tab==="ops"     && <ScreenOps frats={sgsFrat} canClose={profileId==="eqp"&&["TRI","CM1","CM2"].includes((sgsCurrentUser()||{}).role||"CM1")} flights={flights} satis={satis} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>(x.id&&u.id)?(x.id===u.id?u:x):((x.num===u.num&&x.date===u.date&&x.dep===u.dep)?u:x)))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>(x.id&&f.id)?x.id!==f.id:!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
         {tab==="maint"   && <ScreenMaint kpis={kpis} maintData={maintData} flights={flights} aircraft={aircraft}/>}
