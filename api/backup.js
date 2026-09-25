@@ -37,6 +37,9 @@ export function buildBackup({ kv, audit, now }) {
   for (const row of kv) {
     if (!String(row.key || "").startsWith(PFX)) continue;
     if (/totp_secret|users$/.test(row.key)) continue;          // secrets d'authentification : jamais exportés
+    // Documents PDF de la Réglementation et de Doc Avion : plusieurs mégaoctets chacun,
+    // figés et détenus par ailleurs. Leur index est conservé, leur contenu non.
+    if (/(reglementation|docavion)_(?!index)/.test(row.key)) continue;
     // L'application enregistre ses valeurs en texte JSON, parfois dans une enveloppe {__v}
     let v = row.value;
     if (typeof v === "string") { try { v = JSON.parse(v); } catch { /* valeur brute */ } }
