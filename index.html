@@ -1858,12 +1858,12 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights }) 
           <div style={{flex:1,minWidth:0}}>
             <FLabel>CM1</FLabel>
             <CustomSelect value={cm1} onChange={setCm1} placeholder='-- --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm2).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':(m.role==='TRI'?'TRI':'CDB'))}))}/>
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm2).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':(m.role==='TRI'?'TRI':'CM1'))}))}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
             <FLabel>CM2</FLabel>
             <CustomSelect value={cm2} onChange={setCm2} placeholder='-- --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm1).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':(m.role==='TRI'?'TRI':'OPL'))}))}/>
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm1).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':(m.role==='TRI'?'TRI':'CM2'))}))}/>
           </div>
         </div>
         <div>
@@ -2368,8 +2368,8 @@ const sgsCrewRole=(crew,nom)=>{ const m=(crew||[]).find(x=>sgsCrewNom(x)===nom);
 // t : text · area · place (pays + code OACI) · yn (oui/non) · sel (liste)
 const SGS_CR_FORMS=[
   {k:'SMS-19',l:'Rapport de danger — équipage',court:'Équipage',motif:true,redac:true,f:[
-    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'nomCdb',l:'Nom du CDB',t:'crew',kind:'cdb'},{k:'roleCdb',l:'Rôle du CDB pendant le vol',t:'sel',opts:['PF — pilote en fonction','PM — pilote surveillant']},
-    {k:'nomOpl',l:"Nom de l'OPL",t:'crew',kind:'opl'},{k:'roleOpl',l:"Rôle de l'OPL pendant le vol",t:'sel',opts:['PF — pilote en fonction','PM — pilote surveillant']},
+    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'nomCdb',l:'Nom du CM1',t:'crew',kind:'cdb'},{k:'roleCdb',l:'Rôle du CM1 pendant le vol',t:'sel',opts:['PF — pilote en fonction','PM — pilote surveillant']},
+    {k:'nomOpl',l:"Nom du CM2",t:'crew',kind:'opl'},{k:'roleOpl',l:"Rôle du CM2 pendant le vol",t:'sel',opts:['PF — pilote en fonction','PM — pilote surveillant']},
     {k:'nomCc',l:'Nom du CC',t:'crew',kind:'pnc'},{k:'nomPnc',l:'Nom du PCB / PNC',t:'crew',kind:'pnc'},
     {k:'heure',l:'Heure locale',t:'time'},{k:'depart',l:'Départ',t:'place'},{k:'arrivee',l:'Arrivée',t:'place'},{k:'lieu',l:"Lieu de l'événement",t:'place'},
     {k:'infos',l:'Informations / précisions (waypoint, coordonnées, pistes, routes…)',t:'area'},{k:'precisions',l:"Précisions sur la nature de l'événement"}]},
@@ -2390,9 +2390,9 @@ const SGS_CR_FORMS=[
     {k:'numVol',l:'Numéro de vol'},{k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'}]},
   {k:'SMS-16',l:'Compte rendu sûreté',court:'Sûreté',redac:true,descL:"Circonstances, constatations concernant l'événement",f:[
     {k:'heure',l:'Heure locale',t:'time'},{k:'lieu',l:"Lieu de l'événement",t:'place'},{k:'infos',l:'Informations / précisions (waypoint, coordonnées, piste, routes…)',t:'area'}]},
-  {k:'SMS-17',l:'CRTSV — prolongation de TSV ou réduction du repos',court:'CRTSV',auto:['tsv'],descL:"Compte rendu du CDB expliquant les conditions de l'événement",f:[
+  {k:'SMS-17',l:'CRTSV — prolongation de TSV ou réduction du repos',court:'CRTSV',auto:['tsv'],descL:"Compte rendu du CM1 expliquant les conditions de l'événement",f:[
     {k:'nature',l:'Nature',t:'sel',opts:['Prolongation du TSV','Réduction du temps de repos']},{k:'duree',l:'Durée de la prolongation ou de la réduction (h:mm)',ph:'1:30'},
-    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'nomCdb',l:'Nom du CDB',t:'crew',kind:'cdb'},{k:'nomOpl',l:"Nom de l'OPL",t:'crew',kind:'opl'},
+    {k:'immat',l:'Immatriculation',t:'ac'},{k:'typeAv',l:"Type d'aéronef",t:'ro'},{k:'nomCdb',l:'Nom du CM1',t:'crew',kind:'cdb'},{k:'nomOpl',l:"Nom du CM2",t:'crew',kind:'opl'},
     {k:'depart',l:'Départ',t:'place'},{k:'arrivee',l:'Arrivée',t:'place'},{k:'lieu',l:"Lieu de l'événement",t:'place'},
     {k:'infos',l:'Informations / précisions (waypoint, coordonnées, piste, routes…)',t:'area'}]},
 ];
@@ -2597,7 +2597,7 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved, profil }) {
         <FSection title="Informations générales" color="#DC2626"/>
         {(()=>{ const inp={width:"100%",boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"9px 11px",fontSize:13,fontFamily:"inherit",outline:"none"};
           const setF=(k,v)=>setFx(o=>({...o,[k]:v}));
-          // Rôles pendant le vol : l'un implique l'autre (PF pour le CDB → PM pour l'OPL, et inversement)
+          // Rôles pendant le vol : l'un implique l'autre (PF pour le CM1 → PM pour le CM2, et inversement)
           const PFPM={roleCdb:"roleOpl",roleOpl:"roleCdb"};
           const pickSel=(f,v)=>{ const autre=PFPM[f.k];
             if(autre&&f.opts&&f.opts.length===2){ const inverse=f.opts.find(x=>x!==v); setFx(o=>({...o,[f.k]:v,[autre]:inverse})); return; }
@@ -3325,7 +3325,7 @@ function SgsAnalyseEditor({ e, init, nomResp, onSave, onCancel }){
         <SgsField label="Date de la réunion du groupe d'analyse">{inp('dateReunion','','date')}</SgsField>
         {late20&&<div style={{fontSize:11.5,color:"#B45309",fontWeight:700,marginTop:-6}}>Plus de 20 jours après l'événement : le manuel impose une réunion sous 20 jours (SGS 02-01 § 1.2).</div>}
         <SgsField label="Responsable de l'évaluation">{inp('responsable')}</SgsField>
-        <SgsField label="Participants (un par ligne : nom — fonction)">{txt('participants',3,"Youssef IKLI — Responsable SGS\nCDB du vol — Commandant de bord")}</SgsField>
+        <SgsField label="Participants (un par ligne : nom — fonction)">{txt('participants',3,"Youssef IKLI — Responsable SGS\nCM1 du vol — Commandant de bord")}</SgsField>
       </>}
       {step===2&&<>
         <SgsField label="Conséquences de l'événement">{txt('consequences',3)}</SgsField>
@@ -3746,11 +3746,11 @@ function SgsFormationsView({ items, setItems, nomResp, crew }){
   </div>);
 }
 
-// ── FRAT — SGS 02-04 : évaluation du risque de chaque vol par le CDB ──
+// ── FRAT — SGS 02-04 : évaluation du risque de chaque vol par le CM1 ──
 // Le manuel fixe la procédure (vert / jaune / rouge) mais pas le questionnaire, prévu dans le logiciel SMS :
 // grille standard ci-dessous, À VALIDER par le responsable SGS et le RDOA.
 const SGS_FRAT_Q=[
-  {g:'Équipage',k:'cdbXp',l:"CDB : moins de 100 h sur type",p:3},{g:'Équipage',k:'oplXp',l:"OPL : moins de 100 h sur type",p:3},{g:'Équipage',k:'fatigue',l:"Repos réduit, fatigue ou fin de TSV étendu",p:4},
+  {g:'Équipage',k:'cdbXp',l:"CM1 : moins de 100 h sur type",p:3},{g:'Équipage',k:'oplXp',l:"CM2 : moins de 100 h sur type",p:3},{g:'Équipage',k:'fatigue',l:"Repos réduit, fatigue ou fin de TSV étendu",p:4},
   {g:'Équipage',k:'nouveauTerrain',l:"Premier vol de l'équipage sur l'un des terrains",p:3},{g:'Équipage',k:'binome',l:"Équipage n'ayant jamais volé ensemble",p:2},
   {g:'Environnement',k:'nuit',l:"Vol ou arrivée de nuit",p:2},{g:'Environnement',k:'meteo',l:"Météo marginale au départ, à destination ou au dégagement",p:4},{g:'Environnement',k:'vent',l:"Vent traversier supérieur à 15 kt",p:3},
   {g:'Environnement',k:'piste',l:"Piste courte, contaminée ou en travaux",p:4},{g:'Environnement',k:'approche',l:"Terrain sans ILS (approche de non-précision)",p:3},{g:'Environnement',k:'sable',l:"Vent de sable, poussière ou visibilité réduite",p:3},
@@ -3761,7 +3761,7 @@ const SGS_FRAT_SEUILS={jaune:11,rouge:21};   // 0-10 vert · 11-20 jaune · 21 e
 const sgsFratScore=r=>SGS_FRAT_Q.reduce((s,q)=>s+(r&&r[q.k]?q.p:0),0);
 const sgsFratCouleur=s=>s>=SGS_FRAT_SEUILS.rouge?'rouge':s>=SGS_FRAT_SEUILS.jaune?'jaune':'vert';
 const SGS_FRAT_C={vert:{bg:'#EAF3DE',fg:'#27500A',c:'#1D9E75',l:'Vert'},jaune:{bg:'#FAEEDA',fg:'#633806',c:'#BA7517',l:'Jaune'},rouge:{bg:'#FCEBEB',fg:'#791F1F',c:'#DC2626',l:'Rouge'}};
-const SGS_FRAT_DEC={go:'GO — vol possible',nogo:'NO GO — vol impossible',cdb_ok:'GO — le CDB accepte le vol',cdb_non:'NO GO — le CDB refuse le vol'};
+const SGS_FRAT_DEC={go:'GO — vol possible',nogo:'NO GO — vol impossible',cdb_ok:'GO — le CM1 accepte le vol',cdb_non:'NO GO — le CM1 refuse le vol'};
 function SgsFratView({ items, setItems, flights, crew, standalone }){
   const [ed,setEd]=useState(null);
   const today=sgsToday(), list=[...(items||[])].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -3775,17 +3775,17 @@ function SgsFratView({ items, setItems, flights, crew, standalone }){
       setItems(l=>[...(l||[]),{...it,id:'FR'+Date.now(),ref:'FRAT-'+String(ed.date||today).replace(/-/g,'')+'-'+String(1+(items||[]).filter(x=>x.date===ed.date).length).padStart(2,'0')}]);
       setEd(null); sgsToast("FRAT enregistré · "+SGS_FRAT_DEC[decision]); };
     let g0='';
-    return (<Card accent="#0F766E">{!standalone&&<FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="SGS 02-04 · à remplir par le CDB avant chaque étape" color="#0F766E"/>}
+    return (<Card accent="#0F766E">{!standalone&&<FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="SGS 02-04 · à remplir par le CM1 avant chaque étape" color="#0F766E"/>}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <SgsField label="Vol"><CustomSelect dense searchable value={ed.flightId||''} placeholder="-- Choisir un vol planifié --"
           onChange={v=>{ const f=vols.find(x=>String(x.id||x.num+x.date)===v); up(f?{flightId:v,vol:(f.num||'')+' · '+(f.from||'')+'→'+(f.to||'')+' · '+sgsFr(f.date),date:f.date,cdb:ed.cdb||f.cm1||''}:{flightId:'',vol:''}); }}
           options={vols.map(f=>({value:String(f.id||f.num+f.date),label:(f.num||'')+' · '+(f.from||'')+'→'+(f.to||''),sub:sgsFr(f.date)}))}/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"118px 1fr",gap:8}}>
           <SgsField label="Date"><DateField value={ed.date||today} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
-          <SgsField label="Commandant"><CustomSelect dense value={ed.cdb||''} onChange={v=>up({cdb:v})} searchable icon='👨‍✈️' placeholder='-- Choisir --' options={sgsCrewOpts(crew,'cdb',ed.cdb)}/></SgsField></div>
+          <SgsField label="CM1"><CustomSelect dense value={ed.cdb||''} onChange={v=>up({cdb:v})} searchable icon='👨‍✈️' placeholder='-- Choisir --' options={sgsCrewOpts(crew,'cdb',ed.cdb)}/></SgsField></div>
         <div style={{position:"sticky",top:0,zIndex:2,background:CC.bg,color:CC.fg,borderRadius:10,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,border:"1.5px solid "+CC.c}}>
           <div style={{fontSize:26,fontWeight:800}}>{score}</div><div style={{flex:1,fontSize:12.5,fontWeight:700}}>Résultat {CC.l.toLowerCase()}{phase===2?' après barrières':''}<div style={{fontWeight:400,fontSize:11}}>Vert 0 à {SGS_FRAT_SEUILS.jaune-1} · jaune {SGS_FRAT_SEUILS.jaune} à {SGS_FRAT_SEUILS.rouge-1} · rouge {SGS_FRAT_SEUILS.rouge} et plus</div></div></div>
-        {phase===2&&<SgsField label="Barrières mises en place"><textarea rows={2} value={ed.barr} onChange={e=>up({barr:e.target.value})} placeholder="Changement de CDB, carburant supplémentaire, dégagement plus proche…" style={sgsInput}/></SgsField>}
+        {phase===2&&<SgsField label="Barrières mises en place"><textarea rows={2} value={ed.barr} onChange={e=>up({barr:e.target.value})} placeholder="Changement de CM1, carburant supplémentaire, dégagement plus proche…" style={sgsInput}/></SgsField>}
         <div style={{fontSize:11.5,color:C.slate}}>{phase===2?"Remplissez à nouveau le questionnaire en tenant compte des barrières :":"Cochez chaque situation qui s'applique au vol :"}</div>
         {SGS_FRAT_Q.map(q=>{ const head=q.g!==g0; g0=q.g; const on=!!(rep||{})[q.k];
           return <React.Fragment key={q.k}>{head&&<div style={{...sgsH,margin:"6px 0 2px"}}>{q.g}</div>}
@@ -3794,24 +3794,24 @@ function SgsFratView({ items, setItems, flights, crew, standalone }){
         <div style={{fontSize:10.5,color:C.slate}}>Questionnaire et seuils standard proposés, à valider par le responsable SGS et le RDOA : le manuel en prévoit le principe mais pas le contenu.</div>
         {coul==='vert'&&<SgsBtn l="Enregistrer — GO, vol possible" onClick={()=>finish('go')} prim full/>}
         {coul==='jaune'&&phase===1&&<SgsBtn l="Résultat jaune : mettre en place des barrières" onClick={()=>up({barr:'',rep2:{...ed.rep}})} prim full/>}
-        {coul==='jaune'&&phase===2&&<><div style={{fontSize:12,color:C.text}}>Le résultat reste jaune : après analyse des conditions du vol, décision du CDB.</div>
-          <div style={{display:"flex",gap:8}}><div style={{flex:1}}><SgsBtn l="Le CDB accepte le vol" onClick={()=>finish('cdb_ok')} prim full/></div><div style={{flex:1}}><SgsBtn l="Le CDB refuse le vol" onClick={()=>finish('cdb_non')} danger full/></div></div></>}
-        {coul==='jaune'&&phase===1&&<SgsBtn l="Aucune barrière possible — décision du CDB" onClick={()=>up({barr:'Aucune barrière possible',rep2:{...ed.rep}})} full/>}
-        {coul==='rouge'&&<><label style={{display:"flex",gap:8,fontSize:12.5,alignItems:"flex-start",...TAP}}><input type="checkbox" checked={!!ed.informes} onChange={()=>up({informes:!ed.informes})} style={{marginTop:2}}/>Le CDB a informé le chef de secteur et les opérations sol que le vol n'est pas possible dans les conditions actuelles.</label>
+        {coul==='jaune'&&phase===2&&<><div style={{fontSize:12,color:C.text}}>Le résultat reste jaune : après analyse des conditions du vol, décision du CM1.</div>
+          <div style={{display:"flex",gap:8}}><div style={{flex:1}}><SgsBtn l="Le CM1 accepte le vol" onClick={()=>finish('cdb_ok')} prim full/></div><div style={{flex:1}}><SgsBtn l="Le CM1 refuse le vol" onClick={()=>finish('cdb_non')} danger full/></div></div></>}
+        {coul==='jaune'&&phase===1&&<SgsBtn l="Aucune barrière possible — décision du CM1" onClick={()=>up({barr:'Aucune barrière possible',rep2:{...ed.rep}})} full/>}
+        {coul==='rouge'&&<><label style={{display:"flex",gap:8,fontSize:12.5,alignItems:"flex-start",...TAP}}><input type="checkbox" checked={!!ed.informes} onChange={()=>up({informes:!ed.informes})} style={{marginTop:2}}/>Le CM1 a informé le chef de secteur et les opérations sol que le vol n'est pas possible dans les conditions actuelles.</label>
           <SgsBtn l="Enregistrer — NO GO, vol impossible" onClick={()=>{ if(!ed.informes){ uiAlert("⚠️ Le manuel impose d'informer le chef de secteur et les opérations sol."); return; } finish('nogo'); }} danger full/></>}
         <SgsBtn l="Annuler" onClick={()=>setEd(null)} full/>
       </div></Card>);
   }
   const j30=list.filter(f=>sgsJours(f.date)<=30);
   return (<div style={{display:"flex",flexDirection:"column",gap:12}}>
-    {!standalone&&<SgsIntro titre="FRAT — Flight Risk Assessment Tool" refm="SGS 02-04" txt="Le commandant de bord évalue le risque de chaque étape avant le vol. Vert : GO. Jaune : barrières puis décision du CDB. Rouge : le CDB informe le chef de secteur et les opérations sol, et le vol n'est pas possible dans les conditions actuelles."/>}
+    {!standalone&&<SgsIntro titre="FRAT — Flight Risk Assessment Tool" refm="SGS 02-04" txt="Le commandant de bord évalue le risque de chaque étape avant le vol. Vert : GO. Jaune : barrières puis décision du CM1. Rouge : le CM1 informe le chef de secteur et les opérations sol, et le vol n'est pas possible dans les conditions actuelles."/>}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>{['vert','jaune','rouge'].map(k=><div key={k} style={{background:SGS_FRAT_C[k].bg,borderRadius:10,padding:"9px 10px"}}>
       <div style={{fontSize:22,fontWeight:800,color:SGS_FRAT_C[k].fg}}>{j30.filter(f=>f.couleur===k).length}</div><div style={{fontSize:11,color:SGS_FRAT_C[k].fg}}>{SGS_FRAT_C[k].l} · 30 jours</div></div>)}</div>
     <SgsBtn l="+ Nouveau FRAT" onClick={()=>setEd({date:today,rep:{},cdb:'',vol:''})} prim full/>
     <div style={sgsCard}>{list.length?list.slice(0,60).map(f=>{ const C2=SGS_FRAT_C[f.couleur2||f.couleur]||SGS_FRAT_C.vert;
       return <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid "+C.border}}>
         <span style={{width:4,alignSelf:"stretch",borderRadius:2,background:C2.c}}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800}}>{f.vol}</div>
-        <div style={{fontSize:11,color:C.slate}}>{f.ref} · CDB {f.cdb||'—'} · score {f.score}{f.score2!=null?' → '+f.score2+' après barrières':''}</div></div>
+        <div style={{fontSize:11,color:C.slate}}>{f.ref} · CM1 {f.cdb||'—'} · score {f.score}{f.score2!=null?' → '+f.score2+' après barrières':''}</div></div>
         {sgsPill(SGS_FRAT_DEC[f.decision]?.split(' — ')[0],/NO GO/.test(SGS_FRAT_DEC[f.decision])?'#FCEBEB':'#EAF3DE',/NO GO/.test(SGS_FRAT_DEC[f.decision])?'#791F1F':'#27500A')}</div>; })
       :<div style={{fontSize:12.5,color:C.slate,padding:"6px 0"}}>Aucun FRAT enregistré.</div>}</div>
   </div>);
@@ -3913,7 +3913,7 @@ function SgsFdmView({ items, setItems, onDanger, aircraft }){
 }
 
 // ══ Lot 2 — Interview équipage (SMS-04) et recommandations de sécurité (SMS-07) ══
-const SGS_ITW_CREW=[{k:'cdb',l:'Commandant',h:true},{k:'opl',l:'Copilote',h:true},{k:'scm',l:'Chef de cabine (SCM)',h:false}];
+const SGS_ITW_CREW=[{k:'cdb',l:'CM1',h:true},{k:'opl',l:'CM2',h:true},{k:'scm',l:'Chef de cabine (SCM)',h:false}];
 const sgsEvLabel=e=>sgsFr(e.date)+' · '+(e.titre||safetyLabels(e).join(', ')).slice(0,60)+(e.num?' · '+e.num:'');
 function SgsInterviewsView({ items, setItems, safety, nomResp, crew:crewReg, flights, aircraft }){   // crewReg : registre Équipage
   const [ed,setEd]=useState(null);
@@ -4166,7 +4166,7 @@ function SgsFormsView({ reg, safety, ES, go, onSecu }){
 
 const SGS_EXTRA=[['forms','Formulaires SMS','Les 17 formulaires du chapitre 05 — sommaire et accès direct'],['revue','Revue annuelle','Revue de sécurité, fascicule et compte rendu (SGS 03-04)'],['chg','Changements',"Évaluations d'impact sur la sécurité (SGS 03-05)"],
   ['aud','Audits','Audits internes et contrôles (SGS 03-01)'],['form','Formations','Sensibilisation et recyclages (SGS 04-01)'],
-  ['frat','FRAT','Risque de chaque vol, par le CDB (SGS 02-04)'],['meda','MEDA','Erreurs de maintenance (SGS 02-06)'],['fdm','FDM','Événements issus de l\'analyse des vols (SGS 02-05)'],
+  ['frat','FRAT','Risque de chaque vol, par le CM1 (SGS 02-04)'],['meda','MEDA','Erreurs de maintenance (SGS 02-06)'],['fdm','FDM','Événements issus de l\'analyse des vols (SGS 02-05)'],
   ['itw','Interviews','Interview équipage — investigation (SMS-04)'],['reco','Recommandations','Recommandations de sécurité (SMS-07)'],
   ['plan','Planning SGS','Programmation annuelle des activités (SMS-10)'],['osv','Contrôles OSV','Contenu des enveloppes de vol (SMS-18)']];
 // Pastille : ce qui attend une action dans chaque registre
@@ -6112,8 +6112,8 @@ ${keyPoints?'Points clés à intégrer impérativement :\n'+keyPoints:''}`;
       }
       if(vol){
         if(vol.num)  faits.push(`N° de vol : ${vol.num}`);
-        if(vol.cm1)  faits.push(`CDB : ${vol.cm1}`);
-        if(vol.cm2)  faits.push(`OPL : ${vol.cm2}`);
+        if(vol.cm1)  faits.push(`CM1 : ${vol.cm1}`);
+        if(vol.cm2)  faits.push(`CM2 : ${vol.cm2}`);
         if(vol.cc)   faits.push(`PNC : ${vol.cc}`);
         if(vol.pax!==undefined&&vol.pax!=='') faits.push(`Passagers : ${vol.pax}`);
         if(vol.dep)  faits.push(`Départ prévu (GMT) : ${vol.dep}`);
@@ -7405,7 +7405,7 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
       {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} crew={crew} saved={saved} profil={profileId}/>}
       {effectiveActive==="journal" && <JournalView/>}
-      {effectiveActive==="frat" && sgs && <Card accent="#0F766E"><FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="Manuel SGS 02-04 · à remplir par le CDB avant chaque étape" color="#0F766E"/>
+      {effectiveActive==="frat" && sgs && <Card accent="#0F766E"><FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="Manuel SGS 02-04 · à remplir par le CM1 avant chaque étape" color="#0F766E"/>
         <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} crew={crew} standalone/></Card>}
       {effectiveActive==="sgs" && sgs && <SgsTile safety={safetyData} flights={flights} aircraft={aircraft} crew={crew} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
@@ -8949,7 +8949,7 @@ const AUDIT_FIELDS={statut:"Statut",titre:"Intitulé",description:"Description",
   analyse:"Fiche d'analyse",recu:"Réception",dac:"Transmission DAC",date:"Date",num:"Vol",immat:"Immatriculation",valeur:"Valeur",profil:"Profil",fonction:"Fonction",motif:"Motif",document:"Document",elements:"Éléments",
   status:"Statut",pax:"Passagers réels",depReal:"Off Block (GMT)",takeOff:"Take Off (GMT)",landing:"Landing (GMT)",arrReal:"On Block (GMT)",
   carbDep:"Carburant départ (kg)",carbArr:"Carburant arrivée (kg)",causeRetard:"Cause du retard",from:"Départ",to:"Arrivée",dep:"Heure de départ",arr:"Heure d'arrivée",
-  clientId:"Client",acId:"Appareil",cm1:"Commandant",cm2:"Copilote",cc:"Chef de cabine",sieges:"Sièges",nps:"Satisfaction (sur 10)",
+  clientId:"Client",acId:"Appareil",cm1:"CM1",cm2:"CM2",cc:"Chef de cabine",sieges:"Sièges",nps:"Satisfaction (sur 10)",
   mels:"MEL",exp:"Échéance",sev:"Catégorie",sys:"Système",notes:"Notes de l'enquête",commentaire:"Commentaire"};
 const auditMod=m=>AUDIT_MODULES[m]||m;
 const auditFld=f=>AUDIT_FIELDS[f]||f;
@@ -9138,7 +9138,7 @@ function AccountsModal({ onClose, crew }){
           <div style={{fontSize:12.5,fontWeight:800}}>Nouveau compte</div>
           {form.profil==="eqp"
             ? ((crew||[]).length
-                ? <><div style={{fontSize:11.5,color:C.slate}}>Personne du registre Équipage — le rôle détermine l'accès au FRAT (TRI et CDB seulement).</div>
+                ? <><div style={{fontSize:11.5,color:C.slate}}>Personne du registre Équipage — le rôle détermine l'accès au FRAT (TRI et CM1 seulement).</div>
                     <CustomSelect value={form.crewId||""} searchable icon="👥" placeholder="-- Choisir dans le registre Équipage --"
                       onChange={v=>{ const m=(crew||[]).find(x=>x.id===v)||{}; setForm({...form,crewId:v,nom:m.nom||"",prenom:m.prenom||"",role:m.role,fonction:SGS_ROLE_L[m.role]||""}); }}
                       options={(crew||[]).filter(m=>!(list||[]).some(u=>u.actif&&u.crewId===m.id)).map(m=>({value:m.id,label:(m.nom+" "+m.prenom).trim(),sub:SGS_ROLE_L[m.role]||m.role}))}/>
