@@ -139,6 +139,15 @@ async function checkPassword(pwd, profileId) {
 }
 const supabase = window.supabase?.createClient(SUPA_URL, SUPA_KEY);
 
+// Liste des sauvegardes : un seul enregistrement léger, écrit chaque nuit par le serveur.
+// Le contenu des copies n est téléchargé qu au moment de la restauration.
+async function sbListBackups(){
+  const idx=await sbGet(PFX+"backup_index");
+  if(!Array.isArray(idx)) return [];
+  return idx.filter(x=>x&&x.cle&&x.exportDate)
+            .sort((a,b)=>String(b.exportDate).localeCompare(String(a.exportDate)));
+}
+
 async function sbGet(key) {
   if(!supabase) return null;
   try {
@@ -11077,14 +11086,15 @@ const restoreDate=v=>v?new Date(v).toLocaleString("fr-FR",{day:"numeric",month:"
 function RestoreModal({ onClose, setRestoreProgress, onImport }){
   // Sept copies glissantes écrites chaque nuit par le serveur, une par jour de la semaine
   const [copies,setCopies]=useState(null);
+  // Seules les dates sont lues à l ouverture : une requête légère, indépendante du volume.
+  // Le contenu de la copie choisie n est téléchargé qu au moment de la restauration.
   useEffect(()=>{ (async()=>{
-    const out=[];
-    for(let j=0;j<7;j++){
-      try{ const d=await sbGet(PFX+"backup_j"+j); if(d&&d.exportDate) out.push(d); }catch(e){ logSilent(e); }
-    }
-    if(!out.length){ try{ const d=await sbGet(PFX+"lastBackupData"); if(d) out.push(d); }catch(e){ logSilent(e); } }
-    out.sort((a,b)=>String(b.exportDate).localeCompare(String(a.exportDate)));
-    setCopies(out);
+    try{
+      const l=await sbListBackups();
+      if(l&&l.length){ setCopies(l); return; }
+    }catch(e){ logSilent(e); }
+    try{ const d=await sbGet(PFX+"lastBackupData"); setCopies(d&&d.exportDate?[{cle:PFX+"lastBackupData",exportDate:d.exportDate,source:d.source}]:[]); }
+    catch(e){ logSilent(e); setCopies([]); }
   })(); },[]);
   const rSleep=(ms)=>new Promise(r=>setTimeout(r,ms));   // courte pause entre les étapes affichées
   return (
@@ -11103,8 +11113,11 @@ function RestoreModal({ onClose, setRestoreProgress, onImport }){
                   setRestoreProgress({title:"Restauration en cours",icon:"☁️",steps,currentStep:0,pct:15});
                   await rSleep(200);
                   setRestoreProgress(p=>({...p,currentStep:1,pct:50}));
-                  if(await uiConfirm("Copie du "+restoreDate(d.exportDate)+"\n"+restoreResume(d)+"\n\nLes données actuelles seront remplacées. Le journal d'audit reste intact.\n\nConfirmer la restauration ?")){
-                    if(onImport){onImport(d);}
+                  let don=d;
+                  if(d.cle){ try{ don=await sbGet(d.cle); }catch(e){ logSilent(e); don=null; } }
+                  if(!don){ setRestoreProgress(null); uiAlert("⚠️ Cette copie n'a pas pu être lue. Réessayez, ou utilisez un fichier."); return; }
+                  if(await uiConfirm("Copie du "+restoreDate(don.exportDate||d.exportDate)+"\n"+restoreResume(don)+"\n\nLes données actuelles seront remplacées. Le journal d'audit reste intact.\n\nConfirmer la restauration ?")){
+                    if(onImport){onImport(don);}
                     setRestoreProgress(p=>({...p,currentStep:2,pct:85})); await rSleep(400);
                     setRestoreProgress(p=>({...p,currentStep:3,pct:100})); await rSleep(600);
                     setRestoreProgress(null);
@@ -11112,7 +11125,7 @@ function RestoreModal({ onClose, setRestoreProgress, onImport }){
                 }} style={{textAlign:"left",padding:"11px 12px",background:k===0?"#EFF6FF":"white",border:"1.5px solid "+(k===0?"#0369A1":C.border),borderRadius:12,cursor:"pointer",...TAP}}>
                   <div style={{fontSize:13.5,fontWeight:800,color:C.navy}}>☁️ {k===0?"Copie la plus récente":"Copie du "+restoreDate(d.exportDate).split(" à ")[0]}</div>
                   <div style={{fontSize:11.5,color:"#0369A1",fontWeight:700,marginTop:3}}>{restoreDate(d.exportDate)}{d.source?" · "+d.source:""}</div>
-                  <div style={{fontSize:11,color:C.slate,marginTop:2}}>{restoreResume(d)}</div>
+                  <div style={{fontSize:11,color:C.slate,marginTop:2}}>{d.compteurs?((d.compteurs.flights||0)+" vols · "+(d.compteurs.sgsHazards||0)+" dangers · "+(d.compteurs.sgsActions||0)+" actions"):(k===0?"Touchez pour voir son contenu":"")}</div>
                 </button>))}
               <button onClick={()=>{
                 onClose();
