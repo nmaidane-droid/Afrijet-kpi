@@ -3095,7 +3095,6 @@ const SGS_ICON_PATHS={
   aud:['M10 10m-6 0a6 6 0 1 0 12 0a6 6 0 1 0-12 0','M21 21l-6-6'],
   form:['M22 9L12 5L2 9l10 4l10-4z','M6 10.6V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.4'],
   frat:['M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0','M8 16l2-6l6-2l-2 6z'],
-  fdm:['M3 12h4l3 8l4-16l3 8h4'],
   forms:['M6 3h9l4 4v14H6z','M14 3v5h5','M9 12h7','M9 16h7'],
   itw:['M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z','M5 11a7 7 0 0 0 14 0','M12 18v3'],
   reco:['M9 18h6','M10 21h4','M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.3 1 2.5h6c0-1.2.4-1.9 1-2.5A6 6 0 0 0 12 3z'],
@@ -3446,7 +3445,6 @@ function SgsRevue({ safety, ES, H, A, spi, reg, revues, setRevues, meetings, nom
       changements:(reg.changes||[]).filter(c=>inY(c.createdAt||c.datePrevue)).map(c=>({ref:c.ref,objet:c.objet,statut:sgsChgStatut(c).l})),
       formations:{sessions:(reg.formations||[]).filter(f=>inY(f.date)).length,personnes:new Set((reg.formations||[]).filter(f=>inY(f.date)).flatMap(f=>sgsFormNoms(f))).size},
       frat:{evaluations:(reg.frat||[]).filter(f=>inY(f.date)).length,rouges:(reg.frat||[]).filter(f=>inY(f.date)&&f.couleur==='rouge').length,no_go:(reg.frat||[]).filter(f=>inY(f.date)&&f.decision==='nogo').length},
-      fdm:{evenements:(reg.fdm||[]).filter(f=>inY(f.date)).length,rouges:(reg.fdm||[]).filter(f=>inY(f.date)&&f.niveau==='rouge').length},
       safety_meetings_tenus:(meetings||[]).filter(m=>String(m.mois||'').slice(0,4)===String(an)).length,
       indicateurs_en_alerte:spi.filter(s=>s.alerte).map(s=>s.l),
       revue_precedente:prev?{ref:prev.ref,decisions:(prev.sections.find(s=>/Décisions/.test(s.title))||{}).content||''}:null };
@@ -3623,6 +3621,84 @@ function SgsChangesView({ items, setItems, nomResp, onDanger }){
   </div>);
 }
 
+// ── Sous-traitants — SGS 01-04 et 04-01 ──
+// Afrijet reste responsable des tâches sous-traitées et les intègre à son SGS : critères de
+// sécurité au contrat, audits, sensibilisation de leurs employés, diffusion des comptes rendus.
+const SGS_ST_ACT=[{k:'entretien',l:'Entretien et navigabilité'},{k:'handling',l:'Assistance en escale'},
+  {k:'avitaillement',l:'Avitaillement'},{k:'degivrage',l:'Dégivrage'},{k:'catering',l:'Commissariat'},{k:'autre',l:'Autre'}];
+const sgsStMois=(d,n)=>{ if(!d) return true; const x=new Date(d); x.setMonth(x.getMonth()+n); return x.toISOString().slice(0,10)<sgsToday(); };
+// Ce qui appelle une action : contrat non revu depuis 12 mois, audit échu, attestation manquante
+const sgsStAlertes=s=>{ const a=[];
+  if(sgsStMois(s.revueContrat,12)) a.push('revue de contrat');
+  if(sgsStMois(s.dernierAudit,24)) a.push('audit');
+  if(!s.attestationFormation) a.push('sensibilisation SGS');
+  if(!s.diffusionSM) a.push('diffusion des comptes rendus');
+  return a; };
+
+function SgsSousTraitantsView({ items, setItems, nomResp, safety, audits }){
+  const [ed,setEd]=useState(null);
+  const list=[...(items||[])].sort((a,b)=>String(a.nom||'').localeCompare(String(b.nom||'')));
+  if(ed){ const up=p=>setEd({...ed,...p});
+    const save=()=>{ if(!(ed.nom||'').trim()){ uiAlert("⚠️ Indiquez le nom du sous-traitant."); return; }
+      const now=new Date().toISOString();
+      if(ed.id) setItems(l=>(l||[]).map(x=>x.id===ed.id?{...ed,updatedAt:now}:x));
+      else setItems(l=>[...(l||[]),{...ed,id:'ST'+Date.now(),createdAt:now}]);
+      setEd(null); sgsToast("Sous-traitant enregistré"); };
+    return (<Card accent="#0F766E"><FHeader icon="🤝" title={ed.nom||'Nouveau sous-traitant'} subtitle="SGS 01-04 · activités sous-traitées intégrées au SGS" color="#0F766E"/>
+      <div style={{display:"flex",flexDirection:"column",gap:11}}>
+        <SgsField label="Nom de l'entreprise"><input value={ed.nom||''} onChange={e=>up({nom:e.target.value})} style={sgsInput}/></SgsField>
+        <SgsField label="Activité sous-traitée"><SgsPills value={ed.activite} onChange={v=>up({activite:v})} options={SGS_ST_ACT} color="#0F766E"/></SgsField>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <SgsField label="Contact"><input value={ed.contact||''} onChange={e=>up({contact:e.target.value})} style={sgsInput}/></SgsField>
+          <SgsField label="Escale ou lieu"><input value={ed.lieu||''} onChange={e=>up({lieu:e.target.value})} style={sgsInput}/></SgsField></div>
+        <SgsField label="Critères de sécurité inscrits au contrat">
+          <textarea rows={3} value={ed.criteres||''} onChange={e=>up({criteres:e.target.value})}
+            placeholder="Notification des événements, formation SGS des employés, participation à l'analyse, indicateurs…" style={{...sgsInput,height:"auto",padding:"8px 10px"}}/></SgsField>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <SgsField label="Dernière revue de contrat"><DateField value={ed.revueContrat||''} onChange={v=>up({revueContrat:v})} style={sgsInput}/></SgsField>
+          <SgsField label="Dernier audit chez le sous-traitant"><DateField value={ed.dernierAudit||''} onChange={v=>up({dernierAudit:v})} style={sgsInput}/></SgsField></div>
+        <SgsField label="Sensibilisation SGS de leurs employés">
+          <SgsPills value={ed.attestationFormation?'oui':ed.attestationFormation===false?'non':''} onChange={v=>up({attestationFormation:v==='oui'})}
+            options={[{k:'oui',l:'Attestation reçue'},{k:'non',l:'Non reçue'}]} color="#0F766E"/></SgsField>
+        {ed.attestationFormation&&<SgsField label="Date de l'attestation"><DateField value={ed.dateAttestation||''} onChange={v=>up({dateAttestation:v})} style={sgsInput}/></SgsField>}
+        <SgsField label="Diffusion des comptes rendus de Safety Meeting">
+          <SgsPills value={ed.diffusionSM?'oui':ed.diffusionSM===false?'non':''} onChange={v=>up({diffusionSM:v==='oui'})}
+            options={[{k:'oui',l:'Destinataire'},{k:'non',l:'Non destinataire'}]} color="#0F766E"/></SgsField>
+        <SgsField label="Observations"><textarea rows={2} value={ed.notes||''} onChange={e=>up({notes:e.target.value})} style={{...sgsInput,height:"auto",padding:"8px 10px"}}/></SgsField>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <SgsBtn l="Annuler" onClick={()=>setEd(null)} full/>
+          <SgsBtn l="Enregistrer" onClick={save} prim full/></div>
+        {ed.id&&<SgsBtn l="🗑 Supprimer" full onClick={async()=>{ if(await uiConfirm("Supprimer ce sous-traitant ?")){ setItems(l=>(l||[]).filter(x=>x.id!==ed.id)); setEd(null); } }}/>}
+      </div></Card>);
+  }
+  const enAlerte=list.filter(s=>sgsStAlertes(s).length);
+  const pdf=()=>{ try{ sgsDocPDF({ref:'ST-'+new Date().getFullYear(),titre:'Registre des sous-traitants',sous:"Activités sous-traitées intégrées au SGS (SGS 01-04)",
+      nom:nomResp,fonction:'Responsable du Système de Gestion de la Sécurité',
+      meta:[['Sous-traitants',String(list.length)],['Points à traiter',String(enAlerte.length)],['Édité le',sgsFr(sgsToday())]],
+      blocs:[{t:'Sous-traitants',cols:[{l:'Entreprise',w:44},{l:'Activité',w:38},{l:'Revue contrat',w:26},{l:'Dernier audit',w:26},{l:'Sensibilisation',w:28},{l:'Comptes rendus',w:28}],
+        rows:list.map(s=>[s.nom||'-',(SGS_ST_ACT.find(a=>a.k===s.activite)||{}).l||'-',s.revueContrat?sgsFr(s.revueContrat):'—',
+          s.dernierAudit?sgsFr(s.dernierAudit):'—',s.attestationFormation?'Attestation reçue':'Non reçue',s.diffusionSM?'Destinataire':'Non']) },
+        ...(enAlerte.length?[{t:'Points à traiter',cols:[{l:'Entreprise',w:60},{l:'À traiter',w:120}],
+          rows:enAlerte.map(s=>[s.nom,sgsStAlertes(s).join(', ')])}]:[])]});
+      sgsToast('Registre exporté'); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
+  return (<div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <SgsIntro titre="Sous-traitants" refm="SGS 01-04" txt="Afrijet Sahara reste responsable des tâches qu'elle sous-traite et intègre ces activités à son SGS : critères de sécurité au contrat, audits, sensibilisation de leurs employés, participation à l'analyse des événements et diffusion des comptes rendus de Safety Meeting."/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+      {[[list.length,'Sous-traitants',false],[enAlerte.length,'Points à traiter',enAlerte.length>0]].map(([n,l,al])=>
+        <div key={l} style={{background:al?'#FCEBEB':'#E1F5EE',borderRadius:10,padding:"9px 10px"}}>
+          <div style={{fontSize:22,fontWeight:800,color:al?'#791F1F':'#085041'}}>{n}</div>
+          <div style={{fontSize:11,color:al?'#791F1F':'#085041'}}>{l}</div></div>)}</div>
+    <SgsBtn l="+ Nouveau sous-traitant" onClick={()=>setEd({activite:'handling'})} prim full/>
+    <div style={sgsCard}>{list.length?list.map(s=>{ const al=sgsStAlertes(s);
+      return <SgsRow key={s.id} titre={s.nom} color={al.length?'#B91C1C':'#0F766E'}
+        sub={((SGS_ST_ACT.find(a=>a.k===s.activite)||{}).l||'')+(s.lieu?' · '+s.lieu:'')+(al.length?' · à traiter : '+al.join(', '):' · à jour')}
+        badge={al.length?sgsPill(String(al.length),'#FCEBEB','#791F1F'):sgsPill('À jour','#EAF3DE','#27500A')}
+        onClick={()=>setEd(s)}/>; })
+      :<div style={{fontSize:12.5,color:C.slate,padding:"6px 0"}}>Aucun sous-traitant enregistré. Inscrivez l'entretien, l'assistance en escale, l'avitaillement…</div>}</div>
+    {list.length>0&&<SgsBtn l="📄 Registre des sous-traitants (PDF)" onClick={pdf} full/>}
+  </div>);
+}
+
 // ── Audits internes — SGS 03-01, guide d'audit ENR/SGS-FOR/SMS-22 ──
 const SGS_AUD_TYPES=[{k:'eval',l:'Évaluation du fonctionnement du SGS (guide ENR-22)'},{k:'qualite',l:'Audit Qualité — thème SGS'},{k:'base',l:'Audit sécurité de la base'},{k:'escale',l:'Audit sécurité des escales'},
   {k:'bagages',l:'Contrôle : pesée aléatoire des bagages'},{k:'docs',l:'Contrôle : réconciliation documentaire'}];
@@ -3696,7 +3772,18 @@ function SgsAuditsView({ items, setItems, nomResp, onAction }){
 }
 
 // ── Formation et sensibilisation — SGS 04-01 ──
-const SGS_FORM_TYPES=[{k:'initiale',l:'Sensibilisation SGS initiale'},{k:'recyclage',l:'Recyclage SGS'},{k:'direction',l:'DR et responsables désignés'},{k:'soustraitant',l:'Sous-traitants'}];
+const SGS_FORM_TYPES=[{k:'initiale',l:'Sensibilisation SGS initiale'},{k:'recyclage',l:'Recyclage SGS'},{k:'direction',l:'DR et responsables désignés'},{k:'soustraitant',l:'Sous-traitants'}]
+// Thèmes imposés par le Manuel SGS 04-01, repris mot pour mot.
+// Sensibilisation de tout le personnel : récurrence biennale (24 mois).
+const SGS_FORM_THEMES={
+  personnel:['Principes du SGS','Exigences de l\u2019OACI','Règlements et guides nationaux','Structure du système de gestion de la sécurité',
+    'Mise en place au sein de la Compagnie','Objectifs et indicateurs de sécurité','Notification des événements','Rôle de chacun dans le SGS',
+    'Facteurs humains','Réalisation des études de sécurité','Réalisation des audits internes','Analyse des événements',
+    'Résultats et retours d\u2019expérience (internes, autres compagnies, statistiques)'],
+  direction:['Concept OACI du SGS','La gestion de la sécurité','Gestion des risques et des dangers','Exigences de l\u2019OACI concernant le SGS',
+    'Mise en œuvre du SGS','Maintien de la sécurité','Intégration stratégique','Coût de la sécurité']};
+const sgsFormThemes=t=>t==='direction'?SGS_FORM_THEMES.direction:(t==='soustraitant'?[]:SGS_FORM_THEMES.personnel);
+const SGS_FORM_PERIODE={initiale:24,recyclage:24,direction:24,soustraitant:24};   // SGS 04-01 : récurrence biennale;
 // Participants d'une session : une ligne par personne (nom, fonction, présence, résultat au test facultatif).
 // Les anciennes sessions (liste de noms en texte) sont converties à la lecture, sans perte.
 const sgsFormPers=f=>Array.isArray(f.pers)?f.pers:String(f.participants||'').split(/\n|,/).map(s=>s.trim()).filter(Boolean).map(n=>{ const [nom,fonction]=n.split(/\s+[—–-]\s+/); return {nom:(nom||'').trim(),fonction:(fonction||'').trim(),present:true,score:''}; });
@@ -3720,12 +3807,16 @@ function SgsFormationsView({ items, setItems, nomResp, crew }){
     sgsDocPDF({ref:(f.ref||'FOR')+'-PRES',titre:'Tableau récapitulatif de présence',sous:(f.intitule||'Sensibilisation au SGS')+' — '+sgsFr(f.date),nom:nomResp,fonction:'Responsable du Système de Gestion de la Sécurité',
       meta:[['Session',f.ref||'-'],['Type',(SGS_FORM_TYPES.find(t=>t.k===f.type)||{}).l||'-'],['Date et durée',sgsFr(f.date)+(f.duree?' · '+f.duree:'')],['Formateur',f.formateur||'-'],['Seuil de réussite au test',ps.some(p=>p.score!==''&&p.score!=null)?sgsFormSeuil(f)+' %':'Pas de test']],
       blocs:[{t:'Participants (SGS 04-01)',cols:[{l:'Nom',w:48},{l:'Fonction',w:40},{l:'Présence',w:22},{l:'Test',w:16},{l:'Résultat',w:24},{l:'Signature',w:32}],
-        rows:ps.map(p=>[p.nom,p.fonction||'-',p.present?'Présent':'Absent',(p.score===''||p.score==null)?'-':p.score+' %',SGS_FORM_RES[sgsFormRes(p,f)].l,'\n\n'])}]});   // hauteur de ligne suffisante pour signer à la main
+        rows:ps.map(p=>[p.nom,p.fonction||'-',p.present?'Présent':'Absent',(p.score===''||p.score==null)?'-':p.score+' %',SGS_FORM_RES[sgsFormRes(p,f)].l,'\n\n'])},
+        ...(sgsFormThemes(f.type).filter(x=>(f.themes||{})[x]).length?[{t:'Thèmes traités (Manuel SGS 04-01)',
+          cols:[{l:'Thème',w:150},{l:'Traité',w:22}],
+          rows:sgsFormThemes(f.type).map(x=>[x,(f.themes||{})[x]?'Oui':'—'])}]:[])]});   // hauteur de ligne suffisante pour signer à la main
     sgsToast('Tableau de présence exporté'); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
   const attestation=(f,p)=>{ try{
     sgsDocPDF({ref:(f.ref||'FOR')+'-ATT-'+String(sgsFormPers(f).indexOf(p)+1).padStart(2,'0'),titre:'Attestation de formation',sous:p.nom+(p.fonction?' — '+p.fonction:''),nom:nomResp,fonction:'Responsable du Système de Gestion de la Sécurité',
       meta:[['Formation',f.intitule||'Sensibilisation au SGS'],['Type',(SGS_FORM_TYPES.find(t=>t.k===f.type)||{}).l||'-'],['Date et durée',sgsFr(f.date)+(f.duree?' · '+f.duree:'')],['Formateur',f.formateur||'-'],
-        ['Résultat',SGS_FORM_RES[sgsFormRes(p,f)].l+((p.score===''||p.score==null)?'':' ('+p.score+' %, seuil '+sgsFormSeuil(f)+' %)')],['Prochain recyclage',(()=>{ const d=new Date(f.date); d.setMonth(d.getMonth()+(Number(f.periodicite)||24)); return sgsFr(d.toISOString().slice(0,10)); })()]],
+        ['Résultat',SGS_FORM_RES[sgsFormRes(p,f)].l+((p.score===''||p.score==null)?'':' ('+p.score+' %, seuil '+sgsFormSeuil(f)+' %)')],['Prochain recyclage',(()=>{ const d=new Date(f.date); d.setMonth(d.getMonth()+(Number(f.periodicite)||24)); return sgsFr(d.toISOString().slice(0,10)); })()],
+        ...(sgsFormThemes(f.type).length?[['Thèmes traités',sgsFormThemes(f.type).filter(x=>(f.themes||{})[x]).length+' sur '+sgsFormThemes(f.type).length+' (Manuel SGS 04-01)']]:[])],
       blocs:[{t:'Attestation',txt:'Le Responsable du Système de Gestion de la Sécurité d\'Afrijet Sahara atteste que '+p.nom+(p.fonction?', '+p.fonction+',':'')+' a suivi la formation « '+(f.intitule||'Sensibilisation au SGS')+' » le '+sgsFr(f.date)+(f.duree?' (durée : '+f.duree+')':'')+', conformément au Manuel SGS, chapitre SGS 04-01.'}]});
     sgsToast('Attestation exportée · '+p.nom); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
   if(ed){ const up=p=>setEd(o=>({...o,...p})), rows=ed.pers||[];
@@ -3738,7 +3829,18 @@ function SgsFormationsView({ items, setItems, nomResp, crew }){
     const cell={...sgsInput,padding:"7px 8px",fontSize:12.5};
     return (<Card accent="#0F766E"><FHeader icon="🎓" title={ed.ref||'Nouvelle session'} subtitle="SGS 04-01 · formation et sensibilisation" color="#0F766E"/>
       <div style={{display:"flex",flexDirection:"column",gap:11}}>
-        <SgsField label="Type"><SgsPills value={ed.type} onChange={v=>up({type:v})} options={SGS_FORM_TYPES} color="#0F766E"/></SgsField>
+        <SgsField label="Type"><SgsPills value={ed.type} onChange={v=>up({type:v,periodicite:ed.periodicite||SGS_FORM_PERIODE[v]||24})} options={SGS_FORM_TYPES} color="#0F766E"/></SgsField>
+        {sgsFormThemes(ed.type).length>0&&(()=>{ const th=ed.themes||{}, L=sgsFormThemes(ed.type), n=L.filter(x=>th[x]).length;
+          return <SgsField label={"Thèmes du Manuel SGS 04-01 — "+n+" / "+L.length}>
+            <div style={{border:"1px solid "+C.border,borderRadius:10,overflow:"hidden"}}>
+              {L.map((x,i)=><div key={x} role="button" aria-label={"Thème : "+x} onClick={()=>up({themes:{...th,[x]:!th[x]}})}
+                style={{display:"flex",gap:8,alignItems:"flex-start",padding:"7px 10px",borderTop:i?"1px solid "+C.border:"none",...TAP}}>
+                <div style={{width:17,height:17,borderRadius:5,flexShrink:0,marginTop:1,border:"1.5px solid "+(th[x]?"#0F766E":C.border),
+                  background:th[x]?"#0F766E":"white",color:"white",fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{th[x]?"✓":""}</div>
+                <div style={{fontSize:12,color:C.text}}>{x}</div></div>)}
+            </div>
+            {n<L.length&&<div style={{fontSize:10.5,color:"#B45309",marginTop:4}}>Le manuel impose de couvrir les {L.length} thèmes sur la récurrence biennale.</div>}
+          </SgsField>; })()}
         <SgsField label="Intitulé"><input value={ed.intitule||''} onChange={e=>up({intitule:e.target.value})} style={sgsInput}/></SgsField>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <SgsField label="Date"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
@@ -3778,10 +3880,16 @@ function SgsFormationsView({ items, setItems, nomResp, crew }){
         rows:list.map(f=>{ const ps=sgsFormPers(f); return [f.ref,sgsFr(f.date),(SGS_FORM_TYPES.find(t=>t.k===f.type)||{}).l,f.formateur||'-',ps.filter(p=>p.present).length+' / '+ps.length,String(sgsFormNoms(f).length)]; })},
       {t:'Échéances de recyclage par personne',cols:[{l:'Personne',w:70},{l:'Dernière session réussie',w:44},{l:'Échéance',w:32},{l:'État',w:36}],rows:P.map(p=>[p.nom,sgsFr(p.date)+' ('+p.ref+')',sgsFr(p.ech),p.ech<today?'Échu':'À jour'])},
       ...(AF.length?[{t:'Personnes à former',cols:[{l:'Personne',w:70},{l:'Motif',w:40},{l:'Session',w:72}],rows:AF.map(a=>[a.nom,a.motif,a.ref+' · '+sgsFr(a.date)])}]:[])]}); sgsToast("Registre des formations exporté"); }catch(e){ uiAlert("❌ Erreur PDF : "+(e.message||e)); } };
+  // Couverture des thèmes du manuel sur la récurrence biennale (24 mois)
+  const couv=(()=>{ const lim=new Date(); lim.setMonth(lim.getMonth()-24); const limS=lim.toISOString().slice(0,10);
+    const TH=SGS_FORM_THEMES.personnel, vus=new Set();
+    list.filter(f=>f.date>=limS&&f.type!=='direction'&&f.type!=='soustraitant').forEach(f=>TH.forEach(x=>{ if((f.themes||{})[x]) vus.add(x); }));
+    return [vus.size,TH.length]; })();
   return (<div style={{display:"flex",flexDirection:"column",gap:12}}>
     <SgsIntro titre="Formation et sensibilisation" refm="SGS 04-01" txt="Tout le personnel est convié aux sessions de sensibilisation SGS ; le DR, les responsables désignés et les sous-traitants ont leurs propres sessions. Chaque session donne lieu à un tableau de présence et à une attestation par personne. Le responsable SGS vérifie que chacun est formé et que les recyclages sont respectés."/>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-      {[[P.length,'Personnes formées',false],[echus.length,'Recyclages échus',echus.length>0],[AF.length,'Personnes à former',AF.length>0],[list.length,'Sessions',false]].map(([n,l,al])=>
+      {[[P.length,'Personnes formées',false],[echus.length,'Recyclages échus',echus.length>0],[AF.length,'Personnes à former',AF.length>0],
+        [couv[0]+' / '+couv[1],'Thèmes couverts · 24 mois',couv[0]<couv[1]]].map(([n,l,al])=>
         <div key={l} style={{background:al?'#FCEBEB':'#E1F5EE',borderRadius:10,padding:"9px 10px"}}><div style={{fontSize:22,fontWeight:800,color:al?'#791F1F':'#085041'}}>{n}</div><div style={{fontSize:11,color:al?'#791F1F':'#085041'}}>{l}</div></div>)}</div>
     <SgsBtn l="+ Nouvelle session" onClick={()=>setEd({type:'initiale',intitule:'Sensibilisation au SGS',date:today,formateur:nomResp,pers:[{nom:'',fonction:'',present:true,score:''}],seuil:75,periodicite:24})} prim full/>
     {(echus.length>0||bientot.length>0||AF.length>0)&&<div style={sgsCard}><div style={{...sgsH,marginTop:0}}>Formations à prévoir</div>
@@ -4302,7 +4410,7 @@ function SgsFormsView({ reg, safety, ES, go, onSecu }){
 
 const SGS_EXTRA=[['forms','Formulaires SMS','Les 17 formulaires du chapitre 05 — sommaire et accès direct'],['revue','Revue annuelle','Revue de sécurité, fascicule et compte rendu (SGS 03-04)'],['chg','Changements',"Évaluations d'impact sur la sécurité (SGS 03-05)"],
   ['aud','Audits','Audits internes et contrôles (SGS 03-01)'],['form','Formations','Sensibilisation et recyclages (SGS 04-01)'],
-  ['frat','FRAT','Risque de chaque vol, par le CM1 (SGS 02-04)'],['fdm','FDM','Événements issus de l\'analyse des vols (SGS 02-05)'],
+  ['frat','FRAT','Risque de chaque vol, par le CM1 (SGS 02-04)'],['st','Sous-traitants','Activités sous-traitées intégrées au SGS (SGS 01-04)'],
   ['itw','Interviews','Interview équipage — investigation (SMS-04)'],['reco','Recommandations','Recommandations de sécurité (SMS-07)'],
   ['plan','Planning SGS','Programmation annuelle des activités (SMS-10)'],['osv','Contrôles OSV','Contenu des enveloppes de vol (SMS-18)']];
 // Pastille : ce qui attend une action dans chaque registre
@@ -4316,8 +4424,8 @@ function sgsExtraAlert(k,reg){ const t=sgsToday();
   if(k==='aud') return (reg.audits||[]).filter(a=>a.statut==='planifie'&&a.date<t).length;
   if(k==='form'){ let n=0; const P={}; (reg.formations||[]).forEach(f=>sgsFormNoms(f).forEach(x=>{ const kk=x.toLowerCase(); if(!P[kk]||P[kk].d<f.date) P[kk]={d:f.date,p:Number(f.periodicite)||24}; }));
     Object.values(P).forEach(p=>{ const d=new Date(p.d); d.setMonth(d.getMonth()+p.p); if(d.toISOString().slice(0,10)<t) n++; }); return n; }
-  if(k==='frat') return (reg.frat||[]).filter(f=>sgsJours(f.date)<=30&&(f.couleur2||f.couleur)==='rouge').length;
-  if(k==='fdm') return (reg.fdm||[]).filter(f=>f.niveau==='rouge'&&f.statut!=='traite').length;
+  if(k==='frat') return (reg.frat||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&!f.decision2).length;   // rouges non décidés
+  if(k==='st') return (reg.st||[]).filter(s=>sgsStAlertes(s).length).length;
   return 0; }
 // PDF d'un compte rendu au format de son formulaire officiel (SMS-09, 13, 16, 17, 19, 20, 21)
 function sgsCrPDF(e, evStatus, nom){
@@ -4885,13 +4993,13 @@ function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHaza
       {tab==='aud'&&<SgsAuditsView items={reg.audits} setItems={reg.setAudits} nomResp={nomResp} onAction={addActionDirect}/>}
       {tab==='form'&&<SgsFormationsView items={reg.formations} setItems={reg.setFormations} nomResp={nomResp} crew={crew}/>}
       {tab==='frat'&&<SgsFratView items={reg.frat} setItems={reg.setFrat} flights={flights} crew={crew} prof={prof}/>}
+      {tab==='st'&&<SgsSousTraitantsView items={reg.st} setItems={reg.setSt} nomResp={nomResp} safety={safety} audits={reg.audits}/>}
       {tab==='forms'&&<SgsFormsView reg={reg} safety={safety} ES={ES} go={go} onSecu={onSecu}/>}
       {tab==='itw'&&<SgsInterviewsView items={reg.itw} setItems={reg.setItw} safety={safety} nomResp={nomResp} crew={crew} flights={flights} aircraft={aircraft}/>}
       {tab==='reco'&&<SgsRecosView items={reg.reco} setItems={reg.setReco} safety={safety} H={H} nomResp={nomResp} onAction={o=>setEdit({kind:'action',data:o})}/>}
       {tab==='plan'&&<SgsPlanningView items={reg.plan} setItems={reg.setPlan} nomResp={nomResp} auto={{meetings:MT,revues:reg.revues,audits:reg.audits,osv:reg.osv,formations:reg.formations,bulletins:[...bullAuto,...(M.bulletins||[])]}}/>}
       {tab==='osv'&&<SgsOsvView items={reg.osv} setItems={reg.setOsv} flights={flights} nomResp={nomResp} aircraft={aircraft}/>}
-      {tab==='fdm'&&<SgsFdmView items={reg.fdm} setItems={reg.setFdm} aircraft={aircraft} onDanger={o=>setEdit({kind:'hazard',data:o,step:1})}/>}
-      {tab==='sm'&&<SgsMeeting safety={safety} spi={spi} H={H} A={A} meetings={MT} setMeetings={setMeetings} nomResp={nomResp}
+            {tab==='sm'&&<SgsMeeting safety={safety} spi={spi} H={H} A={A} meetings={MT} setMeetings={setMeetings} nomResp={nomResp}
         extra={{tauxLoadsheet,butees,tauxAnalyse,crmN,nbBull:bulls.length}}/>}
 
     </>);
@@ -5035,11 +5143,22 @@ function SgsMeeting({ safety, spi, H, A, meetings, setMeetings, extra, nomResp }
       dangers_ouverts:H.filter(h=>h.statut!=='clos').map(h=>{const r=sgsRisqueCourant(h);return {ref:h.ref,intitule:h.titre,niveau:r?r.l+' ('+r.cell+')':'non évalué',statut:h.statut};}),
       actions_ouvertes:A.filter(sgsActionOuverte).map(a=>({ref:a.ref,action:a.titre,echeance:sgsFr(a.echeance),en_retard:a.echeance<today})),
       actions_closes_du_mois:A.filter(a=>!sgsActionOuverte(a)&&String(a.closedAt||'').slice(0,7)===mSel).map(a=>({ref:a.ref,action:a.titre})),
+      // Suivi du mois précédent : les décisions prises ne doivent pas se perdre d'un meeting à l'autre
+      meeting_precedent:(()=>{ const d=new Date(Number(mSel.slice(0,4)),Number(mSel.slice(5,7))-2,1);
+        const mPrec=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+        const prec=(meetings||[]).find(m=>String(m.mois||'')===mPrec||String(m.mois||'')===moisFr(mPrec));
+        if(!prec) return null;
+        const sec=(prec.sections||[]).find(s=>/Décisions|Actions décidées/i.test(s.title||''));
+        return {mois:moisFr(mPrec), ref:prec.ref||'', decisions:(sec&&sec.content)||'',
+          actions_encore_ouvertes:A.filter(a=>sgsActionOuverte(a)&&String(a.createdAt||'').slice(0,7)<=mPrec)
+            .map(a=>({ref:a.ref,action:a.titre,echeance:sgsFr(a.echeance),en_retard:a.echeance<today})) };
+      })(),
     };
     const system=`Tu es le responsable Qualité / SGS d'Afrijet Sahara, exploitant d'EMB-145 sous CTA marocain. Tu rédiges le compte rendu du Safety Meeting mensuel prévu par le Manuel SGS (SGS 02-01), à partir UNIQUEMENT des données fournies.
 Règles : français professionnel et factuel ; n'invente aucun fait, chiffre, nom ni participant ; ne nomme aucune personne ; lorsqu'une information manque (participants, décisions de séance), écris exactement "[à compléter]" ; rappelle les seuils du manuel quand un indicateur est en alerte ; un risque intolérable impose des mesures immédiates et l'information du Dirigeant Responsable.
 Réponds UNIQUEMENT par un objet JSON, sans texte autour : {"objet":"...","intro":"...","sections":[{"title":"...","content":"..."}],"closing":"..."}
-Sections dans cet ordre : "Participants", "Événements de sécurité du mois", "Indicateurs de sécurité", "Registre des dangers", "Suivi des actions correctives et préventives", "Décisions de la séance", "Prochaine réunion".`;
+Sections dans cet ordre : "Participants", "Suivi du meeting précédent", "Événements de sécurité du mois", "Indicateurs de sécurité", "Registre des dangers", "Suivi des actions correctives et préventives", "Décisions de la séance", "Prochaine réunion".
+La section "Suivi du meeting précédent" reprend les décisions du mois précédent (champ meeting_precedent) et indique, pour chacune, ce qu'elle est devenue ; elle signale les actions encore ouvertes et celles en retard. Si meeting_precedent est nul, écris qu'aucun compte rendu n'existe pour le mois précédent.`;
     setBusy(0);
     try{
       const j=await sgsCallAI(system,"Données du mois :\n"+JSON.stringify(data,null,1),n=>setBusy(Math.min(n,7)));
@@ -7254,7 +7373,7 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
       safetyData,
       clients,
       ndsArchive,
-      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,satisfaction:satis,sgsFdm:sgs.reg.fdm,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv}:{}),
+      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,satisfaction:satis,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv}:{}),
     };
     setProgress(p=>({...p,currentStep:1,pct:40}));
     try{
@@ -9103,7 +9222,7 @@ function auditFields(a,b){ const ch={}; const ks=new Set([...Object.keys(a||{}),
 // ══ Consultation du journal d'audit (lot 3) ═════════════════════════
 const AUDIT_MODULES={sgsHazards:"Dangers",sgsActions:"Actions",sgsEvStatus:"Statut et analyse des comptes rendus",safety:"Comptes rendus",flights:"Vols",crew:"Équipage",aircraft:"Avions",
   clients:"Clients",sgsManual:"Indicateurs saisis",sgsMeetings:"Safety Meetings",sgsRevues:"Revues de sécurité",sgsChanges:"Changements",sgsAudits:"Audits",sgsFormations:"Formations",
-  sgsFrat:"FRAT",sgsFdm:"FDM",sgsItw:"Interviews",sgsReco:"Recommandations",sgsPlan:"Planning SGS",sgsOsv:"Contrôles OSV",sgsResponsable:"Signataire SGS",
+  sgsFrat:"FRAT",sgsSt:"Sous-traitants",sgsItw:"Interviews",sgsReco:"Recommandations",sgsPlan:"Planning SGS",sgsOsv:"Contrôles OSV",sgsResponsable:"Signataire SGS",
   connexion:"Connexions",comptes:"Comptes",["export PDF"]:"Exports PDF",essai:"Installation",
   melHist:"Historique des MEL",fin:"Finances",maint:"Maintenance",satisfaction:"Enquêtes de satisfaction",
   alertHist:"Alertes (automatique)",journal:"Journal d'audit",export:"Exports",installation:"Installation"};
@@ -11396,13 +11515,13 @@ function AppMain({ onLogout, profileId }) {
   const [sgsEvStatus,setSgsEvStatus] = usePersist("sgsEvStatus",{});
   const [sgsManual,setSgsManual]     = usePersist("sgsManual",{changes:[],crm:[],bulletins:[]});
   const [sgsMeetings,setSgsMeetings] = usePersist("sgsMeetings",[]);
-  // Registres SGS : revue annuelle, changements, audits, formations, FRAT, FDM
+  // Registres SGS : revue annuelle, changements, audits, formations, FRAT
   const [sgsRevues,setSgsRevues] = usePersist("sgsRevues",[]);
   const [sgsChanges,setSgsChanges] = usePersist("sgsChanges",[]);
   const [sgsAudits,setSgsAudits] = usePersist("sgsAudits",[]);
   const [sgsFormations,setSgsFormations] = usePersist("sgsFormations",[]);
   const [sgsFrat,setSgsFrat] = usePersist("sgsFrat",[]);
-  const [sgsFdm,setSgsFdm] = usePersist("sgsFdm",[]);
+  const [sgsSt,setSgsSt] = usePersist("sgsSt",[]);   // sous-traitants (SGS 01-04)
   // Formulaires du chapitre 05 : interviews (SMS-04), recommandations (SMS-07), planning (SMS-10), contrôles OSV (SMS-18)
   const [sgsItw,setSgsItw] = usePersist("sgsItw",[]);
   const [sgsReco,setSgsReco] = usePersist("sgsReco",[]);
@@ -11415,11 +11534,11 @@ function AppMain({ onLogout, profileId }) {
     const t=setTimeout(()=>auditAsSystem(()=>{   // opérations automatiques : journalisées au nom du système
       if((aircraft||[]).some(a=>a.immat===K&&a.type!==T)) setAircraft(l=>(l||[]).map(a=>a.immat===K?{...a,type:T}:a));
       if((safetyData||[]).some(e=>e.fx&&e.fx.immat===K&&e.fx.typeAv&&e.fx.typeAv!==T)) setSafety(l=>(l||[]).map(e=>e.fx&&e.fx.immat===K&&e.fx.typeAv!==T?{...e,fx:{...e.fx,typeAv:T}}:e));
-      [[sgsItw,setSgsItw,'type'],[sgsOsv,setSgsOsv,'type'],[sgsFdm,setSgsFdm,'typeAv']].forEach(([L,S,f])=>{
+      [[sgsItw,setSgsItw,'type'],[sgsOsv,setSgsOsv,'type']].forEach(([L,S,f])=>{
         if((L||[]).some(x=>x.immat===K&&x[f]&&x[f]!==T)) S(l=>(l||[]).map(x=>x.immat===K&&x[f]&&x[f]!==T?{...x,[f]:T}:x)); });
     }),5000);   // après l'arrivée des données du cloud
     return ()=>clearTimeout(t);
-  },[aircraft,safetyData,sgsItw,sgsOsv,sgsFdm]);
+  },[aircraft,safetyData,sgsItw,sgsOsv]);
   const [sgsResponsable,setSgsResponsable] = usePersist("sgsResponsable",SGS_RESP_DEFAUT);
   // Démonstration SGS : ajout unique, relié aux comptes rendus de démonstration présents
   const [demoSgsV1,setDemoSgsV1] = usePersist("demoSgsV1",false);
@@ -11447,7 +11566,7 @@ function AppMain({ onLogout, profileId }) {
   const AUTO_BACKUP_MS = 30*60*1000;
   const stateRef = useRef({});
   stateRef.current = { flights, maintData, crew, finData, kpis, dismissed, safetyData, clients, ndsArchive,
-    sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings, sgsResponsable, sgsRevues, sgsChanges, sgsAudits, sgsFormations, sgsFrat, sgsFdm, sgsItw, sgsReco, sgsPlan, sgsOsv, satisfaction:satis };
+    sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings, sgsResponsable, sgsRevues, sgsChanges, sgsAudits, sgsFormations, sgsFrat, sgsSt,  sgsItw, sgsReco, sgsPlan, sgsOsv, satisfaction:satis };
   const buildBackup = () => ({ version:"1.0", exportDate:new Date().toISOString(), auto:true, ...stateRef.current });
   const lastAutoRef = useRef(0);
   const autoBackup = async (reason) => {
@@ -11497,8 +11616,8 @@ function AppMain({ onLogout, profileId }) {
     if(data.sgsAudits) setSgsAudits(data.sgsAudits);
     if(data.sgsFormations) setSgsFormations(data.sgsFormations);
     if(data.sgsFrat) setSgsFrat(data.sgsFrat);
+    if(data.sgsSt) setSgsSt(data.sgsSt);
     if(data.satisfaction) setSatis(data.satisfaction);
-    if(data.sgsFdm) setSgsFdm(data.sgsFdm);
     if(data.sgsItw) setSgsItw(data.sgsItw); if(data.sgsReco) setSgsReco(data.sgsReco); if(data.sgsPlan) setSgsPlan(data.sgsPlan); if(data.sgsOsv) setSgsOsv(data.sgsOsv);
   };
 const [showRestoreModal,setShowRestoreModal] = useState(false);
@@ -11537,7 +11656,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);
     setClients(INIT_CLIENTS);setNdsArchive([]);   // sinon ces deux-là reviennent depuis le cloud
-    setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);setSgsRevues([]);setSgsChanges([]);setSgsAudits([]);setSgsFormations([]);setSgsFrat([]);setSgsFdm([]);setSgsItw([]);setSgsReco([]);setSgsPlan([]);setSgsOsv([]);setSatis([]);
+    setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);setSgsRevues([]);setSgsChanges([]);setSgsAudits([]);setSgsFormations([]);setSgsFrat([]);setSgsItw([]);setSgsReco([]);setSgsPlan([]);setSgsOsv([]);setSatis([]);
     setReport(null);setReset(false);setTab("forms");
   };
 
@@ -11615,7 +11734,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
         {tab==="forms"   && <ScreenForms satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
-          sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,reg:{revues:sgsRevues,setRevues:setSgsRevues,changes:sgsChanges,setChanges:setSgsChanges,audits:sgsAudits,setAudits:setSgsAudits,formations:sgsFormations,setFormations:setSgsFormations,frat:sgsFrat,setFrat:setSgsFrat,fdm:sgsFdm,setFdm:setSgsFdm,itw:sgsItw,setItw:setSgsItw,reco:sgsReco,setReco:setSgsReco,plan:sgsPlan,setPlan:setSgsPlan,osv:sgsOsv,setOsv:setSgsOsv},ndsArchive}}
+          sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,reg:{revues:sgsRevues,setRevues:setSgsRevues,changes:sgsChanges,setChanges:setSgsChanges,audits:sgsAudits,setAudits:setSgsAudits,formations:sgsFormations,setFormations:setSgsFormations,frat:sgsFrat,setFrat:setSgsFrat,st:sgsSt,setSt:setSgsSt,itw:sgsItw,setItw:setSgsItw,reco:sgsReco,setReco:setSgsReco,plan:sgsPlan,setPlan:setSgsPlan,osv:sgsOsv,setOsv:setSgsOsv},ndsArchive}}
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
           onSubmitMaint={d=>{
             if(d.acId){
