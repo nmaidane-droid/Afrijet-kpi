@@ -1858,12 +1858,12 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights }) 
           <div style={{flex:1,minWidth:0}}>
             <FLabel>CM1</FLabel>
             <CustomSelect value={cm1} onChange={setCm1} placeholder='-- --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm2).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':(m.role==='TRI'?'TRI':'CM1'))}))}/>
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm2).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':fonctionDe(m))}))}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
             <FLabel>CM2</FLabel>
             <CustomSelect value={cm2} onChange={setCm2} placeholder='-- --' icon='👨‍✈️' searchable
-              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm1).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':(m.role==='TRI'?'TRI':'CM2'))}))}/>
+              options={(crew||[]).filter(m=>(m.role==='CM1'||m.role==='CM2'||m.role==='TRI')&&m.nom+' '+m.prenom!==cm1).map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':fonctionDe(m))}))}/>
           </div>
         </div>
         <div>
@@ -2352,6 +2352,9 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
 
 // ── Choix des membres d'équipage depuis le registre Équipage (évite les erreurs de saisie) ──
 const SGS_ROLE_L={TRI:'TRI — instructeur',CM1:'CDB',CM2:'OPL',CC:'CC'};
+// Fonction inscrite au registre : TRI, CDB, OPL ou CC. Le siège occupé, lui, est CM1 ou CM2.
+const FONCTION={TRI:'TRI',CM1:'CDB',CM2:'OPL',CC:'CC'};
+const fonctionDe=m=>FONCTION[(m||{}).role]||(m||{}).role||'';
 const sgsCrewNom=m=>(m.nom+' '+m.prenom).trim();
 const SGS_CREW_ROLES={cdb:['CM1','TRI'],opl:['CM1','CM2','TRI'],pnc:['CC'],tous:['TRI','CM1','CM2','CC']};
 function sgsCrewOpts(crew, kind, cur){
