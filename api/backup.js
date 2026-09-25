@@ -125,12 +125,18 @@ async function kvEcrire(key, valeur) {
   return r.ok;
 }
 
-export async function copieSupabase(backup, now) {
+export async function copieSupabase(backup, now, index) {
   const donnees = { exportDate: now, source: "sauvegarde automatique", ...backup.donnees };
   const cle = cleDuJour(now);
   const a = await kvEcrire(cle, donnees);
   const b = await kvEcrire("lastBackupData", donnees);   // la plus récente, pour le bouton Restore
-  return a && b;
+  // Index léger : l ecran Restore lit ce seul enregistrement pour afficher la liste,
+  // sans telecharger le contenu des sauvegardes.
+  const ligne = { cle: PFX + cle, exportDate: now, source: "sauvegarde automatique", compteurs: backup.compteurs };
+  const autres = (Array.isArray(index) ? index : []).filter(x => x && x.cle !== ligne.cle);
+  const maj = [ligne, ...autres].sort((x, y) => String(y.exportDate).localeCompare(String(x.exportDate))).slice(0, 7);
+  const i = await kvEcrire("backup_index", maj);
+  return a && b && i;
 }
 
 export default async function handler(req, res) {
@@ -154,7 +160,7 @@ export default async function handler(req, res) {
     if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_REPO) {
       // Sans dépôt GitHub, la copie Supabase est écrite quand même
       let copie = false;
-      try { copie = await copieSupabase(backup, now); } catch (e) { /* signalé ci-dessous */ }
+      try { copie = await copieSupabase(backup, now, []); } catch (e) { /* signalé ci-dessous */ }
       res.status(200).json({ ok: true, depose: false, copieSupabase: copie, motif: "GITHUB_TOKEN ou GITHUB_REPO manquant", taille: json.length, compteurs: backup.compteurs });
       return;
     }
@@ -169,7 +175,12 @@ export default async function handler(req, res) {
       message: `Sauvegarde du ${now.slice(0, 10)} — ${nb} enregistrements, ${audit.length} entrées de journal`,
     });
     let copieSb = false;
-    try { copieSb = await copieSupabase(backup, now); } catch (e) { /* la copie Supabase ne doit pas empêcher le dépôt */ }
+    try {
+      const idx = kv.find(r => String(r.key) === PFX + "backup_index");
+      let index = idx ? idx.value : [];
+      if (typeof index === "string") { try { index = JSON.parse(index); } catch { index = []; } }
+      copieSb = await copieSupabase(backup, now, index);
+    } catch (e) { /* la copie Supabase ne doit pas empêcher le dépôt */ }
     let retires = 0;
     try {
       retires = await menage({
