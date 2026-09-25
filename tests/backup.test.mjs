@@ -11,6 +11,9 @@ const kv = [
   { key: "ajs135v1_flights", value: JSON.stringify({ __v: [{ num: "CN-KTA" }, { num: "CN-KTB" }], __t: 1 }) },
   { key: "ajs135v1_sgsHazards", value: JSON.stringify({ __v: [{ ref: "DG-001" }] }) },
   { key: "ajs135v1_sgsResponsable", value: { __v: "Youssef IKLI" } },
+  { key: "ajs135v1_reglementation_regl_1782934211112", value: JSON.stringify({ __v: { pdf: "x".repeat(500) } }) },
+  { key: "ajs135v1_docavion_docavion_1782934211999", value: JSON.stringify({ __v: { pdf: "y".repeat(500) } }) },
+  { key: "ajs135v1_reglementation_index", value: JSON.stringify({ __v: [{ nom: "Arrêté 2026" }] }) },
   { key: "ajs135v1_users", value: { __v: [{ hash: "secret" }] } },
   { key: "ajs135v1_totp_secret_u_UY", value: ["JBSW"] },
   { key: "autre_appli_x", value: 1 },
@@ -19,6 +22,12 @@ const audit = [{ id: 1, ts: "2026-09-01T10:00:00Z" }, { id: 2, ts: "2026-09-22T1
 const b = buildBackup({ kv, audit, now: "2026-09-22T03:00:00Z" });
 test("données reprises sans l'enveloppe de synchronisation", () => att(b.donnees.flights.length === 2 && b.donnees.sgsResponsable === "Youssef IKLI"));
 test("mots de passe et clés Authenticator exclus", () => att(!("users" in b.donnees) && !Object.keys(b.donnees).some(k => k.includes("totp"))));
+test("PDF réglementaires et Doc Avion exclus", () => {
+  const b = buildBackup({ kv, audit, now: "2026-09-22T03:00:00Z" });
+  const j = JSON.stringify(b.donnees);
+  att(!j.includes("xxxxx") && !j.includes("yyyyy"), "un PDF a été recopié");
+  att(b.donnees.reglementation_index, "l index doit être conservé");
+});
 test("clés d'une autre application ignorées", () => att(!("autre_appli_x" in b.donnees)));
 test("journal joint, avec ses bornes", () => att(b.journal.entrees === 2 && b.journal.premiere === "2026-09-01T10:00:00Z" && b.journal.derniere === "2026-09-22T10:00:00Z"));
 test("compteurs par registre", () => att(b.compteurs.flights === 2 && b.compteurs.sgsHazards === 1));
