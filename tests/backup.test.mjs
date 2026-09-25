@@ -6,9 +6,10 @@ const test = (n, f) => { try { f(); console.log("  ✓", n); ok++; } catch (e) {
 const att = (c, m) => { if (!c) throw new Error(m || "faux"); };
 
 console.log("\nSauvegarde hors site");
+// Comme l'application : les valeurs sont enregistrées en texte JSON
 const kv = [
-  { key: "ajs135v1_flights", value: { __v: [{ num: "CN-KTA" }, { num: "CN-KTB" }], __t: 1 } },
-  { key: "ajs135v1_sgsHazards", value: { __v: [{ ref: "DG-001" }] } },
+  { key: "ajs135v1_flights", value: JSON.stringify({ __v: [{ num: "CN-KTA" }, { num: "CN-KTB" }], __t: 1 }) },
+  { key: "ajs135v1_sgsHazards", value: JSON.stringify({ __v: [{ ref: "DG-001" }] }) },
   { key: "ajs135v1_sgsResponsable", value: { __v: "Youssef IKLI" } },
   { key: "ajs135v1_users", value: { __v: [{ hash: "secret" }] } },
   { key: "ajs135v1_totp_secret_u_UY", value: ["JBSW"] },
