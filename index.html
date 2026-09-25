@@ -1309,8 +1309,14 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
 
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
-function computeAlerts(kpis, flights, maintData, aircraft, crew, sgsRed) {
+function computeAlerts(kpis, flights, maintData, aircraft, crew, sgsRed, frats) {
   const a=[];
+  // FRAT rouge : le vol attend des barrières, puis la décision du Dirigeant ou du SGS
+  (frats||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&!f.decision2).forEach(f=>{
+    const barres=(f.barrieresTxt||'').trim();
+    a.push({id:"frat-"+f.id, sev:"danger", icon:"🧭",
+      msg:"FRAT rouge — "+(f.vol||'')+" · "+(barres?"décision attendue du Dirigeant Responsable ou du responsable SGS":"barrières à établir par les Opérations")});
+  });
   // SGS 02-02 : risque intolérable → Dirigeant Responsable avisé immédiatement.
   // Seuls l'intitulé et le niveau sont diffusés, jamais le détail.
   (sgsRed||[]).forEach(h=>{ const r=sgsRisqueCourant(h);
@@ -3804,6 +3810,73 @@ const SGS_FRAT_SEUILS={jaune:11,rouge:21};   // 0-10 vert · 11-20 jaune · 21 e
 const sgsFratScore=r=>SGS_FRAT_Q.reduce((s,q)=>s+(r&&r[q.k]?q.p:0),0);
 const sgsFratCouleur=s=>s>=SGS_FRAT_SEUILS.rouge?'rouge':s>=SGS_FRAT_SEUILS.jaune?'jaune':'vert';
 
+// FRAT rempli en PDF : critères cochés, score, barrières et décision — le dossier complet.
+function fratPdf(f){
+  try{
+    const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4"});
+    const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=14;
+    const coul=f.couleur2||f.couleur, CC={vert:[0,147,106],jaune:[217,119,6],rouge:[220,38,38]}[coul]||[100,116,139];
+    const entete=()=>sgsPdfHeader(doc,{titre:"FRAT — ÉVALUATION DU RISQUE DU VOL",ref:(f.ref||"")+" · Manuel SGS 02-04",MX:M});
+    let y=entete();
+    const w4=(W-2*M-6)/4;
+    const cell=(x,w,l,v)=>{ doc.setDrawColor(203,213,225); doc.setLineWidth(.2); doc.roundedRect(x,y,w,11,1.5,1.5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(6.2); doc.setTextColor(100,116,139); doc.text(String(l).toUpperCase(),x+2,y+3.6);
+      doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(15,31,61); doc.text(String(v||"-"),x+2,y+8.4); };
+    cell(M,w4,"Vol",(f.vol||"").split(" · ")[0]); cell(M+w4+2,w4,"Date",sgsFr(f.date));
+    cell(M+2*(w4+2),w4,"Route",((f.vol||"").split(" · ")[1]||"").replace("→"," - ")); cell(M+3*(w4+2),w4,"CM1",f.cdb||"-");
+    y+=15;
+    // Résultat
+    doc.setFillColor(CC[0],CC[1],CC[2]); doc.roundedRect(M,y,W-2*M,10,1.5,1.5,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(255,255,255);
+    doc.text((coul||"").toUpperCase()+"  ·  "+(f.score2!=null?f.score+" points, puis "+f.score2+" après barrières":(f.score||0)+" points"),M+3,y+6.6);
+    y+=14;
+    // Critères cochés
+    const rep=f.score2!=null?(f.rep2||f.rep||{}):(f.rep||{});
+    let groupe="";
+    SGS_FRAT_Q.forEach(q=>{
+      if(!rep[q.k]) return;
+      if(q.g!==groupe){ groupe=q.g;
+        if(y>H-40){ doc.addPage(); y=entete(); }
+        doc.setFillColor(15,31,61); doc.roundedRect(M,y,W-2*M,5.6,1.4,1.4,"F");
+        doc.setFont("helvetica","bold"); doc.setFontSize(8.4); doc.setTextColor(255,255,255);
+        doc.text(groupe.toUpperCase(),M+2.5,y+3.9); y+=9.5; }
+      if(y>H-30){ doc.addPage(); y=entete(); }
+      doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(0,147,106); doc.text("X",M+.8,y);
+      doc.setDrawColor(71,85,105); doc.setLineWidth(.25); doc.roundedRect(M,y-3.1,3.6,3.6,.6,.6);
+      doc.setFont("helvetica","normal"); doc.setFontSize(8.6); doc.setTextColor(15,31,61); doc.text(q.l,M+6,y);
+      doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(100,116,139); doc.text(String(q.p)+" pts",W-M-10,y);
+      y+=6;
+    });
+    if(!Object.keys(rep).filter(k=>rep[k]).length){ doc.setFont("helvetica","italic"); doc.setFontSize(8.6); doc.setTextColor(100,116,139);
+      doc.text("Aucun critère coché — risque faible.",M,y); y+=7; }
+    const bloc=(titre,txt,sous)=>{
+      if(y>H-34){ doc.addPage(); y=entete(); }
+      y+=3;
+      doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(100,116,139); doc.text(titre.toUpperCase(),M,y); y+=3.6;
+      doc.setFont("helvetica","normal"); doc.setFontSize(8.6); doc.setTextColor(15,31,61);
+      const li=doc.splitTextToSize(String(txt||"-"),W-2*M); doc.text(li,M,y); y+=li.length*4;
+      if(sous){ doc.setFont("helvetica","italic"); doc.setFontSize(7.4); doc.setTextColor(100,116,139); doc.text(sous,M,y); y+=4; }
+    };
+    if(f.barr) bloc("Barrières mises en place par le CM1", f.barr);
+    if(f.barrieresTxt) bloc("Barrières retenues par les Opérations", f.barrieresTxt,
+      (f.barrieresPar||"")+(f.barrieresLe?" · "+sgsFr(String(f.barrieresLe).slice(0,10)):""));
+    if(f.decision2) bloc(f.decision2==='autorise'?"Vol autorisé":"Vol reporté", f.motifDecision,
+      (f.decisionPar||"")+(f.decisionLe?" · "+sgsFr(String(f.decisionLe).slice(0,10)):""));
+    else if(coul==='rouge') bloc("Décision", "En attente — "+((f.barrieresTxt||'').trim()?"décision du Dirigeant Responsable ou du responsable SGS":"barrières à établir par les Opérations"));
+    if(y>H-28){ doc.addPage(); y=entete(); }
+    y+=4;
+    const wS=(W-2*M-4)/2;
+    doc.setDrawColor(203,213,225); doc.setLineWidth(.2);
+    doc.roundedRect(M,y,wS,16,1.5,1.5); doc.roundedRect(M+wS+4,y,wS,16,1.5,1.5);
+    doc.setFontSize(6.2); doc.setTextColor(100,116,139);
+    doc.text("CM1 — NOM, DATE, SIGNATURE",M+2,y+4);
+    doc.text("DIRIGEANT RESPONSABLE OU RESPONSABLE SGS",M+wS+6,y+4);
+    y+=20; doc.setFontSize(6.4); doc.setTextColor(148,163,184);
+    doc.text("Manuel SGS 02-04 · le FRAT est une aide à la décision ; il ne garantit pas la sécurité du vol.",M,y);
+    doc.save("FRAT_"+(f.ref||"document").replace(/[^\w-]/g,"_")+".pdf");
+  }catch(e){ uiAlert("PDF impossible : "+(e.message||e)); }
+}
+
 // FRAT vierge à imprimer : mêmes critères, points et seuils que l ecran.
 function fratVierge(){
   try{
@@ -3865,6 +3938,9 @@ const SGS_FRAT_DEC={go:'GO — vol possible',nogo:'NO GO — vol impossible',cdb
 //   2. les Opérations saisissent les barrières retenues → en attente de décision
 //   3. le Dirigeant Responsable OU le responsable SGS autorise, ou reporte le vol
 // Un vol reporté reste « Planifié » : les Opérations le replanifient elles-mêmes.
+// FRAT rattaché à un vol : par identifiant, sinon par numéro et date
+const fratDuVol=(frats,f)=>(frats||[]).filter(x=>x.flightId?(x.flightId===String(f.id||'')||x.flightId===String((f.num||'')+(f.date||''))):(String(x.vol||'').includes(f.num)&&x.date===f.date))
+  .sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0]||null;
 const fratEtat=f=>{ if((f.couleur2||f.couleur)!=='rouge') return null;
   if(f.decision2) return f.decision2;                       // 'autorise' ou 'reporte'
   return (f.barrieresTxt||'').trim() ? 'decision' : 'barrieres'; };
@@ -3918,10 +3994,13 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
     {!standalone&&<SgsIntro titre="FRAT — Flight Risk Assessment Tool" refm="SGS 02-04" txt="Le commandant de bord évalue le risque de chaque étape avant le vol. Vert : GO. Jaune : barrières puis décision du CM1. Rouge : le CM1 informe le chef de secteur et les opérations sol, et le vol n'est pas possible dans les conditions actuelles."/>}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>{['vert','jaune','rouge'].map(k=><div key={k} style={{background:SGS_FRAT_C[k].bg,borderRadius:10,padding:"9px 10px"}}>
       <div style={{fontSize:22,fontWeight:800,color:SGS_FRAT_C[k].fg}}>{j30.filter(f=>f.couleur===k).length}</div><div style={{fontSize:11,color:SGS_FRAT_C[k].fg}}>{SGS_FRAT_C[k].l} · 30 jours</div></div>)}</div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-      <SgsBtn l="+ Nouveau FRAT" onClick={()=>setEd({date:today,rep:{},cdb:'',vol:''})} prim full/>
-      <SgsBtn l="📥 Télécharger" onClick={fratVierge} full/>
-    </div>
+    {/* Le FRAT est rempli par le commandant de bord : le SGS et la Direction consultent et décident */}
+    {(prof==='sgs'||prof==='dir')
+      ? <SgsBtn l="📥 Télécharger le formulaire vierge" onClick={fratVierge} full/>
+      : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <SgsBtn l="+ Nouveau FRAT" onClick={()=>setEd({date:today,rep:{},cdb:'',vol:''})} prim full/>
+          <SgsBtn l="📥 Télécharger" onClick={fratVierge} full/>
+        </div>}
     <div style={sgsCard}>{list.length?list.slice(0,60).map(f=>{ const C2=SGS_FRAT_C[f.couleur2||f.couleur]||SGS_FRAT_C.vert;
       const et=fratEtat(f), EL=et?FRAT_ETAT_L[et]:null;
       const peutBarrieres=prof==='ops'||prof==='rdoa';
@@ -3931,7 +4010,10 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
         <div style={{display:"flex",alignItems:"center",gap:10}}>
         <span style={{width:4,alignSelf:"stretch",borderRadius:2,background:C2.c}}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800}}>{f.vol}</div>
         <div style={{fontSize:11,color:C.slate}}>{f.ref} · CM1 {f.cdb||'—'} · score {f.score}{f.score2!=null?' → '+f.score2+' après barrières':''}</div></div>
-        {EL?sgsPill(EL[0],EL[1],EL[2]):sgsPill(SGS_FRAT_DEC[f.decision]?.split(' — ')[0],'#EAF3DE','#27500A')}</div>
+        {EL?sgsPill(EL[0],EL[1],EL[2]):sgsPill(SGS_FRAT_DEC[f.decision]?.split(' — ')[0],'#EAF3DE','#27500A')}
+        <button aria-label={"PDF du "+(f.ref||'FRAT')} onClick={()=>fratPdf(f)} style={{border:"1.5px solid "+C.border,background:"white",borderRadius:8,padding:"5px 8px",fontSize:11,fontWeight:700,color:C.navy,...TAP}}>📄</button></div>
+        {(f.couleur2||f.couleur)==='jaune'&&f.barr&&<div style={{marginTop:6,fontSize:11,color:C.slate,lineHeight:1.4}}>
+          <b style={{color:"#92400E"}}>Barrières du CM1</b> — {f.barr}</div>}
         {et==='barrieres'&&<div style={{marginTop:8,background:"#FDF7EC",border:"1px solid #D97706",borderRadius:10,padding:"9px 10px"}}>
           <div style={{fontSize:11.5,color:"#92400E",lineHeight:1.45,marginBottom:peutBarrieres?7:0}}>
             <b>Risque élevé.</b> Les Opérations établissent les barrières retenues, puis le Dirigeant Responsable ou le responsable SGS décide.</div>
@@ -7933,6 +8015,14 @@ function ScreenOps({ flights, satis, safetyData, aircraft, frats, onUpdateFlight
                 ))}
               </div>
             </div>}
+            {(()=>{ const fr=fratDuVol(frats,edit); if(!fr) return null;
+              const et=fratEtat(fr), coul=fr.couleur2||fr.couleur;
+              const CO=coul==='rouge'?["#FCEBEB","#DC2626","#7A1414"]:coul==='jaune'?["#FAEEDA","#D97706","#92400E"]:["#E7F6F0","#00936A","#065F46"];
+              return <div style={{background:CO[0],border:"1px solid "+CO[1],borderRadius:10,padding:"8px 10px",marginBottom:12,fontSize:11.5,color:CO[2],lineHeight:1.45}}>
+                <b>FRAT {String(coul||'').toUpperCase()}</b> · {fr.ref} · CM1 {fr.cdb||'—'}
+                {et&&<div>{FRAT_ETAT_L[et]?FRAT_ETAT_L[et][0]:''}{fr.decisionPar?" — "+fr.decisionPar:""}</div>}
+                {fr.barrieresTxt&&<div style={{color:C.slate}}>Barrières : {fr.barrieresTxt}</div>}
+              </div>; })()}
             {(edit.status==="Termine"||modePilote)&&(
               <div>
                 <div style={{fontSize:10,fontWeight:700,color:C.gold,textTransform:"uppercase",marginBottom:8}}>Heures</div>
@@ -8126,8 +8216,8 @@ function ScreenOps({ flights, satis, safetyData, aircraft, frats, onUpdateFlight
 }
 
 
-function ScreenAlertes({ sgsRed, kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist, crew }) {
-  const all=computeAlerts(kpis,flights,maintData,aircraft,crew,sgsRed);
+function ScreenAlertes({ sgsRed, kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist, crew, frats }) {
+  const all=computeAlerts(kpis,flights,maintData,aircraft,crew,sgsRed,frats);
   const active=all.filter(a=>!dismissed.includes(a.id));
   const colors={danger:{bg:"#FEE2E2",border:"#DC2626",text:"#DC2626"},warn:{bg:"#FEF3C7",border:"#D97706",text:"#D97706"}};
   const [melFilter,setMelFilter]=React.useState("Tout");
@@ -11654,7 +11744,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           onImport={onImport}
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
-        {tab==="alertes" && <ScreenAlertes sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew}/>}
+        {tab==="alertes" && <ScreenAlertes frats={sgsFrat} sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew}/>}
         {tab==="ops"     && <ScreenOps frats={sgsFrat} canClose={profileId==="eqp"&&["TRI","CM1","CM2"].includes((sgsCurrentUser()||{}).role||"CM1")} flights={flights} satis={satis} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>(x.id&&u.id)?(x.id===u.id?u:x):((x.num===u.num&&x.date===u.date&&x.dep===u.dep)?u:x)))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>(x.id&&f.id)?x.id!==f.id:!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
