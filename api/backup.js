@@ -37,8 +37,11 @@ export function buildBackup({ kv, audit, now }) {
   for (const row of kv) {
     if (!String(row.key || "").startsWith(PFX)) continue;
     if (/totp_secret|users$/.test(row.key)) continue;          // secrets d'authentification : jamais exportés
-    const v = row.value;
-    donnees[String(row.key).slice(PFX.length)] = v && typeof v === "object" && "__v" in v ? v.__v : v;
+    // L'application enregistre ses valeurs en texte JSON, parfois dans une enveloppe {__v}
+    let v = row.value;
+    if (typeof v === "string") { try { v = JSON.parse(v); } catch { /* valeur brute */ } }
+    if (v && typeof v === "object" && !Array.isArray(v) && "__v" in v) v = v.__v;
+    donnees[String(row.key).slice(PFX.length)] = v;
   }
   const compteurs = Object.fromEntries(
     Object.entries(donnees).map(([k, v]) => [k, Array.isArray(v) ? v.length : v && typeof v === "object" ? Object.keys(v).length : 1])
