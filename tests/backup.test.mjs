@@ -102,6 +102,13 @@ test("clé du jour : un exemplaire par jour de la semaine", () => {
   });
   test("le journal n est pas recopié dans cette copie", () => att(!("journal" in JSON.parse(ecrits[0].value))));
   test("le résultat signale la copie Supabase", () => att(r.body.copieSupabase === true));
+  test("un index léger est écrit pour l ecran Restore", () => {
+    const e = ecrits.find(x => x.key === "ajs135v1_backup_index");
+    att(e, "index absent");
+    const idx = JSON.parse(e.value);
+    att(Array.isArray(idx) && idx[0].cle && idx[0].exportDate && idx[0].compteurs, JSON.stringify(idx).slice(0,120));
+    att(!JSON.stringify(idx).includes("CN-KTA"), "l index ne doit pas contenir les données");
+  });
 }
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko ? 1 : 0);
