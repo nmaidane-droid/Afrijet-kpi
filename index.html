@@ -123,7 +123,7 @@ const PROFILES = [
    tabs:["forms"],       readOnly:["live","secu","maint","ops","fin","alertes","perf"] },
   {id:"dir",   label:"Direction",   icon:"🏢",  color:"#A0720A",
    pwdHash:"ed494928275b93b897810bd7b090babaee8d4d92268cd96119eef7948b251184",
-   forms:["rapport"],
+   forms:["rapport","frat","sgs"],   // FRAT : décision sur un rouge · SGS : consultation (supervision du Dirigeant)
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
@@ -2400,6 +2400,42 @@ const SGS_CR_FORMS=[
     {k:'infos',l:'Informations / précisions (waypoint, coordonnées, piste, routes…)',t:'area'}]},
 ];
 const SGS_CR_BY=Object.fromEntries(SGS_CR_FORMS.map(f=>[f.k,f]));
+
+// Les sept comptes rendus, vierges, en un seul PDF à imprimer et à garder à bord.
+function crVierges(){
+  try{
+    const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4"});
+    const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=14;
+    let premier=true;
+    SGS_CR_FORMS.forEach(F=>{
+      if(!premier) doc.addPage(); premier=false;
+      const ct=sgsCtrl(F.k)||{};
+      let y=sgsPdfHeader(doc,{titre:(F.l||"").toUpperCase(),ref:"ENR/SGS-FOR/"+F.k+(ct.ed?" · Éd. "+ct.ed+" Rév. "+ct.rev:""),MX:M});
+      const ligne=(lib,h)=>{
+        if(y>H-30){ doc.addPage(); y=sgsPdfHeader(doc,{titre:(F.l||"").toUpperCase(),ref:"ENR/SGS-FOR/"+F.k,MX:M}); }
+        doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(100,116,139);
+        doc.text(String(lib).toUpperCase(),M+2,y+3.6);
+        doc.setDrawColor(203,213,225); doc.setLineWidth(.2); doc.roundedRect(M,y,W-2*M,h,1.5,1.5);
+        y+=h+2.5;
+      };
+      ligne("Titre de l’événement",12);
+      if(F.redac) ligne("Rédacteur (ou anonyme)",12);
+      ligne("Date et heure locale",12);
+      ligne("Rattachement : vol, appareil, ou hors vol",12);
+      (F.f||[]).forEach(f=>ligne(f.l, f.t==='area'?22:12));
+      ligne("Description des faits",34);
+      if(y>H-26){ doc.addPage(); y=sgsPdfHeader(doc,{titre:(F.l||"").toUpperCase(),ref:"ENR/SGS-FOR/"+F.k,MX:M}); }
+      const wS=(W-2*M-4)/2;
+      doc.setDrawColor(203,213,225); doc.roundedRect(M,y,wS,16,1.5,1.5); doc.roundedRect(M+wS+4,y,wS,16,1.5,1.5);
+      doc.setFontSize(6.2); doc.setTextColor(100,116,139);
+      doc.text("RÉDACTEUR — NOM, DATE, SIGNATURE",M+2,y+4);
+      doc.text("RÉCEPTION SGS — DATE",M+wS+6,y+4);
+      y+=20; doc.setFontSize(6.4); doc.setTextColor(148,163,184);
+      doc.text("À remplir lorsque l’application n’est pas accessible, puis à saisir dans la tuile Comptes rendus.",M,y);
+    });
+    doc.save("Comptes_rendus_vierges.pdf");
+  }catch(e){ uiAlert("PDF impossible : "+(e.message||e)); }
+}
 // CRTSV : au-delà d'une heure, copie à la DAC au plus tard 28 jours après l'événement (SMS-17)
 const sgsDureeMin=s=>{ const m=String(s||'').trim().match(/^(\d{1,2})(?:[h:](\d{1,2}))?/); return m?Number(m[1])*60+Number(m[2]||0):0; };
 const sgsCrtsvDac=e=>e&&e.form==='SMS-17'&&sgsDureeMin((e.fx||{}).duree)>60;
@@ -2544,6 +2580,10 @@ function FormSafety({ onSubmit, flights, aircraft, crew, saved, profil }) {
   return (
     <Card accent="#DC2626">
       <FHeader icon="🛡" title={FD.l} subtitle={"Formulaire ENR/SGS-FOR/"+FD.k+" — Manuel SGS 05-01"} color="#DC2626"/>
+      {/* Formulaires vierges à imprimer, pour les cas où l application n est pas accessible */}
+      <div style={{marginBottom:10}}>
+        <SgsBtn l="📥 Télécharger les 7 formulaires vierges" onClick={crVierges} full/>
+      </div>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
 
         <FSection title="Rattachement" color="#DC2626"/>
@@ -3763,9 +3803,77 @@ const SGS_FRAT_Q=[
 const SGS_FRAT_SEUILS={jaune:11,rouge:21};   // 0-10 vert · 11-20 jaune · 21 et plus rouge — À VALIDER
 const sgsFratScore=r=>SGS_FRAT_Q.reduce((s,q)=>s+(r&&r[q.k]?q.p:0),0);
 const sgsFratCouleur=s=>s>=SGS_FRAT_SEUILS.rouge?'rouge':s>=SGS_FRAT_SEUILS.jaune?'jaune':'vert';
+
+// FRAT vierge à imprimer : mêmes critères, points et seuils que l ecran.
+function fratVierge(){
+  try{
+    const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4"});
+    const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=14;
+    const entete=()=>sgsPdfHeader(doc,{titre:"FRAT — ÉVALUATION DU RISQUE DU VOL",ref:"Manuel SGS 02-04",MX:M});
+    let y=entete();
+    const w4=(W-2*M-6)/4;
+    const cell=(x,w,l)=>{ doc.setDrawColor(203,213,225); doc.setLineWidth(.2); doc.roundedRect(x,y,w,11,1.5,1.5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(6.2); doc.setTextColor(100,116,139); doc.text(l.toUpperCase(),x+2,y+3.6); };
+    cell(M,w4,"Vol"); cell(M+w4+2,w4,"Date"); cell(M+2*(w4+2),w4,"Route"); cell(M+3*(w4+2),w4,"CM1");
+    y+=15;
+    let groupe="";
+    SGS_FRAT_Q.forEach(q=>{
+      if(q.g!==groupe){
+        groupe=q.g;
+        if(y>H-40){ doc.addPage(); y=entete(); }
+        doc.setFillColor(15,31,61); doc.roundedRect(M,y,W-2*M,5.6,1.4,1.4,"F");
+        doc.setFont("helvetica","bold"); doc.setFontSize(8.4); doc.setTextColor(255,255,255);
+        doc.text(groupe.toUpperCase(),M+2.5,y+3.9); y+=9.5;
+      }
+      if(y>H-30){ doc.addPage(); y=entete(); }
+      doc.setDrawColor(71,85,105); doc.setLineWidth(.25); doc.roundedRect(M,y-3.1,3.6,3.6,.6,.6);
+      doc.setFont("helvetica","normal"); doc.setFontSize(8.6); doc.setTextColor(15,31,61);
+      doc.text(q.l,M+6,y);
+      doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(100,116,139);
+      doc.text(String(q.p)+" pts",W-M-10,y);
+      doc.setDrawColor(226,232,240); doc.setLineWidth(.12); doc.line(M+6,y+1.6,W-M-14,y+1.6);
+      y+=6.2;
+    });
+    if(y>H-46){ doc.addPage(); y=entete(); }
+    y+=2;
+    doc.setDrawColor(203,213,225); doc.setLineWidth(.2); doc.roundedRect(M,y,W-2*M,13,1.5,1.5);
+    doc.setFont("helvetica","bold"); doc.setFontSize(8.6); doc.setTextColor(15,31,61);
+    doc.text("TOTAL :  ............  points",M+3,y+5.5);
+    doc.setFont("helvetica","normal"); doc.setFontSize(7.4); doc.setTextColor(100,116,139);
+    doc.text("0 à "+(SGS_FRAT_SEUILS.jaune-1)+" : vert, GO   ·   "+SGS_FRAT_SEUILS.jaune+" à "+(SGS_FRAT_SEUILS.rouge-1)
+      +" : jaune, barrières puis nouvelle évaluation, ou décision du CM1   ·   "+SGS_FRAT_SEUILS.rouge
+      +" et plus : rouge, NO GO",M+3,y+10);
+    y+=17;
+    doc.setFontSize(7.6); doc.setTextColor(15,31,61); doc.setFont("helvetica","bold");
+    doc.text("BARRIÈRES RETENUES",M,y); y+=3;
+    for(let i=0;i<3;i++){ doc.setDrawColor(226,232,240); doc.line(M,y+3.4,W-M,y+3.4); y+=6; }
+    y+=3;
+    const wS=(W-2*M-4)/2;
+    doc.setDrawColor(203,213,225); doc.roundedRect(M,y,wS,16,1.5,1.5); doc.roundedRect(M+wS+4,y,wS,16,1.5,1.5);
+    doc.setFontSize(6.2); doc.setTextColor(100,116,139);
+    doc.text("CM1 — NOM, DATE, SIGNATURE",M+2,y+4);
+    doc.text("DÉCISION : GO / NO GO",M+wS+6,y+4);
+    y+=20; doc.setFontSize(6.4); doc.setTextColor(148,163,184);
+    doc.text("À remplir lorsque l’application n’est pas accessible, puis à reporter dans la tuile FRAT.",M,y);
+    doc.save("FRAT_vierge.pdf");
+  }catch(e){ uiAlert("PDF impossible : "+(e.message||e)); }
+}
 const SGS_FRAT_C={vert:{bg:'#EAF3DE',fg:'#27500A',c:'#1D9E75',l:'Vert'},jaune:{bg:'#FAEEDA',fg:'#633806',c:'#BA7517',l:'Jaune'},rouge:{bg:'#FCEBEB',fg:'#791F1F',c:'#DC2626',l:'Rouge'}};
-const SGS_FRAT_DEC={go:'GO — vol possible',nogo:'NO GO — vol impossible',cdb_ok:'GO — le CM1 accepte le vol',cdb_non:'NO GO — le CM1 refuse le vol'};
-function SgsFratView({ items, setItems, flights, crew, standalone }){
+const SGS_FRAT_DEC={go:'GO — vol possible',nogo:'NO GO — vol impossible',cdb_ok:'GO — le CM1 accepte le vol',cdb_non:'Risque élevé — décision du Dirigeant ou du SGS'};
+// Conduite à tenir sur un FRAT rouge (règle Afrijet Sahara) :
+//   1. le commandant remplit le FRAT ; rouge → en attente de barrières
+//   2. les Opérations saisissent les barrières retenues → en attente de décision
+//   3. le Dirigeant Responsable OU le responsable SGS autorise, ou reporte le vol
+// Un vol reporté reste « Planifié » : les Opérations le replanifient elles-mêmes.
+const fratEtat=f=>{ if((f.couleur2||f.couleur)!=='rouge') return null;
+  if(f.decision2) return f.decision2;                       // 'autorise' ou 'reporte'
+  return (f.barrieresTxt||'').trim() ? 'decision' : 'barrieres'; };
+const FRAT_ETAT_L={barrieres:['En attente de barrières','#FAEEDA','#92400E'],
+  decision:['En attente de décision','#FCEBEB','#B91C1C'],
+  autorise:['Vol autorisé','#E7F6F0','#047857'],
+  reporte:['Vol reporté','#F1F5F9','#475569']};
+
+function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
   const [ed,setEd]=useState(null);
   const today=sgsToday(), list=[...(items||[])].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
   const vols=(flights||[]).filter(f=>f.status!=='Termine'&&f.status!=='Annule').sort((a,b)=>String(a.date).localeCompare(String(b.date))).slice(0,40);
@@ -3801,7 +3909,7 @@ function SgsFratView({ items, setItems, flights, crew, standalone }){
           <div style={{display:"flex",gap:8}}><div style={{flex:1}}><SgsBtn l="Le CM1 accepte le vol" onClick={()=>finish('cdb_ok')} prim full/></div><div style={{flex:1}}><SgsBtn l="Le CM1 refuse le vol" onClick={()=>finish('cdb_non')} danger full/></div></div></>}
         {coul==='jaune'&&phase===1&&<SgsBtn l="Aucune barrière possible — décision du CM1" onClick={()=>up({barr:'Aucune barrière possible',rep2:{...ed.rep}})} full/>}
         {coul==='rouge'&&<><label style={{display:"flex",gap:8,fontSize:12.5,alignItems:"flex-start",...TAP}}><input type="checkbox" checked={!!ed.informes} onChange={()=>up({informes:!ed.informes})} style={{marginTop:2}}/>Le CM1 a informé le chef de secteur et les opérations sol que le vol n'est pas possible dans les conditions actuelles.</label>
-          <SgsBtn l="Enregistrer — NO GO, vol impossible" onClick={()=>{ if(!ed.informes){ uiAlert("⚠️ Le manuel impose d'informer le chef de secteur et les opérations sol."); return; } finish('nogo'); }} danger full/></>}
+          <SgsBtn l="Enregistrer — risque élevé, décision à prendre" onClick={()=>{ if(!ed.informes){ uiAlert("⚠️ Le manuel impose d'informer le chef de secteur et les opérations sol avant toute décision."); return; } finish('cdb_non'); }} prim full/></>}
         <SgsBtn l="Annuler" onClick={()=>setEd(null)} full/>
       </div></Card>);
   }
@@ -3810,12 +3918,54 @@ function SgsFratView({ items, setItems, flights, crew, standalone }){
     {!standalone&&<SgsIntro titre="FRAT — Flight Risk Assessment Tool" refm="SGS 02-04" txt="Le commandant de bord évalue le risque de chaque étape avant le vol. Vert : GO. Jaune : barrières puis décision du CM1. Rouge : le CM1 informe le chef de secteur et les opérations sol, et le vol n'est pas possible dans les conditions actuelles."/>}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>{['vert','jaune','rouge'].map(k=><div key={k} style={{background:SGS_FRAT_C[k].bg,borderRadius:10,padding:"9px 10px"}}>
       <div style={{fontSize:22,fontWeight:800,color:SGS_FRAT_C[k].fg}}>{j30.filter(f=>f.couleur===k).length}</div><div style={{fontSize:11,color:SGS_FRAT_C[k].fg}}>{SGS_FRAT_C[k].l} · 30 jours</div></div>)}</div>
-    <SgsBtn l="+ Nouveau FRAT" onClick={()=>setEd({date:today,rep:{},cdb:'',vol:''})} prim full/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+      <SgsBtn l="+ Nouveau FRAT" onClick={()=>setEd({date:today,rep:{},cdb:'',vol:''})} prim full/>
+      <SgsBtn l="📥 Télécharger" onClick={fratVierge} full/>
+    </div>
     <div style={sgsCard}>{list.length?list.slice(0,60).map(f=>{ const C2=SGS_FRAT_C[f.couleur2||f.couleur]||SGS_FRAT_C.vert;
-      return <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid "+C.border}}>
+      const et=fratEtat(f), EL=et?FRAT_ETAT_L[et]:null;
+      const peutBarrieres=prof==='ops'||prof==='rdoa';
+      const peutDecider=prof==='dir'||prof==='sgs'||prof==='rdoa';
+      const maj=(p)=>setItems(l=>(l||[]).map(x=>x.id===f.id?{...x,...p,updatedAt:new Date().toISOString()}:x));
+      return <div key={f.id} style={{borderBottom:"1px solid "+C.border,padding:"9px 0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
         <span style={{width:4,alignSelf:"stretch",borderRadius:2,background:C2.c}}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800}}>{f.vol}</div>
         <div style={{fontSize:11,color:C.slate}}>{f.ref} · CM1 {f.cdb||'—'} · score {f.score}{f.score2!=null?' → '+f.score2+' après barrières':''}</div></div>
-        {sgsPill(SGS_FRAT_DEC[f.decision]?.split(' — ')[0],/NO GO/.test(SGS_FRAT_DEC[f.decision])?'#FCEBEB':'#EAF3DE',/NO GO/.test(SGS_FRAT_DEC[f.decision])?'#791F1F':'#27500A')}</div>; })
+        {EL?sgsPill(EL[0],EL[1],EL[2]):sgsPill(SGS_FRAT_DEC[f.decision]?.split(' — ')[0],'#EAF3DE','#27500A')}</div>
+        {et==='barrieres'&&<div style={{marginTop:8,background:"#FDF7EC",border:"1px solid #D97706",borderRadius:10,padding:"9px 10px"}}>
+          <div style={{fontSize:11.5,color:"#92400E",lineHeight:1.45,marginBottom:peutBarrieres?7:0}}>
+            <b>Risque élevé.</b> Les Opérations établissent les barrières retenues, puis le Dirigeant Responsable ou le responsable SGS décide.</div>
+          {peutBarrieres&&<>
+            <textarea aria-label="Barrières retenues" rows={2} placeholder="Barrières retenues : équipage renforcé, carburant supplémentaire, dégagement plus proche…"
+              value={f.brouillon||''} onChange={e=>maj({brouillon:e.target.value})} style={{...sgsInput,height:"auto",padding:"8px 10px",fontSize:12}}/>
+            <SgsBtn l="Enregistrer les barrières" full onClick={()=>{ const t=(f.brouillon||'').trim();
+              if(t.length<8){ uiAlert("⚠️ Décrivez les barrières retenues."); return; }
+              maj({barrieresTxt:t,brouillon:'',barrieresPar:userLabel(sgsCurrentUser())||'Opérations',barrieresLe:new Date().toISOString()});
+              sgsToast("Barrières enregistrées — décision attendue"); }}/></>}
+        </div>}
+        {et==='decision'&&<div style={{marginTop:8,background:"#FCEBEB",border:"1px solid #DC2626",borderRadius:10,padding:"9px 10px"}}>
+          <div style={{fontSize:11.5,color:"#7A1414",lineHeight:1.45}}><b>Barrières retenues</b> — {f.barrieresTxt}
+            <div style={{fontSize:10.5,color:C.slate,marginTop:2}}>{f.barrieresPar} · {sgsFr(String(f.barrieresLe||'').slice(0,10))}</div></div>
+          {peutDecider?<>
+            <textarea aria-label="Motif de la décision" rows={2} placeholder="Motif de la décision"
+              value={f.brouillon||''} onChange={e=>maj({brouillon:e.target.value})} style={{...sgsInput,height:"auto",padding:"8px 10px",fontSize:12,marginTop:7}}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:7}}>
+              <SgsBtn l="🚫 Reporter le vol" full onClick={()=>{ const m=(f.brouillon||'').trim();
+                if(m.length<5){ uiAlert("⚠️ Indiquez le motif de la décision."); return; }
+                maj({decision2:'reporte',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||(prof==='dir'?'Dirigeant Responsable':'Responsable SGS'),decisionLe:new Date().toISOString()});
+                sgsToast("Vol reporté — les Opérations replanifient"); }}/>
+              <SgsBtn l="✓ Autoriser le vol" prim full onClick={()=>{ const m=(f.brouillon||'').trim();
+                if(m.length<5){ uiAlert("⚠️ Indiquez le motif de l'autorisation."); return; }
+                maj({decision2:'autorise',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||(prof==='dir'?'Dirigeant Responsable':'Responsable SGS'),decisionLe:new Date().toISOString()});
+                sgsToast("Vol autorisé"); }}/></div></>
+          :<div style={{fontSize:11,color:C.slate,marginTop:6}}>Décision réservée au Dirigeant Responsable ou au responsable SGS.</div>}
+        </div>}
+        {(et==='autorise'||et==='reporte')&&<div style={{marginTop:8,background:et==='autorise'?"#E7F6F0":"#F1F5F9",border:"1px solid "+(et==='autorise'?"#00936A":C.border),borderRadius:10,padding:"9px 10px",fontSize:11.5,lineHeight:1.45,color:et==='autorise'?"#065F46":C.text}}>
+          <b>{et==='autorise'?'Vol autorisé':'Vol reporté'} par {f.decisionPar}</b> · {sgsFr(String(f.decisionLe||'').slice(0,10))}
+          <div style={{color:C.slate,marginTop:2}}>Motif : {f.motifDecision}</div>
+          {f.barrieresTxt&&<div style={{color:C.slate}}>Barrières : {f.barrieresTxt}</div>}
+        </div>}
+      </div>; })
       :<div style={{fontSize:12.5,color:C.slate,padding:"6px 0"}}>Aucun FRAT enregistré.</div>}</div>
   </div>);
 }
@@ -4230,14 +4380,25 @@ function sgsAccCheck(h){
   return '';
 }
 
-function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, reg:regIn, onBack, onSecu, crew }){
-  const reg=regIn||{};
+function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHazards, actions, setActions, evStatus, setEvStatus, manual, setManual, meetings, setMeetings, responsable, setResponsable, reg:regIn, onBack, onSecu, crew }){
+  // La Direction consulte le SGS sans le modifier : le Dirigeant Responsable exerce sa supervision
+  // (OACI Annexe 19), mais la tenue des registres reste au responsable SGS.
+  const lecture = prof==='dir';
+  const bloque = (...a)=>{ uiAlert("👁 Consultation seule — la tenue du registre SGS revient au responsable SGS."); };
+  const reg = lecture
+    ? Object.fromEntries(Object.entries(regIn||{}).map(([k,v])=>[k, (typeof v==='function'&&/^set/.test(k)) ? bloque : v]))
+    : (regIn||{});
+  if(lecture){ setHazards=bloque; setActions=bloque; setEvStatus=bloque; setManual=bloque; setMeetings=bloque; setResponsable=null; }
   const nomResp=(responsable||'').trim()||SGS_RESP_DEFAUT;
   const [nomEdit,setNomEdit]=useState(nomResp);
   useEffect(()=>{ setNomEdit(nomResp); },[nomResp]);
   // Enregistré à la sortie du champ ; vide → nom par défaut
   const commitNom=()=>{ const v=nomEdit.trim()||SGS_RESP_DEFAUT; setNomEdit(v); if(v!==nomResp&&setResponsable) setResponsable(v); };
   const [tab,setTab]=useState('bord');
+  // Bandeau permanent pour la Direction : la consultation ne se devine pas
+  const bandeauLecture = lecture ? <div style={{background:"#FAEEDA",border:"1px solid #D97706",borderRadius:10,padding:"8px 11px",fontSize:11.5,color:"#92400E",lineHeight:1.45,marginBottom:10}}>
+      👁 <b>Consultation seule.</b> La supervision du Dirigeant Responsable s'exerce ici ; la tenue du registre revient au responsable SGS.
+    </div> : null;
   const wide=useSgsWide();
   const [expMenu,setExpMenu]=useState(false);
   const [view,setView]=useState(null);   // fiche en lecture : {kind:'hazard'|'action', id}
@@ -4741,7 +4902,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
       {tab==='chg'&&<SgsChangesView items={reg.changes} setItems={reg.setChanges} nomResp={nomResp} onDanger={addHazardDirect}/>}
       {tab==='aud'&&<SgsAuditsView items={reg.audits} setItems={reg.setAudits} nomResp={nomResp} onAction={addActionDirect}/>}
       {tab==='form'&&<SgsFormationsView items={reg.formations} setItems={reg.setFormations} nomResp={nomResp} crew={crew}/>}
-      {tab==='frat'&&<SgsFratView items={reg.frat} setItems={reg.setFrat} flights={flights} crew={crew}/>}
+      {tab==='frat'&&<SgsFratView items={reg.frat} setItems={reg.setFrat} flights={flights} crew={crew} prof={prof}/>}
       {tab==='meda'&&<SgsMedaView items={reg.meda} setItems={reg.setMeda} nomResp={nomResp} safety={safety} aircraft={aircraft}/>}
       {tab==='forms'&&<SgsFormsView reg={reg} safety={safety} ES={ES} go={go} onSecu={onSecu}/>}
       {tab==='itw'&&<SgsInterviewsView items={reg.itw} setItems={reg.setItw} safety={safety} nomResp={nomResp} crew={crew} flights={flights} aircraft={aircraft}/>}
@@ -4791,7 +4952,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
             <span style={{fontSize:12,color:C.slate}}>{new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</span>
             {expBtns(true)}</div>
           <SgsToastHost/>
-          <div style={{flex:1,overflowY:"auto",padding:"18px 22px 40px"}}><div style={{maxWidth:(tab==='bord'||tab==='dg'||tab==='ac')&&!editorView?1180:860,margin:"0 auto"}}>{body}</div></div>
+          <div style={{flex:1,overflowY:"auto",padding:"18px 22px 40px"}}>{bandeauLecture}<div style={{maxWidth:(tab==='bord'||tab==='dg'||tab==='ac')&&!editorView?1180:860,margin:"0 auto"}}>{body}</div></div>
         </div>
       </div>);
     return (
@@ -4811,7 +4972,7 @@ function SgsTile({ safety, flights, aircraft, ndsArchive, hazards, setHazards, a
               {n>0&&<span style={{position:"absolute",top:3,right:"calc(50% - 20px)",minWidth:15,height:15,borderRadius:8,background:"#DC2626",color:"white",fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{n}</span>}</div>; })}
         </div>
         <SgsToastHost/>
-        <div style={{flex:1,overflowY:"auto",padding:"12px 12px 40px"}}>{body}</div>
+        <div style={{flex:1,overflowY:"auto",padding:"12px 12px 40px"}}>{bandeauLecture}{body}</div>
       </div>);
   })();
 }
@@ -7162,6 +7323,13 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
     {id:"journal",  icon:"🔏",  label:"Journal d'audit", color:"#1a1a2e"},
   ];
   const FORMS = ALL_FORMS; // Toujours afficher toutes les tuiles
+  // Pastilles des tuiles : FRAT rouges non décidés, et comptes rendus reçus au SGS
+  const pastille = (id)=>{
+    if(id==="frat") return ((sgs&&sgs.reg&&sgs.reg.frat)||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&!f.decision2).length;
+    if(id==="sgs"){ const ES=(sgs&&sgs.evStatus)||{};
+      return (safetyData||[]).filter(e=>!((ES[sgsEventKey(e)]||{}).statut)||((ES[sgsEventKey(e)]||{}).statut)==='recu').length; }
+    return 0;
+  };
   const canAccessForm = (id) => !canForm || canForm(id);
   // Reset active if current form is not allowed for this profile
   const activeAllowed = !active || canAccessForm(active);
@@ -7224,7 +7392,10 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
               borderColor:effectiveActive===fm.id?fm.color:C.border,
               background:effectiveActive===fm.id?fm.color+"15":"white",
               color:effectiveActive===fm.id?fm.color:C.slate}}>
-            <div style={{fontSize:16,marginBottom:2}}>{fm.icon}</div>
+            <div style={{fontSize:16,marginBottom:2,position:"relative"}}>{fm.icon}
+              {allowed&&pastille(fm.id)>0&&<span style={{position:"absolute",top:-6,right:"50%",marginRight:-20,minWidth:16,height:16,padding:"0 4px",
+                borderRadius:9,background:"#DC2626",color:"white",fontSize:9.5,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{pastille(fm.id)}</span>}
+            </div>
             <div>{fm.label}</div>
             {!allowed&&<div style={{fontSize:7,color:"#94A3B8"}}>🔒</div>}
           </button>
@@ -7409,8 +7580,8 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} crew={crew} saved={saved} profil={profileId}/>}
       {effectiveActive==="journal" && <JournalView/>}
       {effectiveActive==="frat" && sgs && <Card accent="#0F766E"><FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="Manuel SGS 02-04 · à remplir par le CM1 avant chaque étape" color="#0F766E"/>
-        <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} crew={crew} standalone/></Card>}
-      {effectiveActive==="sgs" && sgs && <SgsTile safety={safetyData} flights={flights} aircraft={aircraft} crew={crew} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
+        <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} crew={crew} standalone prof={profileId}/></Card>}
+      {effectiveActive==="sgs" && sgs && <SgsTile prof={profileId} safety={safetyData} flights={flights} aircraft={aircraft} crew={crew} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {/* Opérations : consultation seule des documents */}
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"}/>}
@@ -11181,7 +11352,7 @@ function AppMain({ onLogout, profileId }) {
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
   // Tuile Finances : profil Finances seul. Tuile SGS : profil SGS et Administrateur.
   const canForm = (id) => id==="fin" ? profile.id==="fin"
-                        : id==="sgs" ? (profile.id==="sgs"||profile.id==="rdoa")
+                        : id==="sgs" ? ["sgs","rdoa","dir"].includes(profile.id)   // la Direction consulte, sans modifier
                         : id==="journal" ? ["dir","sgs","rdoa"].includes(profile.id)
                         // FRAT : rôle CM1 seulement, dès que la personne est identifiée (compte nominatif)
                         : id==="frat" && profile.id==="eqp" && sgsCurrentUser() && sgsCurrentUser().role ? sgsCurrentUser().role==="CM1"
