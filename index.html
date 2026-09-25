@@ -3095,7 +3095,6 @@ const SGS_ICON_PATHS={
   aud:['M10 10m-6 0a6 6 0 1 0 12 0a6 6 0 1 0-12 0','M21 21l-6-6'],
   form:['M22 9L12 5L2 9l10 4l10-4z','M6 10.6V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.4'],
   frat:['M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0','M8 16l2-6l6-2l-2 6z'],
-  meda:['M7 10h3V7L6.5 3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1-3 3l-6-6a6 6 0 0 1-8-8z'],
   fdm:['M3 12h4l3 8l4-16l3 8h4'],
   forms:['M6 3h9l4 4v14H6z','M14 3v5h5','M9 12h7','M9 16h7'],
   itw:['M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z','M5 11a7 7 0 0 0 14 0','M12 18v3'],
@@ -3448,7 +3447,6 @@ function SgsRevue({ safety, ES, H, A, spi, reg, revues, setRevues, meetings, nom
       formations:{sessions:(reg.formations||[]).filter(f=>inY(f.date)).length,personnes:new Set((reg.formations||[]).filter(f=>inY(f.date)).flatMap(f=>sgsFormNoms(f))).size},
       frat:{evaluations:(reg.frat||[]).filter(f=>inY(f.date)).length,rouges:(reg.frat||[]).filter(f=>inY(f.date)&&f.couleur==='rouge').length,no_go:(reg.frat||[]).filter(f=>inY(f.date)&&f.decision==='nogo').length},
       fdm:{evenements:(reg.fdm||[]).filter(f=>inY(f.date)).length,rouges:(reg.fdm||[]).filter(f=>inY(f.date)&&f.niveau==='rouge').length},
-      meda:{enquetes:(reg.meda||[]).filter(m=>inY(m.date)).length},
       safety_meetings_tenus:(meetings||[]).filter(m=>String(m.mois||'').slice(0,4)===String(an)).length,
       indicateurs_en_alerte:spi.filter(s=>s.alerte).map(s=>s.l),
       revue_precedente:prev?{ref:prev.ref,decisions:(prev.sections.find(s=>/Décisions/.test(s.title))||{}).content||''}:null };
@@ -4052,104 +4050,7 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
   </div>);
 }
 
-// ── MEDA — SGS 02-06 : erreurs de maintenance ──
-// Le manuel fixe le logigramme ; les rubriques ci-dessous reprennent la grille MEDA standard, À VALIDER.
-const SGS_MEDA_ERR=['Installation incorrecte','Pièce incorrecte ou non conforme','Oubli ou omission','Dommage causé pendant la maintenance','Objet oublié (FOD)','Défaut d\'inspection','Documentation incorrecte','Autre'];
-const SGS_MEDA_FACT=['Information (manuels, cartes de travail)','Équipement, outillage, sécurité','Conception ou configuration de l\'avion','Tâche (complexité, répétition)','Connaissances et compétences','Facteurs individuels (fatigue, stress)','Environnement et installations','Organisation','Encadrement et supervision','Communication'];
-const SGS_MEDA_ET=[{k:'constat',l:'Constat'},{k:'enquete',l:'Enquête'},{k:'reco',l:'Recommandations'},{k:'chg',l:'Changements'},{k:'info',l:'Information'},{k:'clos',l:'Clos'}];
-function SgsMedaView({ items, setItems, nomResp, safety, aircraft }){
-  const [ed,setEd]=useState(null); const list=[...(items||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  if(ed){ const up=p=>setEd({...ed,...p}); const fct=ed.facteurs||{};
-    const save=()=>{ if(!ed.date||!(ed.description||'').trim()){ uiAlert("⚠️ Indiquez la date et la description de l'événement."); return; } const now=new Date().toISOString();
-      const it={...ed,statut:ed.lie==='non'?'clos':ed.statut,updatedAt:now};
-      if(ed.id) setItems(l=>(l||[]).map(x=>x.id===ed.id?it:x)); else setItems(l=>[...(l||[]),{...it,id:'MD'+Date.now(),ref:sgsRefAn(items,'MEDA',ed.date),createdAt:now}]);
-      setEd(null); sgsToast("Fiche MEDA enregistrée"); };
-    return (<Card accent="#0F766E"><FHeader icon="🔧" title={ed.ref||'Nouvelle enquête MEDA'} subtitle="SGS 02-06 · Maintenance Error Decision Aid" color="#0F766E"/>
-      <div style={{display:"flex",flexDirection:"column",gap:11}}>
-        <SgsStepper steps={SGS_MEDA_ET} value={ed.statut} onPick={k=>up({statut:k})}/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Date"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
-          <SgsField label="Avion"><AircraftSelect aircraft={aircraft} value={ed.immat} onChange={(im,ty)=>up({immat:im,typeAv:ty})}/></SgsField></div>
-          <SgsField label="Type d'aéronef"><SgsRoField v={ed.typeAv||sgsAcType(aircraft,ed.immat)} ph="Rempli selon l'appareil choisi"/></SgsField>
-        <SgsField label="1. Constatation de l'événement"><textarea rows={3} value={ed.description||''} onChange={e=>up({description:e.target.value})} placeholder="Retour au parking, retour au terrain de départ…" style={sgsInput}/></SgsField>
-        <SgsField label="Traitement de l'anomalie et remise en état de vol"><textarea rows={2} value={ed.traitement||''} onChange={e=>up({traitement:e.target.value})} style={sgsInput}/></SgsField>
-        <SgsField label="L'événement est-il lié à l'entretien ?"><SgsPills value={ed.lie} onChange={v=>up({lie:v})} options={[{k:'oui',l:'Oui — ouvrir l\'enquête'},{k:'non',l:'Non — fin'}]} color="#0F766E"/></SgsField>
-        {ed.lie==='oui'&&<>
-          <SgsField label="Enquêteur habilité"><input value={ed.enqueteur||''} onChange={e=>up({enqueteur:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Tâche de maintenance concernée"><input value={ed.tache||''} onChange={e=>up({tache:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Type d'erreur"><SgsPills value={ed.typeErreur} onChange={v=>up({typeErreur:v})} options={SGS_MEDA_ERR.map(x=>({k:x,l:x}))} color="#0F766E"/></SgsField>
-          <div style={sgsH}>Facteurs contributifs</div>
-          {SGS_MEDA_FACT.map(f=>{ const v=fct[f]||{}; return <div key={f} style={{display:"flex",flexDirection:"column",gap:4}}>
-            <label style={{display:"flex",gap:8,fontSize:12.5,alignItems:"center",...TAP}}><input type="checkbox" checked={!!v.on} onChange={()=>up({facteurs:{...fct,[f]:{...v,on:!v.on}}})}/>{f}</label>
-            {v.on&&<input value={v.note||''} onChange={e=>up({facteurs:{...fct,[f]:{...v,note:e.target.value}}})} placeholder="Précisez" style={{...sgsInput,marginLeft:24,width:"calc(100% - 24px)"}}/>}</div>; })}
-          <SgsField label="Raisons pour lesquelles l'événement est survenu"><textarea rows={3} value={ed.raisons||''} onChange={e=>up({raisons:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Recommandations pour éviter la répétition"><textarea rows={2} value={ed.recommandations||''} onChange={e=>up({recommandations:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Changements adoptés dans le système de maintenance"><textarea rows={2} value={ed.changements||''} onChange={e=>up({changements:e.target.value})} style={sgsInput}/></SgsField>
-          <SgsField label="Information du personnel de maintenance (date)"><DateField value={ed.infoDate||''} onChange={v=>up({infoDate:v})} max={new Date().toISOString().slice(0,10)} style={sgsInput}/></SgsField>
-        </>}
-        <div style={{fontSize:10.5,color:C.slate}}>Types d'erreur et facteurs : grille MEDA standard, à valider — le manuel décrit le logigramme mais pas le formulaire.</div>
-      </div>
-      <div style={{display:"flex",gap:8,marginTop:16}}><SgsBtn l="Annuler" onClick={()=>setEd(null)}/>
-        {ed.id&&<SgsBtn l="PDF" onClick={()=>{ try{ sgsDocPDF({ref:ed.ref,titre:'Enquête MEDA',sous:ed.description,nom:ed.enqueteur||nomResp,fonction:'Enquêteur habilité',
-          meta:[['Date',sgsFr(ed.date)],['Avion',ed.immat],['Lié à l\'entretien',ed.lie==='oui'?'Oui':'Non'],['Tâche',ed.tache],['Type d\'erreur',ed.typeErreur]],
-          blocs:[{t:'Traitement',txt:ed.traitement},{t:'Facteurs contributifs',txt:Object.entries(fct).filter(([,v])=>v.on).map(([k,v])=>'- '+k+(v.note?' : '+v.note:'')).join('\n')||'-'},
-            {t:'Raisons',txt:ed.raisons},{t:'Recommandations',txt:ed.recommandations},{t:'Changements adoptés',txt:ed.changements},{t:'Information du personnel',txt:ed.infoDate?'Le '+sgsFr(ed.infoDate):'-'}]}); }catch(e){ uiAlert("❌ Erreur PDF : "+e.message); } }}/>}
-        <div style={{flex:1}}><SgsBtn l="Enregistrer" onClick={save} prim full/></div></div></Card>); }
-  return (<div style={{display:"flex",flexDirection:"column",gap:12}}>
-    <SgsIntro titre="MEDA — erreurs de maintenance" refm="SGS 02-06" txt="Quand un événement demande l'intervention d'un technicien : l'événement est-il lié à l'entretien ? Si oui, un enquêteur habilité remplit le formulaire MEDA, détermine les raisons, formule des recommandations, fait adopter les changements et informe le personnel de maintenance."/>
-    <SgsBtn l="+ Nouvelle enquête MEDA" onClick={()=>setEd({date:sgsToday(),statut:'constat',lie:'',facteurs:{}})} prim full/>
-    <div style={sgsCard}>{list.length?list.map(m=><SgsRow key={m.id} titre={m.ref+' · '+String(m.description||'').slice(0,60)} sub={sgsFr(m.date)+(m.immat?' · '+m.immat:'')+(m.typeErreur?' · '+m.typeErreur:'')}
-      color={m.statut==='clos'?'#1D9E75':'#0F766E'} badge={sgsPill((SGS_MEDA_ET.find(s=>s.k===m.statut)||{}).l,'#E1F5EE','#085041')} onClick={()=>setEd(m)}/>)
-      :<div style={{fontSize:12.5,color:C.slate,padding:"6px 0"}}>Aucune enquête MEDA.</div>}</div></div>);
-}
 
-// ── FDM — SGS 02-05 : registre des événements issus de l'analyse des vols ──
-const SGS_FDM_EV=['Approche non stabilisée','Vitesse excessive en approche','Taux de descente élevé','Assiette élevée à l\'atterrissage','Atterrissage dur (accélération verticale)','Survitesse (VMO / MMO)','Alarme GPWS','TCAS RA','Alarme de configuration','Vent traversier au-delà des limites','Autre'];
-const SGS_FDM_PH=['Roulage','Décollage','Montée','Croisière','Descente','Approche','Atterrissage'];
-const SGS_FDM_N={vert:{bg:'#EAF3DE',fg:'#27500A',c:'#1D9E75',l:'Vert'},jaune:{bg:'#FAEEDA',fg:'#633806',c:'#BA7517',l:'Jaune'},rouge:{bg:'#FCEBEB',fg:'#791F1F',c:'#DC2626',l:'Rouge'}};
-function SgsFdmView({ items, setItems, onDanger, aircraft }){
-  const [ed,setEd]=useState(null); const list=[...(items||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  const rouges90=list.filter(f=>f.niveau==='rouge'&&sgsJours(f.date)<=90);
-  const repet=Object.entries(rouges90.reduce((m,f)=>{ m[f.evenement]=(m[f.evenement]||0)+1; return m; },{})).filter(([,n])=>n>=2);
-  if(ed){ const up=p=>setEd({...ed,...p});
-    const save=()=>{ if(!ed.date||!ed.evenement){ uiAlert("⚠️ Indiquez la date et l'événement."); return; } const now=new Date().toISOString();
-      if(ed.id) setItems(l=>(l||[]).map(x=>x.id===ed.id?{...ed,updatedAt:now}:x)); else setItems(l=>[...(l||[]),{...ed,id:'FD'+Date.now(),createdAt:now}]);
-      setEd(null); sgsToast("Événement FDM enregistré"); };
-    return (<Card accent="#0F766E"><FHeader icon="📈" title="Événement FDM" subtitle="SGS 02-05 · analyse des vols, programme non punitif" color="#0F766E"/>
-      <div style={{display:"flex",flexDirection:"column",gap:11}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Date du vol"><DateField value={ed.date||''} onChange={v=>up({date:v})} style={sgsInput}/></SgsField>
-          <SgsField label="Vol"><input value={ed.vol||''} onChange={e=>up({vol:e.target.value})} placeholder="AJS201" style={sgsInput}/></SgsField></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <SgsField label="Appareil"><AircraftSelect aircraft={aircraft} value={ed.immat} onChange={(im,ty)=>up({immat:im,typeAv:ty})}/></SgsField>
-            <SgsField label="Type d'aéronef"><SgsRoField v={ed.typeAv||sgsAcType(aircraft,ed.immat)} ph="Selon l'appareil"/></SgsField></div>
-        <SgsField label="Événement"><CustomSelect dense searchable value={ed.evenement||''} onChange={v=>up({evenement:v})} placeholder="— Choisir —" options={SGS_FDM_EV.map(x=>({value:x,label:x}))}/></SgsField>
-        <SgsField label="Phase de vol"><SgsPills value={ed.phase} onChange={v=>up({phase:v})} options={SGS_FDM_PH.map(x=>({k:x,l:x}))} color="#0F766E"/></SgsField>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <SgsField label="Valeur relevée"><input value={ed.valeur||''} onChange={e=>up({valeur:e.target.value})} placeholder="1 250 ft/min à 500 ft" style={sgsInput}/></SgsField>
-          <SgsField label="Seuil"><input value={ed.seuil||''} onChange={e=>up({seuil:e.target.value})} placeholder="1 000 ft/min" style={sgsInput}/></SgsField></div>
-        <SgsField label="Niveau"><SgsPills value={ed.niveau} onChange={v=>up({niveau:v})} options={['vert','jaune','rouge'].map(k=>({k,l:SGS_FDM_N[k].l}))} color="#0F766E"/></SgsField>
-        <SgsField label="Analyse (contact confidentiel avec l'équipage si nécessaire)"><textarea rows={3} value={ed.analyse||''} onChange={e=>up({analyse:e.target.value})} style={sgsInput}/></SgsField>
-        <SgsField label="Suite donnée et responsable désigné informé"><textarea rows={2} value={ed.suite||''} onChange={e=>up({suite:e.target.value})} style={sgsInput}/></SgsField>
-        <SgsField label="Statut"><SgsPills value={ed.statut} onChange={v=>up({statut:v})} options={[{k:'ouvert',l:'Ouvert'},{k:'traite',l:'Traité'}]} color="#0F766E"/></SgsField>
-      </div>
-      <div style={{display:"flex",gap:8,marginTop:16}}><SgsBtn l="Annuler" onClick={()=>setEd(null)}/><div style={{flex:1}}><SgsBtn l="Enregistrer" onClick={save} prim full/></div></div></Card>); }
-  return (<div style={{display:"flex",flexDirection:"column",gap:12}}>
-    <SgsIntro titre="FDM — analyse des vols" refm="SGS 02-05" txt="Programme proactif et non punitif. Le responsable SGS et le RDSV identifient les événements issus des enregistrements de vol et les transmettent aux responsables désignés, qui prennent les actions correctives. L'analyse des données se fait avec le logiciel FDM ; ce registre en assure le suivi."/>
-    {repet.length>0&&<div style={{background:"#FCEBEB",border:"1px solid #F7C1C1",borderRadius:10,padding:"10px 12px",fontSize:12.5,color:"#791F1F"}}>
-      <b>Enquête recommandée</b> — événements rouges répétés sur 90 jours : {repet.map(([e,n])=>e+' ('+n+')').join(', ')}. Le manuel demande une enquête du service SGS en cas de répétition d'événements rouges FDM (SGS 02-01).
-      <div style={{marginTop:8}}><SgsBtn l="Ouvrir un danger" onClick={()=>onDanger({titre:'Répétition FDM : '+repet[0][0],origine:'reactif',description:'Événements FDM rouges répétés sur 90 jours : '+repet.map(([e,n])=>e+' ('+n+')').join(', ')+'.',statut:'ouvert'})}/></div></div>}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>{['vert','jaune','rouge'].map(k=><div key={k} style={{background:SGS_FDM_N[k].bg,borderRadius:10,padding:"9px 10px"}}>
-      <div style={{fontSize:22,fontWeight:800,color:SGS_FDM_N[k].fg}}>{list.filter(f=>f.niveau===k&&sgsJours(f.date)<=90).length}</div><div style={{fontSize:11,color:SGS_FDM_N[k].fg}}>{SGS_FDM_N[k].l} · 90 jours</div></div>)}</div>
-    <SgsBtn l="+ Nouvel événement FDM" onClick={()=>setEd({date:sgsToday(),niveau:'jaune',statut:'ouvert',phase:'Approche'})} prim full/>
-    <div style={sgsCard}>{list.length?list.slice(0,80).map(f=><SgsRow key={f.id} titre={f.evenement+(f.vol?' · '+f.vol:'')} sub={sgsFr(f.date)+(f.phase?' · '+f.phase:'')+(f.valeur?' · '+f.valeur:'')}
-      color={SGS_FDM_N[f.niveau].c} badge={sgsPill(f.statut==='traite'?'Traité':'Ouvert',SGS_FDM_N[f.niveau].bg,SGS_FDM_N[f.niveau].fg)} onClick={()=>setEd(f)}/>)
-      :<div style={{fontSize:12.5,color:C.slate,padding:"6px 0"}}>Aucun événement FDM enregistré.</div>}</div></div>);
-}
-
-// ══ Lot 2 — Interview équipage (SMS-04) et recommandations de sécurité (SMS-07) ══
-const SGS_ITW_CREW=[{k:'cdb',l:'CM1',h:true},{k:'opl',l:'CM2',h:true},{k:'scm',l:'Chef de cabine (SCM)',h:false}];
-const sgsEvLabel=e=>sgsFr(e.date)+' · '+(e.titre||safetyLabels(e).join(', ')).slice(0,60)+(e.num?' · '+e.num:'');
 function SgsInterviewsView({ items, setItems, safety, nomResp, crew:crewReg, flights, aircraft }){   // crewReg : registre Équipage
   const [ed,setEd]=useState(null);
   const today=sgsToday(), list=[...(items||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
@@ -4401,7 +4302,7 @@ function SgsFormsView({ reg, safety, ES, go, onSecu }){
 
 const SGS_EXTRA=[['forms','Formulaires SMS','Les 17 formulaires du chapitre 05 — sommaire et accès direct'],['revue','Revue annuelle','Revue de sécurité, fascicule et compte rendu (SGS 03-04)'],['chg','Changements',"Évaluations d'impact sur la sécurité (SGS 03-05)"],
   ['aud','Audits','Audits internes et contrôles (SGS 03-01)'],['form','Formations','Sensibilisation et recyclages (SGS 04-01)'],
-  ['frat','FRAT','Risque de chaque vol, par le CM1 (SGS 02-04)'],['meda','MEDA','Erreurs de maintenance (SGS 02-06)'],['fdm','FDM','Événements issus de l\'analyse des vols (SGS 02-05)'],
+  ['frat','FRAT','Risque de chaque vol, par le CM1 (SGS 02-04)'],['fdm','FDM','Événements issus de l\'analyse des vols (SGS 02-05)'],
   ['itw','Interviews','Interview équipage — investigation (SMS-04)'],['reco','Recommandations','Recommandations de sécurité (SMS-07)'],
   ['plan','Planning SGS','Programmation annuelle des activités (SMS-10)'],['osv','Contrôles OSV','Contenu des enveloppes de vol (SMS-18)']];
 // Pastille : ce qui attend une action dans chaque registre
@@ -4416,7 +4317,6 @@ function sgsExtraAlert(k,reg){ const t=sgsToday();
   if(k==='form'){ let n=0; const P={}; (reg.formations||[]).forEach(f=>sgsFormNoms(f).forEach(x=>{ const kk=x.toLowerCase(); if(!P[kk]||P[kk].d<f.date) P[kk]={d:f.date,p:Number(f.periodicite)||24}; }));
     Object.values(P).forEach(p=>{ const d=new Date(p.d); d.setMonth(d.getMonth()+p.p); if(d.toISOString().slice(0,10)<t) n++; }); return n; }
   if(k==='frat') return (reg.frat||[]).filter(f=>sgsJours(f.date)<=30&&(f.couleur2||f.couleur)==='rouge').length;
-  if(k==='meda') return (reg.meda||[]).filter(m=>m.statut!=='clos').length;
   if(k==='fdm') return (reg.fdm||[]).filter(f=>f.niveau==='rouge'&&f.statut!=='traite').length;
   return 0; }
 // PDF d'un compte rendu au format de son formulaire officiel (SMS-09, 13, 16, 17, 19, 20, 21)
@@ -4985,7 +4885,6 @@ function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHaza
       {tab==='aud'&&<SgsAuditsView items={reg.audits} setItems={reg.setAudits} nomResp={nomResp} onAction={addActionDirect}/>}
       {tab==='form'&&<SgsFormationsView items={reg.formations} setItems={reg.setFormations} nomResp={nomResp} crew={crew}/>}
       {tab==='frat'&&<SgsFratView items={reg.frat} setItems={reg.setFrat} flights={flights} crew={crew} prof={prof}/>}
-      {tab==='meda'&&<SgsMedaView items={reg.meda} setItems={reg.setMeda} nomResp={nomResp} safety={safety} aircraft={aircraft}/>}
       {tab==='forms'&&<SgsFormsView reg={reg} safety={safety} ES={ES} go={go} onSecu={onSecu}/>}
       {tab==='itw'&&<SgsInterviewsView items={reg.itw} setItems={reg.setItw} safety={safety} nomResp={nomResp} crew={crew} flights={flights} aircraft={aircraft}/>}
       {tab==='reco'&&<SgsRecosView items={reg.reco} setItems={reg.setReco} safety={safety} H={H} nomResp={nomResp} onAction={o=>setEdit({kind:'action',data:o})}/>}
@@ -7355,7 +7254,7 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
       safetyData,
       clients,
       ndsArchive,
-      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,sgsMeda:sgs.reg.meda,satisfaction:satis,sgsFdm:sgs.reg.fdm,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv}:{}),
+      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,satisfaction:satis,sgsFdm:sgs.reg.fdm,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv}:{}),
     };
     setProgress(p=>({...p,currentStep:1,pct:40}));
     try{
@@ -9204,7 +9103,7 @@ function auditFields(a,b){ const ch={}; const ks=new Set([...Object.keys(a||{}),
 // ══ Consultation du journal d'audit (lot 3) ═════════════════════════
 const AUDIT_MODULES={sgsHazards:"Dangers",sgsActions:"Actions",sgsEvStatus:"Statut et analyse des comptes rendus",safety:"Comptes rendus",flights:"Vols",crew:"Équipage",aircraft:"Avions",
   clients:"Clients",sgsManual:"Indicateurs saisis",sgsMeetings:"Safety Meetings",sgsRevues:"Revues de sécurité",sgsChanges:"Changements",sgsAudits:"Audits",sgsFormations:"Formations",
-  sgsFrat:"FRAT",sgsMeda:"MEDA",sgsFdm:"FDM",sgsItw:"Interviews",sgsReco:"Recommandations",sgsPlan:"Planning SGS",sgsOsv:"Contrôles OSV",sgsResponsable:"Signataire SGS",
+  sgsFrat:"FRAT",sgsFdm:"FDM",sgsItw:"Interviews",sgsReco:"Recommandations",sgsPlan:"Planning SGS",sgsOsv:"Contrôles OSV",sgsResponsable:"Signataire SGS",
   connexion:"Connexions",comptes:"Comptes",["export PDF"]:"Exports PDF",essai:"Installation",
   melHist:"Historique des MEL",fin:"Finances",maint:"Maintenance",satisfaction:"Enquêtes de satisfaction",
   alertHist:"Alertes (automatique)",journal:"Journal d'audit",export:"Exports",installation:"Installation"};
@@ -11497,13 +11396,12 @@ function AppMain({ onLogout, profileId }) {
   const [sgsEvStatus,setSgsEvStatus] = usePersist("sgsEvStatus",{});
   const [sgsManual,setSgsManual]     = usePersist("sgsManual",{changes:[],crm:[],bulletins:[]});
   const [sgsMeetings,setSgsMeetings] = usePersist("sgsMeetings",[]);
-  // Registres SGS : revue annuelle, changements, audits, formations, FRAT, MEDA, FDM
+  // Registres SGS : revue annuelle, changements, audits, formations, FRAT, FDM
   const [sgsRevues,setSgsRevues] = usePersist("sgsRevues",[]);
   const [sgsChanges,setSgsChanges] = usePersist("sgsChanges",[]);
   const [sgsAudits,setSgsAudits] = usePersist("sgsAudits",[]);
   const [sgsFormations,setSgsFormations] = usePersist("sgsFormations",[]);
   const [sgsFrat,setSgsFrat] = usePersist("sgsFrat",[]);
-  const [sgsMeda,setSgsMeda] = usePersist("sgsMeda",[]);
   const [sgsFdm,setSgsFdm] = usePersist("sgsFdm",[]);
   // Formulaires du chapitre 05 : interviews (SMS-04), recommandations (SMS-07), planning (SMS-10), contrôles OSV (SMS-18)
   const [sgsItw,setSgsItw] = usePersist("sgsItw",[]);
@@ -11517,11 +11415,11 @@ function AppMain({ onLogout, profileId }) {
     const t=setTimeout(()=>auditAsSystem(()=>{   // opérations automatiques : journalisées au nom du système
       if((aircraft||[]).some(a=>a.immat===K&&a.type!==T)) setAircraft(l=>(l||[]).map(a=>a.immat===K?{...a,type:T}:a));
       if((safetyData||[]).some(e=>e.fx&&e.fx.immat===K&&e.fx.typeAv&&e.fx.typeAv!==T)) setSafety(l=>(l||[]).map(e=>e.fx&&e.fx.immat===K&&e.fx.typeAv!==T?{...e,fx:{...e.fx,typeAv:T}}:e));
-      [[sgsItw,setSgsItw,'type'],[sgsOsv,setSgsOsv,'type'],[sgsMeda,setSgsMeda,'typeAv'],[sgsFdm,setSgsFdm,'typeAv']].forEach(([L,S,f])=>{
+      [[sgsItw,setSgsItw,'type'],[sgsOsv,setSgsOsv,'type'],[sgsFdm,setSgsFdm,'typeAv']].forEach(([L,S,f])=>{
         if((L||[]).some(x=>x.immat===K&&x[f]&&x[f]!==T)) S(l=>(l||[]).map(x=>x.immat===K&&x[f]&&x[f]!==T?{...x,[f]:T}:x)); });
     }),5000);   // après l'arrivée des données du cloud
     return ()=>clearTimeout(t);
-  },[aircraft,safetyData,sgsItw,sgsOsv,sgsMeda,sgsFdm]);
+  },[aircraft,safetyData,sgsItw,sgsOsv,sgsFdm]);
   const [sgsResponsable,setSgsResponsable] = usePersist("sgsResponsable",SGS_RESP_DEFAUT);
   // Démonstration SGS : ajout unique, relié aux comptes rendus de démonstration présents
   const [demoSgsV1,setDemoSgsV1] = usePersist("demoSgsV1",false);
@@ -11549,7 +11447,7 @@ function AppMain({ onLogout, profileId }) {
   const AUTO_BACKUP_MS = 30*60*1000;
   const stateRef = useRef({});
   stateRef.current = { flights, maintData, crew, finData, kpis, dismissed, safetyData, clients, ndsArchive,
-    sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings, sgsResponsable, sgsRevues, sgsChanges, sgsAudits, sgsFormations, sgsFrat, sgsMeda, sgsFdm, sgsItw, sgsReco, sgsPlan, sgsOsv, satisfaction:satis };
+    sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings, sgsResponsable, sgsRevues, sgsChanges, sgsAudits, sgsFormations, sgsFrat, sgsFdm, sgsItw, sgsReco, sgsPlan, sgsOsv, satisfaction:satis };
   const buildBackup = () => ({ version:"1.0", exportDate:new Date().toISOString(), auto:true, ...stateRef.current });
   const lastAutoRef = useRef(0);
   const autoBackup = async (reason) => {
@@ -11599,7 +11497,6 @@ function AppMain({ onLogout, profileId }) {
     if(data.sgsAudits) setSgsAudits(data.sgsAudits);
     if(data.sgsFormations) setSgsFormations(data.sgsFormations);
     if(data.sgsFrat) setSgsFrat(data.sgsFrat);
-    if(data.sgsMeda) setSgsMeda(data.sgsMeda);
     if(data.satisfaction) setSatis(data.satisfaction);
     if(data.sgsFdm) setSgsFdm(data.sgsFdm);
     if(data.sgsItw) setSgsItw(data.sgsItw); if(data.sgsReco) setSgsReco(data.sgsReco); if(data.sgsPlan) setSgsPlan(data.sgsPlan); if(data.sgsOsv) setSgsOsv(data.sgsOsv);
@@ -11640,7 +11537,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);
     setClients(INIT_CLIENTS);setNdsArchive([]);   // sinon ces deux-là reviennent depuis le cloud
-    setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);setSgsRevues([]);setSgsChanges([]);setSgsAudits([]);setSgsFormations([]);setSgsFrat([]);setSgsMeda([]);setSgsFdm([]);setSgsItw([]);setSgsReco([]);setSgsPlan([]);setSgsOsv([]);setSatis([]);
+    setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);setSgsRevues([]);setSgsChanges([]);setSgsAudits([]);setSgsFormations([]);setSgsFrat([]);setSgsFdm([]);setSgsItw([]);setSgsReco([]);setSgsPlan([]);setSgsOsv([]);setSatis([]);
     setReport(null);setReset(false);setTab("forms");
   };
 
@@ -11718,7 +11615,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
         {tab==="forms"   && <ScreenForms satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
-          sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,reg:{revues:sgsRevues,setRevues:setSgsRevues,changes:sgsChanges,setChanges:setSgsChanges,audits:sgsAudits,setAudits:setSgsAudits,formations:sgsFormations,setFormations:setSgsFormations,frat:sgsFrat,setFrat:setSgsFrat,meda:sgsMeda,setMeda:setSgsMeda,fdm:sgsFdm,setFdm:setSgsFdm,itw:sgsItw,setItw:setSgsItw,reco:sgsReco,setReco:setSgsReco,plan:sgsPlan,setPlan:setSgsPlan,osv:sgsOsv,setOsv:setSgsOsv},ndsArchive}}
+          sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,reg:{revues:sgsRevues,setRevues:setSgsRevues,changes:sgsChanges,setChanges:setSgsChanges,audits:sgsAudits,setAudits:setSgsAudits,formations:sgsFormations,setFormations:setSgsFormations,frat:sgsFrat,setFrat:setSgsFrat,fdm:sgsFdm,setFdm:setSgsFdm,itw:sgsItw,setItw:setSgsItw,reco:sgsReco,setReco:setSgsReco,plan:sgsPlan,setPlan:setSgsPlan,osv:sgsOsv,setOsv:setSgsOsv},ndsArchive}}
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
           onSubmitMaint={d=>{
             if(d.acId){
