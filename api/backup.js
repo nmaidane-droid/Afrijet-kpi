@@ -161,8 +161,10 @@ export default async function handler(req, res) {
         50000, "&key=not.like.*reglementation_regl*&key=not.like.*docavion_docavion*"),
       sbFetchAll(url, key, "audit_log", "*").catch(() => []),   // journal absent : sauvegarde quand même
     ]);
+    console.log("BACKUP : " + kv.length + " clés lues, " + audit.length + " entrées de journal");
     const backup = buildBackup({ kv, audit, now });
     const json = JSON.stringify(backup);
+    console.log("BACKUP : " + Math.round(json.length/1024) + " Ko à déposer");
     const filename = `afrijet-sauvegarde-${now.slice(0, 10)}.json`;
 
     if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_REPO) {
@@ -199,6 +201,7 @@ export default async function handler(req, res) {
     } catch (e) { /* le ménage ne doit jamais empêcher la sauvegarde */ }
     res.status(200).json({ ok: true, depose: true, chemin, remplace, retires, copieSupabase: copieSb, erreurCopie, index: copieSb ? "écrit" : "non écrit", taille: json.length, entrees_journal: audit.length });
   } catch (e) {
-    res.status(500).json({ error: String(e.message || e) });
+    console.error("BACKUP ERREUR :", String(e && e.message || e));   // visible dans les logs Vercel
+    res.status(500).json({ error: String(e && e.message || e) });
   }
 }
