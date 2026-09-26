@@ -17,10 +17,10 @@ const PFX = "ajs135v1_";
 const PAGE = 1000;
 
 // Lecture paginée d'une table Supabase avec la clé de service (jamais exposée à la page)
-export async function sbFetchAll(url, key, path, select, max = 50000) {
+export async function sbFetchAll(url, key, path, select, max = 50000, filtre = "") {
   const out = [];
   for (let from = 0; from < max; from += PAGE) {
-    const r = await fetch(`${url}/rest/v1/${path}?select=${select}`, {
+    const r = await fetch(`${url}/rest/v1/${path}?select=${select}${filtre}`, {
       headers: { apikey: key, Authorization: `Bearer ${key}`, Range: `${from}-${from + PAGE - 1}`, Prefer: "count=none" },
     });
     if (!r.ok) throw new Error(`${path} : ${r.status} ${await r.text()}`);
@@ -155,7 +155,10 @@ export default async function handler(req, res) {
   try {
     const now = new Date().toISOString();
     const [kv, audit] = await Promise.all([
-      sbFetchAll(url, key, "kv_store", "key,value"),
+      // Les PDF de Réglementation et de Doc Avion (plusieurs Mo chacun) sont écartés
+      // DÈS LA REQUÊTE : les télécharger pour les jeter ensuite dépassait le temps imparti.
+      sbFetchAll(url, key, "kv_store", "key,value",
+        50000, "&key=not.like.*reglementation_regl*&key=not.like.*docavion_docavion*"),
       sbFetchAll(url, key, "audit_log", "*").catch(() => []),   // journal absent : sauvegarde quand même
     ]);
     const backup = buildBackup({ kv, audit, now });
