@@ -125,7 +125,9 @@ async function kvEcrire(key, valeur) {
       "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
     body: JSON.stringify({ key: PFX + key, value: JSON.stringify(valeur) }),
   });
-  return r.ok;
+  // L'échec doit être lisible dans la réponse du cron, pas silencieux
+  if (!r.ok) throw new Error(`Supabase (${key}) : ${r.status} ${(await r.text()).slice(0, 120)}`);
+  return true;
 }
 
 export async function copieSupabase(backup, now, index) {
@@ -162,9 +164,9 @@ export default async function handler(req, res) {
 
     if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_REPO) {
       // Sans dépôt GitHub, la copie Supabase est écrite quand même
-      let copie = false;
-      try { copie = await copieSupabase(backup, now, []); } catch (e) { /* signalé ci-dessous */ }
-      res.status(200).json({ ok: true, depose: false, copieSupabase: copie, motif: "GITHUB_TOKEN ou GITHUB_REPO manquant", taille: json.length, compteurs: backup.compteurs });
+      let copie = false, erreurCopie = null;
+      try { copie = await copieSupabase(backup, now, []); } catch (e) { erreurCopie = String(e.message || e); }
+      res.status(200).json({ ok: true, depose: false, copieSupabase: copie, erreurCopie, motif: "GITHUB_TOKEN ou GITHUB_REPO manquant", taille: json.length, compteurs: backup.compteurs });
       return;
     }
     const nb = Object.values(backup.compteurs).reduce((s, n) => s + (Number(n) || 0), 0);
@@ -177,13 +179,13 @@ export default async function handler(req, res) {
       contenu: json,
       message: `Sauvegarde du ${now.slice(0, 10)} — ${nb} enregistrements, ${audit.length} entrées de journal`,
     });
-    let copieSb = false;
+    let copieSb = false, erreurCopie = null;
     try {
       const idx = kv.find(r => String(r.key) === PFX + "backup_index");
       let index = idx ? idx.value : [];
       if (typeof index === "string") { try { index = JSON.parse(index); } catch { index = []; } }
       copieSb = await copieSupabase(backup, now, index);
-    } catch (e) { /* la copie Supabase ne doit pas empêcher le dépôt */ }
+    } catch (e) { erreurCopie = String(e.message || e); }   // n'empêche pas le dépôt GitHub, mais se voit
     let retires = 0;
     try {
       retires = await menage({
@@ -192,7 +194,7 @@ export default async function handler(req, res) {
         dossier: (process.env.GITHUB_PATH || "sauvegardes").replace(/^\/+|\/+$/g, ""), now,
       });
     } catch (e) { /* le ménage ne doit jamais empêcher la sauvegarde */ }
-    res.status(200).json({ ok: true, depose: true, chemin, remplace, retires, copieSupabase: copieSb, taille: json.length, entrees_journal: audit.length });
+    res.status(200).json({ ok: true, depose: true, chemin, remplace, retires, copieSupabase: copieSb, erreurCopie, index: copieSb ? "écrit" : "non écrit", taille: json.length, entrees_journal: audit.length });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
