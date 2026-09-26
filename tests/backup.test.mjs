@@ -111,6 +111,15 @@ test("clé du jour : un exemplaire par jour de la semaine", () => {
   });
   test("le journal n est pas recopié dans cette copie", () => att(!("journal" in JSON.parse(ecrits[0].value))));
   test("le résultat signale la copie Supabase", () => att(r.body.copieSupabase === true));
+  test("un échec d écriture Supabase est signalé, pas silencieux", async () => {
+    const avant = global.fetch;
+    global.fetch = async () => ({ ok: false, status: 401, text: async () => "clé refusée" });
+    let msg = null;
+    try { await copieSupabase({ donnees: {}, compteurs: {} }, "2026-09-26T03:00:00Z", []); }
+    catch (e) { msg = String(e.message || e); }
+    global.fetch = avant;
+    att(msg && /401|Supabase/.test(msg), "l erreur doit être remontée : " + msg);
+  });
   test("un index léger est écrit pour l ecran Restore", () => {
     const e = ecrits.find(x => x.key === "ajs135v1_backup_index");
     att(e, "index absent");
