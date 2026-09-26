@@ -11,6 +11,8 @@
 //   GITHUB_BRANCH         branche, « main » par défaut
 //   GITHUB_PATH           dossier dans le dépôt, « sauvegardes » par défaut
 //   CRON_SECRET           secret ajouté par Vercel à l'appel du cron
+import { gzipSync } from "node:zlib";
+
 export const config = { maxDuration: 60 };
 
 const PFX = "ajs135v1_";
@@ -63,7 +65,7 @@ export function buildBackup({ kv, audit, now }) {
 export function cheminDuJour(now) {
   const d = String(now).slice(0, 10);
   const base = (process.env.GITHUB_PATH || "sauvegardes").replace(/^\/+|\/+$/g, "");
-  return `${base}/${d.slice(0, 4)}/afrijet-${d}.json`;
+  return `${base}/${d.slice(0, 4)}/afrijet-${d}.json.gz`;
 }
 
 export async function deposerGitHub({ token, repo, branche, chemin, contenu, message }) {
@@ -77,7 +79,8 @@ export async function deposerGitHub({ token, repo, branche, chemin, contenu, mes
 
   const r = await fetch(api, {
     method: "PUT", headers: { ...entete, "Content-Type": "application/json" },
-    body: JSON.stringify({ message, content: Buffer.from(contenu, "utf8").toString("base64"), branch: branche, ...(sha ? { sha } : {}) }),
+    // Compressé : le journal d'audit rend le fichier brut trop gros pour l'API GitHub
+    body: JSON.stringify({ message, content: gzipSync(Buffer.from(contenu, "utf8")).toString("base64"), branch: branche, ...(sha ? { sha } : {}) }),
   });
   if (!r.ok) throw new Error("GitHub (écriture) : " + r.status + " " + (await r.text()).slice(0, 160));
   return { remplace: !!sha };
@@ -174,23 +177,30 @@ export default async function handler(req, res) {
       res.status(200).json({ ok: true, depose: false, copieSupabase: copie, erreurCopie, motif: "GITHUB_TOKEN ou GITHUB_REPO manquant", taille: json.length, compteurs: backup.compteurs });
       return;
     }
-    const nb = Object.values(backup.compteurs).reduce((s, n) => s + (Number(n) || 0), 0);
-    const chemin = cheminDuJour(now);
-    const { remplace } = await deposerGitHub({
-      token: process.env.GITHUB_TOKEN,
-      repo: process.env.GITHUB_REPO,
-      branche: process.env.GITHUB_BRANCH || "main",
-      chemin,
-      contenu: json,
-      message: `Sauvegarde du ${now.slice(0, 10)} — ${nb} enregistrements, ${audit.length} entrées de journal`,
-    });
+    // 1. Copie Supabase EN PREMIER : c'est elle que lisent le bouton Restore et le témoin.
+    //    Un échec du dépôt GitHub ne doit jamais la priver d'exister.
     let copieSb = false, erreurCopie = null;
     try {
       const idx = kv.find(r => String(r.key) === PFX + "backup_index");
       let index = idx ? idx.value : [];
       if (typeof index === "string") { try { index = JSON.parse(index); } catch { index = []; } }
       copieSb = await copieSupabase(backup, now, index);
-    } catch (e) { erreurCopie = String(e.message || e); }   // n'empêche pas le dépôt GitHub, mais se voit
+      console.log("BACKUP : copie Supabase et index écrits");
+    } catch (e) { erreurCopie = String(e.message || e); console.error("BACKUP Supabase :", erreurCopie); }
+    // 2. Dépôt GitHub, compressé
+    const nb = Object.values(backup.compteurs).reduce((s, n) => s + (Number(n) || 0), 0);
+    const chemin = cheminDuJour(now);
+    let remplace = false, erreurGitHub = null;
+    try {
+      ({ remplace } = await deposerGitHub({
+        token: process.env.GITHUB_TOKEN,
+        repo: process.env.GITHUB_REPO,
+        branche: process.env.GITHUB_BRANCH || "main",
+        chemin,
+        contenu: json,
+        message: `Sauvegarde du ${now.slice(0, 10)} — ${nb} enregistrements, ${audit.length} entrées de journal`,
+      }));
+    } catch (e) { erreurGitHub = String(e.message || e); console.error("BACKUP GitHub :", erreurGitHub); }
     let retires = 0;
     try {
       retires = await menage({
@@ -199,7 +209,7 @@ export default async function handler(req, res) {
         dossier: (process.env.GITHUB_PATH || "sauvegardes").replace(/^\/+|\/+$/g, ""), now,
       });
     } catch (e) { /* le ménage ne doit jamais empêcher la sauvegarde */ }
-    res.status(200).json({ ok: true, depose: true, chemin, remplace, retires, copieSupabase: copieSb, erreurCopie, index: copieSb ? "écrit" : "non écrit", taille: json.length, entrees_journal: audit.length });
+    res.status(200).json({ ok: !erreurCopie, depose: !erreurGitHub, chemin, remplace, retires, copieSupabase: copieSb, erreurCopie, erreurGitHub, index: copieSb ? "écrit" : "non écrit", taille: json.length, entrees_journal: audit.length });
   } catch (e) {
     console.error("BACKUP ERREUR :", String(e && e.message || e));   // visible dans les logs Vercel
     res.status(500).json({ error: String(e && e.message || e) });
