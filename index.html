@@ -123,7 +123,7 @@ const PROFILES = [
    tabs:["forms"],       readOnly:["live","secu","maint","ops","fin","alertes","perf"] },
   {id:"dir",   label:"Direction",   icon:"🏢",  color:"#A0720A",
    pwdHash:"ed494928275b93b897810bd7b090babaee8d4d92268cd96119eef7948b251184",
-   forms:["rapport","frat","sgs"],   // FRAT : décision sur un rouge · SGS : consultation (supervision du Dirigeant)
+   forms:["rapport","frat","sgs","regl"],   // FRAT : décision sur un rouge · SGS et Réglementation : consultation
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
@@ -5587,7 +5587,6 @@ const SAFETY_EVENTS = [
   // Maintenance
   {k:'aog',         svc:['MNT'],             l:"Panne avec plus d'une heure d'immobilisation",        cible:'25 / trimestre', seuil:'au-delà', manuel:true},
 ];
-const SAFETY_BY_KEY = Object.fromEntries(SAFETY_EVENTS.map(e=>[e.k,e]));
 const svcColor = k => (SAFETY_SERVICES.find(s=>s.k===k)||{}).color || '#64748B';
 // Compatibilité : les générateurs et analyses lisent SAFETY_FLAGS {k,l}
 const SAFETY_FLAGS = SAFETY_EVENTS.map(e=>({k:e.k, l:e.def?`${e.l} (${e.def.toLowerCase()})`:e.l}));
@@ -7677,7 +7676,7 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
       {effectiveActive==="sgs" && sgs && <SgsTile prof={profileId} safety={safetyData} flights={flights} aircraft={aircraft} crew={crew} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {/* Opérations : consultation seule des documents */}
-      {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"}/>}
+      {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"||profileId==="dir"}/>}
       {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}
         modesOK={profileId==="sgs"?["re","dgac","as"]:null} respSgs={sgs?sgs.responsable:null}/>}
       {effectiveActive==="clients"  && <FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
@@ -9431,7 +9430,6 @@ function AccountsModal({ onClose, crew }){
 }
 
 const TOTP_ISSUER = "Afrijet Sahara";
-const TOTP_ACCOUNT = "rdoa@afrijet-sahara.ma";
 
 async function generateTotpSecret() {
   const arr = new Uint8Array(20);
