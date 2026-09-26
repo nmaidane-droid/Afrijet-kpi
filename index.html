@@ -102,14 +102,14 @@ const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813
 const PROFILES = [
   {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
    pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
-   forms:["avion","crew","vol","frat","docavion","regl","sat"],
+   forms:["avion","crew","vol","frat","regl","sat"],
    tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes"] },
   {id:"eqp",   label:"Équipage",   icon:"👨‍✈️", color:"#0369A1",
    pwdHash:"a52e38e3b5f9ef8b577b932c0377e1fe367325f900586baad157cfe688975d11",
-   forms:["secu","frat","docavion","regl","sat"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
+   forms:["secu","frat","regl","sat"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"sgs",   label:"SGS",  icon:"🛡", color:"#0F766E",
    pwdHash:"e6a585f2870b2afbc4e0900a53d6b6b050781460d2d1eb575c347693b29b0d4e",
-   forms:["sgs","secu","nds","frat","docavion","regl"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
+   forms:["sgs","secu","nds","frat","regl"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
    pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
    forms:["maint"],
@@ -7054,7 +7054,6 @@ function FormDocStore({ storeKey, label, readOnly }) {  // readOnly : consultati
     setMsg("📥 Chargement...");
     let b64 = await sbGet(PFX_DOCS + doc.id);
     if (!b64) b64 = await sbGet(PFX + "reglementation_" + doc.id);
-    if (!b64) b64 = await sbGet(PFX + "docavion_" + doc.id);
     if (!b64) { setMsg("❌ Fichier introuvable. Veuillez le ré-importer."); return; }
     setViewing({ name: doc.name, dataUrl: b64 });   // affichage dans l'application, sans téléchargement
     setMsg("");
@@ -7112,7 +7111,6 @@ function FormDocStore({ storeKey, label, readOnly }) {  // readOnly : consultati
 }
 
 function FormReglementation({ readOnly }) { return <FormDocStore storeKey="regl" label="réglementaire(s)" readOnly={readOnly}/>; }
-function FormDocAvion({ readOnly }) { return <FormDocStore storeKey="docavion" label="avion" readOnly={readOnly}/>; }
 
 
 function FormAircraft({ aircraft, onUpdate, saved }) {
@@ -7420,7 +7418,6 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
     {id:"frat",     icon:"🧭",  label:"FRAT",            color:"#0F766E"},
     {id:"sgs",      icon:"🛡",  label:"SGS",             color:"#0F766E"},
     {id:"secu",     icon:"🛡",  label:"Comptes rendus", color:"#DC2626"},
-    {id:"docavion", icon:"📁",  label:"Doc Avion",      color:"#0369A1"},
     {id:"regl",     icon:"📋",  label:"Réglementation", color:"#B45309"},
     {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"},
     {id:"clients",  icon:"🏢",  label:"Clients",         color:"#0891B2"},
@@ -7681,7 +7678,6 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
       {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
       {/* Opérations : consultation seule des documents */}
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"}/>}
-      {effectiveActive==="docavion" && <FormDocAvion readOnly={profileId==="ops"||profileId==="eqp"}/>}
       {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}
         modesOK={profileId==="sgs"?["re","dgac","as"]:null} respSgs={sgs?sgs.responsable:null}/>}
       {effectiveActive==="clients"  && <FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
@@ -11460,8 +11456,8 @@ function AppMain({ onLogout, profileId }) {
                         : id==="journal" ? ["dir","sgs","rdoa"].includes(profile.id)
                         // FRAT : rôle CM1 seulement, dès que la personne est identifiée (compte nominatif)
                         : id==="frat" && profile.id==="eqp" && sgsCurrentUser() && sgsCurrentUser().role ? sgsCurrentUser().role==="CM1"
-                        // Doc Avion et Réglementation : personnel navigant technique seulement, pas les PNC
-                        : (id==="docavion"||id==="regl") && profile.id==="eqp" && (sgsCurrentUser()||{}).role==="CC" ? false
+                        // Réglementation : personnel navigant technique seulement, pas les PNC
+                        : id==="regl" && profile.id==="eqp" && (sgsCurrentUser()||{}).role==="CC" ? false
                         : (profile.forms===null || profile.forms.includes(id));
   // Onglet Finances : Administrateur, Finances et Direction uniquement
   const canTab = (id) => id!=="fin" || ["rdoa","fin","dir"].includes(profile.id);
