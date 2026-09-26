@@ -33,6 +33,25 @@ export async function sbFetchAll(url, key, path, select, max = 50000, filtre = "
   return out;
 }
 
+// Lecture en deux temps : la liste des clés d'abord (instantanée), puis les valeurs
+// des seules clés utiles, par petits paquets. Demander les valeurs de toute la table
+// obligeait Supabase à ouvrir les PDF de plusieurs mégaoctets, et la requête expirait.
+const LOURD = /(reglementation_regl|docavion_docavion)/;
+export async function lireKv(url, key) {
+  const entetes = k => ({ apikey: k, Authorization: `Bearer ${k}` });
+  const rc = await fetch(`${url}/rest/v1/kv_store?select=key`, { headers: entetes(key) });
+  if (!rc.ok) throw new Error(`kv_store (clés) : ${rc.status} ${(await rc.text()).slice(0, 120)}`);
+  const cles = (await rc.json()).map(r => r.key).filter(k => !LOURD.test(String(k)));
+  const out = [];
+  for (let i = 0; i < cles.length; i += 8) {
+    const lot = cles.slice(i, i + 8).map(k => `"${k}"`).join(",");
+    const r = await fetch(`${url}/rest/v1/kv_store?select=key,value&key=in.(${encodeURIComponent(lot)})`, { headers: entetes(key) });
+    if (!r.ok) throw new Error(`kv_store (valeurs) : ${r.status} ${(await r.text()).slice(0, 120)}`);
+    out.push(...(await r.json()));
+  }
+  return out;
+}
+
 // Construit la sauvegarde : données de l'application + journal d'audit
 export function buildBackup({ kv, audit, now }) {
   const donnees = {};
@@ -158,10 +177,7 @@ export default async function handler(req, res) {
   try {
     const now = new Date().toISOString();
     const [kv, audit] = await Promise.all([
-      // Les PDF de Réglementation et de Doc Avion (plusieurs Mo chacun) sont écartés
-      // DÈS LA REQUÊTE : les télécharger pour les jeter ensuite dépassait le temps imparti.
-      sbFetchAll(url, key, "kv_store", "key,value",
-        50000, "&key=not.like.*reglementation_regl*&key=not.like.*docavion_docavion*"),
+      lireKv(url, key),
       sbFetchAll(url, key, "audit_log", "*").catch(() => []),   // journal absent : sauvegarde quand même
     ]);
     console.log("BACKUP : " + kv.length + " clés lues, " + audit.length + " entrées de journal");
