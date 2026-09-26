@@ -7398,6 +7398,12 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
   };
 
   // Compute days since last backup
+  // Dernière sauvegarde écrite par le serveur : lue dans l index, une seule requête légère
+  const [svgAuto,setSvgAuto]=useState(null);
+  useEffect(()=>{ let vivant=true;
+    const lire=async()=>{ try{ const l=await sbListBackups(); if(vivant) setSvgAuto((l&&l[0])||null); }catch(e){ logSilent(e); } };
+    lire(); const t=setInterval(lire,600000);   // relecture toutes les 10 minutes
+    return ()=>{ vivant=false; clearInterval(t); }; },[]);
   const daysSince=lastBackup?(()=>{
     const today=new Date(); today.setHours(0,0,0,0);
     const backupDay=new Date(lastBackup); backupDay.setHours(0,0,0,0);
@@ -7455,30 +7461,19 @@ function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMai
         </div>
       )}
       {(()=>{
-        if(daysSince===null) return (
-          <div style={{padding:"10px 14px",borderRadius:10,fontSize:12,background:"#FEF3C7",border:"1px solid #D97706",color:"#92400E",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:16}}>💾</span>
-            <span><b>Aucun backup effectué</b> — pensez à exporter vos données</span>
-          </div>
-        );
-        if(daysSince===0) return (
-          <div style={{padding:"10px 14px",borderRadius:10,fontSize:12,background:"#D1FAE5",border:"1px solid #00936A",color:"#065F46",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:16}}>✅</span>
-            <span><b>Backup effectué le {new Date(lastBackup).toLocaleDateString("fr-FR",{day:"numeric",month:"long"})} à {new Date(lastBackup).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}</b> — données sécurisées</span>
-          </div>
-        );
-        if(daysSince<=3) return (
-          <div style={{padding:"10px 14px",borderRadius:10,fontSize:12,background:"#FEF3C7",border:"1px solid #D97706",color:"#92400E",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:16}}>⚠️</span>
-            <span><b>Dernier backup il y a {daysSince} jour{daysSince>1?"s":""}</b> — pensez à exporter</span>
-          </div>
-        );
-        return (
-          <div style={{padding:"10px 14px",borderRadius:10,fontSize:12,background:"#FEE2E2",border:"1px solid #DC2626",color:"#991B1B",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:16}}>🚨</span>
-            <span><b>Dernier backup il y a {daysSince} jours</b> — exportez vos données maintenant !</span>
-          </div>
-        );
+        // Témoin de la sauvegarde automatique du serveur (tâche de 3 h UTC), et non des exports faits ici.
+        // Vert : moins de 48 h · Orange : plus de 48 h, une nuit a été manquée · Rouge : aucune sauvegarde.
+        const d=svgAuto&&svgAuto.exportDate?new Date(svgAuto.exportDate):null;
+        const h=d?Math.round((Date.now()-d.getTime())/3600000):null;
+        const cadre=(bg,bd,fg,icone,texte)=>(
+          <div style={{padding:"10px 14px",borderRadius:10,fontSize:12,background:bg,border:"1px solid "+bd,color:fg,display:"flex",alignItems:"center",gap:8,lineHeight:1.45}}>
+            <span style={{fontSize:16}}>{icone}</span><span>{texte}</span></div>);
+        if(!d) return cadre("#FCEBEB","#DC2626","#7A1414","⛔",
+          <><b>Aucune sauvegarde automatique</b> — la tâche planifiée n&rsquo;a jamais abouti. Exportez vos données et prévenez l&rsquo;administrateur.</>);
+        const quand=d.toLocaleDateString("fr-FR",{day:"numeric",month:"long"})+" à "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+        if(h<=48) return cadre("#D1FAE5","#00936A","#065F46","✅",<><b>Sauvegarde automatique du {quand}</b> — données protégées.</>);
+        return cadre("#FEF3C7","#D97706","#92400E","⚠️",
+          <><b>Dernière sauvegarde automatique il y a {Math.floor(h/24)} jour(s)</b>, le {quand} — vérifiez la tâche planifiée.</>);
       })()}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
         {FORMS.map(fm=>{
