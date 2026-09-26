@@ -36,12 +36,15 @@ export async function sbFetchAll(url, key, path, select, max = 50000, filtre = "
 // Lecture en deux temps : la liste des clés d'abord (instantanée), puis les valeurs
 // des seules clés utiles, par petits paquets. Demander les valeurs de toute la table
 // obligeait Supabase à ouvrir les PDF de plusieurs mégaoctets, et la requête expirait.
-const LOURD = /(reglementation_regl|docavion_docavion)/;
+// Écartés de la lecture : les PDF (plusieurs Mo chacun) et les sauvegardes elles-mêmes
+// — backup_j0 à backup_j6, lastBackupData et l'index — qui sont des copies, parfois
+// très volumineuses. Les relire pour les recopier ferait expirer la requête.
+const LOURD = /(reglementation_regl|docavion_docavion|^backup_j|^lastBackupData|^backup_index)/;
 export async function lireKv(url, key) {
   const entetes = k => ({ apikey: k, Authorization: `Bearer ${k}` });
   const rc = await fetch(`${url}/rest/v1/kv_store?select=key`, { headers: entetes(key) });
   if (!rc.ok) throw new Error(`kv_store (clés) : ${rc.status} ${(await rc.text()).slice(0, 120)}`);
-  const cles = (await rc.json()).map(r => r.key).filter(k => !LOURD.test(String(k)));
+  const cles = (await rc.json()).map(r => r.key).filter(k => !LOURD.test(String(k).replace(PFX, "")));
   const out = [];
   for (let i = 0; i < cles.length; i += 8) {
     const lot = cles.slice(i, i + 8).map(k => `"${k}"`).join(",");
