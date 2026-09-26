@@ -1,4 +1,5 @@
 // Tests de la sauvegarde hors site (api/backup.js), avec Supabase et l'envoi de courriel simulés.
+import { gunzipSync } from "node:zlib";
 import { buildBackup, sbFetchAll, cheminDuJour, deposerGitHub, aSupprimer, cleDuJour } from "../api/backup.js";
 import handler from "../api/backup.js";
 let ok = 0, ko = 0;
@@ -60,7 +61,7 @@ process.env.SUPABASE_URL = "https://x"; process.env.SUPABASE_SERVICE_KEY = "k";
 process.env.GITHUB_TOKEN = "jeton"; process.env.GITHUB_REPO = "nmaidane-droid/sauvegardes-afrijet"; process.env.CRON_SECRET = "s3cret";
 const mkRes = () => { const r = { code: 0, body: null }; r.status = c => (r.code = c, r); r.json = b => (r.body = b, r); r.setHeader = () => r; r.send = b => (r.body = b, r); return r; };
 
-test("chemin daté, classé par année", () => { const c = cheminDuJour("2026-09-24T03:00:00Z"); att(c === "sauvegardes/2026/afrijet-2026-09-24.json", c); });
+test("chemin daté, classé par année", () => { const c = cheminDuJour("2026-09-24T03:00:00Z"); att(c === "sauvegardes/2026/afrijet-2026-09-24.json.gz", c); });
 
 let r1 = mkRes(); await handler({ headers: {} }, r1);
 test("appel sans le secret du cron : refusé", () => att(r1.code === 401));
@@ -68,9 +69,9 @@ test("appel sans le secret du cron : refusé", () => att(r1.code === 401));
 let r2 = mkRes(); await handler({ headers: { authorization: "Bearer s3cret" } }, r2);
 test("sauvegarde déposée dans le dépôt", () => att(r2.code === 200 && r2.body.depose === true && depots.length === 1));
 test("fichier daté et lisible", () => { const d = depots[0]; att(d.url.includes("afrijet-"));
-  const j = JSON.parse(Buffer.from(d.corps.content, "base64").toString("utf8"));
+  const j = JSON.parse(gunzipSync(Buffer.from(d.corps.content, "base64")).toString("utf8"));   // le dépôt est compressé
   att(j.donnees.flights.length === 2 && j.journal.entrees === 2); });
-test("aucun secret dans le fichier", () => { const j = Buffer.from(depots[0].corps.content, "base64").toString("utf8");
+test("aucun secret dans le fichier", () => { const j = gunzipSync(Buffer.from(depots[0].corps.content, "base64")).toString("utf8");
   att(!j.includes("secret") && !j.includes("JBSW")); });
 test("message de dépôt explicite", () => att(/Sauvegarde du \d{4}-\d{2}-\d{2}/.test(depots[0].corps.message)));
 
