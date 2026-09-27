@@ -6260,11 +6260,11 @@ function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive, m
 
   const importNotes=()=>{
     const input=document.createElement("input");
-    input.type="file"; input.accept=".json";
+    input.type="file"; input.accept=".json,.gz";
     input.onchange=async(e)=>{
       const file=e.target.files[0]; if(!file) return;
       try{
-        const parsed=JSON.parse(await file.text());
+        const parsed=JSON.parse(await lireFichierExport(file));   // accepte aussi un .json.gz
         const records=Array.isArray(parsed)?parsed:[parsed];
         const arch=(archive||[]).slice();
         let imported=0, replaced=0;
@@ -11338,6 +11338,20 @@ function AppInner() {
 // Extrait d'AppMain ; ne dépend que de ses trois props.
 // Reconnaît les deux formats : export de l application (listes à la racine)
 // et sauvegarde automatique du dépôt GitHub (listes sous la clé « donnees »).
+// Lit un fichier d export : texte brut, ou sauvegarde GitHub compressée (.json.gz).
+// Les sauvegardes déposées sur GitHub sont compressées ; sans cela elles seraient
+// refusées à la restauration, au moment précis où l on en a besoin.
+async function lireFichierExport(file){
+  const buf = await file.arrayBuffer();
+  const u8 = new Uint8Array(buf);
+  const compresse = u8.length>2 && u8[0]===0x1f && u8[1]===0x8b;   // signature gzip
+  if(!compresse) return new TextDecoder("utf-8").decode(u8);
+  if(typeof DecompressionStream!=="function")
+    throw new Error("Ce navigateur ne sait pas ouvrir un fichier compressé. Décompressez-le, puis réessayez.");
+  const flux = new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return await new Response(flux).text();
+}
+
 function restoreNormaliser(data){
   if(!data||typeof data!=="object") return null;
   if(data.donnees&&typeof data.donnees==="object")
@@ -11402,15 +11416,15 @@ function RestoreModal({ onClose, setRestoreProgress, onImport }){
               <button onClick={()=>{
                 onClose();
                 const input=document.createElement("input");
-                input.type="file"; input.accept=".json";
+                input.type="file"; input.accept=".json,.gz";
                 input.onchange=async(e)=>{
                   const file=e.target.files[0]; if(!file) return;
-                  const reader=new FileReader();
-                  reader.onload=async(ev)=>{
+                  (async()=>{
                     try{
                       const steps=["Lecture du fichier","Restauration des données","Finalisation"];
                       setRestoreProgress({title:"Restauration en cours",icon:"📂",steps,currentStep:0,pct:20});
-                      const brut=JSON.parse(ev.target.result);
+                      const texte=await lireFichierExport(file);
+                      const brut=JSON.parse(texte);
                       const lu=restoreNormaliser(brut);
                       if(!lu){ setRestoreProgress(null); uiAlert("⚠️ Ce fichier n'est ni un export de l'application, ni une sauvegarde automatique. Rien n'a été modifié."); return; }
                       const data=lu.donnees;
@@ -11425,9 +11439,8 @@ function RestoreModal({ onClose, setRestoreProgress, onImport }){
                       } else {
                         setRestoreProgress(null);
                       }
-                    }catch(_e){setRestoreProgress(null);uiAlert("❌ Fichier JSON invalide.");}
-                  };
-                  reader.readAsText(file);
+                    }catch(_e){setRestoreProgress(null);uiAlert("❌ "+(_e&&_e.message||"Fichier invalide.")); }
+                  })();
                 };
                 input.click();
               }} style={{height:48,background:"#F0FDF4",border:"1.5px solid #00936A",borderRadius:10,color:"#00936A",fontSize:13,fontWeight:700,cursor:"pointer"}}>
