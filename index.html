@@ -7206,6 +7206,8 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
 
 // Barre des cinq actions (Export, Restore, Effacer, Manuel, Exit), même gabarit.
 // Extraite de ScreenForms ; les trois premières sont réservées à l'Administrateur.
+// Le manuel s'ouvre depuis l'application ; la fonction est posée ici par AppMain.
+let ouvrirManuel = null;
 function ActionBar({ isAdmin, doExport, onRestore, onReset, onLogout }){
           // Cinq boutons de même gabarit : icône centrée au-dessus, libellé centré dessous.
           const base={flex:1,minWidth:0,height:54,borderRadius:10,cursor:"pointer",
@@ -7218,7 +7220,7 @@ function ActionBar({ isAdmin, doExport, onRestore, onReset, onLogout }){
             isAdmin&&{k:"res", icon:"☁️", label:"Restore", bg:"#DBEAFE", bd:"#0369A1", fg:"#0369A1", on:onRestore},
             isAdmin&&{k:"rst", icon:"🗑", label:"Effacer", bg:"#FEE2E2", bd:"#DC2626", fg:"#DC2626", on:onReset},
             isAdmin&&{k:"usr", icon:"👥", label:"Comptes", bg:"#E1F5EE", bd:"#0F766E", fg:"#085041", on:()=>window.dispatchEvent(new Event("open-accounts"))},
-            {k:"man", icon:"📖", label:"Manuel", bg:"#EFF6FF", bd:"#0369A1", fg:"#0369A1", href:"Manuel_Utilisateur_Afrijet_v2.2.pdf"},
+            {k:"man", icon:"📖", label:"Manuel", bg:"#EFF6FF", bd:"#0369A1", fg:"#0369A1", on:()=>ouvrirManuel&&ouvrirManuel()},
             {k:"out", icon:(
               // Icône de sortie : flèche quittant un cadre
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{display:"block"}}>
@@ -7340,7 +7342,7 @@ function FormSatisfactionSaisie({ flights, items, setItems, onClose, onNoteVol }
     </div></Card>);
 }
 
-function ScreenForms({ sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
+function ScreenForms({ onManuel, sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
   const isAdmin = profileId === "rdoa";
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="comm"?"clients":profileId==="eqp"?"secu":null;   // Équipage : arrive sur le compte rendu · SGS : sur la grille
   const [active,setActive]=useState(defaultForm);
@@ -11511,6 +11513,23 @@ function AppMain({ onLogout, profileId }) {
   const [melHist,setMelHist]     = usePersist("melHist",[]);
   const [icao24,setIcao24]   = usePersist("icao24","CN-KTA");
   const [lastBackup,setLastBackup] = usePersist("lastBackup",null);
+  // Manuel intégré : plein écran par-dessus l'application, fermé par son bouton Retour
+  // ou par le bouton retour du téléphone.
+  const [manuelOuvert,setManuelOuvert] = useState(false);
+  ouvrirManuel = ()=>setManuelOuvert(true);
+  useEffect(()=>{
+    const msg=e=>{ const d=e&&e.data; if(d==='fermer-manuel'||(d&&d.type==='fermer-manuel')) setManuelOuvert(false); };
+    window.addEventListener('message',msg);
+    return ()=>window.removeEventListener('message',msg);
+  },[]);
+  useEffect(()=>{
+    if(!manuelOuvert) return;
+    history.pushState({manuel:1},'');
+    const retour=()=>setManuelOuvert(false);
+    window.addEventListener('popstate',retour);
+    return ()=>{ window.removeEventListener('popstate',retour);
+      if(history.state&&history.state.manuel) history.back(); };
+  },[manuelOuvert]);
   const [ndsArchive,setNdsArchive]=usePersist(NDS_ARCHIVE_PERSIST_KEY, []);   // archives du générateur
   // Système de gestion de la sécurité (tuile SGS)
   const [sgsHazards,setSgsHazards]   = usePersist("sgsHazards",[]);
@@ -11699,6 +11718,12 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 ];
 
   return (
+    <>
+      {manuelOuvert && (
+        <div style={{position:"fixed",inset:0,zIndex:9000,background:"#F5F7FA"}}>
+          <iframe src="manuel.html" title="Manuel utilisateur" style={{width:"100%",height:"100%",border:0}}/>
+        </div>
+      )}
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:"Inter,-apple-system,system-ui,sans-serif",display:"flex",flexDirection:"column",position:"relative"}}>
       <style>{`*{box-sizing:border-box;margin:0;padding:0;}@keyframes dot-pulse{0%,100%{opacity:1}50%{opacity:.5}}input,select,button{-webkit-tap-highlight-color:transparent;font-family:inherit;}::-webkit-scrollbar{display:none;}`}</style>
 
@@ -11736,7 +11761,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
-        {tab==="forms"   && <ScreenForms satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
+        {tab==="forms"   && <ScreenForms onManuel={()=>setManuelOuvert(true)} satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
           sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,reg:{revues:sgsRevues,setRevues:setSgsRevues,changes:sgsChanges,setChanges:setSgsChanges,audits:sgsAudits,setAudits:setSgsAudits,formations:sgsFormations,setFormations:setSgsFormations,frat:sgsFrat,setFrat:setSgsFrat,st:sgsSt,setSt:setSgsSt,itw:sgsItw,setItw:setSgsItw,reco:sgsReco,setReco:setSgsReco,plan:sgsPlan,setPlan:setSgsPlan,osv:sgsOsv,setOsv:setSgsOsv},ndsArchive}}
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
           onSubmitMaint={d=>{
@@ -12338,6 +12363,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
         })}
       </div>
     </div>
+    </>
   );
 }
 
