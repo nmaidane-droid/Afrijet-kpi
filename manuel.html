@@ -76,6 +76,8 @@ nav.som .sous a{color:#475569;text-decoration:none;font-size:13.5px;padding:7px 
 nav.som h2.sep{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:#64748B;margin:18px 4px 10px;display:block}
 .az{border:2px solid #0F766E;border-radius:12px;padding:12px 13px;margin:14px 0;background:#F0FDFA}.az .azt{font-weight:800;color:#0F766E;margin-bottom:8px;font-size:15px}
 .az .n{background:#0F766E!important}.fig .shot img{max-width:260px;width:78%;border:1px solid #DDE3ED;border-radius:10px}
+table.t{white-space:normal}table.t td{vertical-align:top}.az{border:2px solid #0F766E;border-radius:12px;padding:12px 13px;margin:14px 0;background:#F0FDFA}.az .azt{font-weight:800;color:#0F766E;margin-bottom:8px;font-size:15px}
+.az .n{background:#0F766E!important}.fig .shot img{max-width:260px;width:78%;border:1px solid #DDE3ED;border-radius:10px}
 table.t{white-space:normal}table.t td{vertical-align:top}</style></head><body>
 <header><button id="retour">← Retour</button><b>Manuel utilisateur 2.16</b></header>
 <main><a class="dl" href="Manuel_Utilisateur_Afrijet_v2.16.pdf" download>📄 Télécharger le PDF</a>
@@ -107,5 +109,7 @@ function quitter(){ try{ (window.parent||window).postMessage({type:'fermer-manue
   try{ if(window.parent!==window) window.parent.postMessage('fermer-manuel','*'); }catch(e){} }
 window.addEventListener('popstate',()=>{ if(z.classList.contains('on')) fermerZoom(); else quitter(); });
 history.replaceState({m:1},'');
+document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',ev=>{ ev.preventDefault();
+  const c=document.getElementById(a.getAttribute('href').slice(1)); if(c) window.scrollTo({top:c.offsetTop-62,behavior:'smooth'}); }));
 </script>
 </body></html>
