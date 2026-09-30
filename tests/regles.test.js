@@ -32,7 +32,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
   'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
-  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
+  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','sgsReceptionAuto','sgsMoisFr','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -483,6 +483,15 @@ console.log('\nRestauration — résumé affiché avant confirmation');
   test("résumé : un devis à deux versions compte une fois", ()=>attendu(/ 2 devis /.test(r),r));
   test("résumé : ligne d'exploitation inchangée", ()=>attendu(/^2 vols · 0 danger · 0 action · 0 enquête · 1 membre d'équipage/.test(r),r));
   test("résumé : ancienne sauvegarde sans module Commercial", ()=>attendu(/Commercial : 0 prospect · 0 devis · 0 client · 0 demande de vols/.test(T.restoreResume({flights:[]})),T.restoreResume({flights:[]})));
+}
+
+
+console.log('\nFiche d\'analyse — date de réception automatique');
+{
+  test("réception : jour d'enregistrement du compte rendu", ()=>attendu(T.sgsReceptionAuto({date:'2026-10-10',timestamp:'2026-10-12T11:20:00.000Z'})==='2026-10-12',T.sgsReceptionAuto({timestamp:'2026-10-12T11:20:00.000Z'})));
+  test("réception : compte rendu anonyme, mois seulement", ()=>attendu(T.sgsReceptionAuto({anonyme:true,date:'2026-10-01',timestamp:'2026-10-12T11:20:00.000Z'})==='2026-10',"jour exposé"));
+  test("réception : ancien compte rendu sans horodatage, à saisir", ()=>attendu(T.sgsReceptionAuto({date:'2026-10-10'})===''&&T.sgsReceptionAuto({timestamp:3})===''&&T.sgsReceptionAuto({timestamp:'n\'importe quoi'})==='',"rempli à tort"));
+  test("mois en clair", ()=>attendu(T.sgsMoisFr('2026-10')==='octobre 2026'&&T.sgsMoisFr('')==='',T.sgsMoisFr('2026-10')));
 }
 
 
