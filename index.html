@@ -11238,7 +11238,7 @@ function DialogHost(){
 //  - pendant l'utilisation : simple bandeau, pour ne jamais perdre une saisie.
 // Référence : meta app-build + version.json produits par build.js. À défaut
 // (page servie sans construction), l'en-tête ETag de la page fait foi.
-const UPD_INTERVAL_MS = 60*1000;          // vérification légère (~60 octets)
+const UPD_INTERVAL_MS = 30*1000;          // vérification légère (~60 octets), toutes les 30 secondes
 const UPD_IDLE_MS     = 20*1000;          // inactivité requise pour recharger en cours d'utilisation
 function currentBuild(){
   const m=document.querySelector('meta[name="app-build"]');
@@ -11315,6 +11315,24 @@ function UpdateWatcher(){
       <button onClick={reloadNow} style={{height:36,padding:"0 14px",background:"white",color:C.navy,border:"none",borderRadius:9,fontSize:12.5,fontWeight:800,...TAP}}>Recharger</button>
     </div>
   );
+}
+
+// Service worker : réseau d'abord pour la page, manuel et PDF consultables hors ligne.
+if ('serviceWorker' in navigator) {
+  // La page est souvent déjà chargée quand ce code s'exécute : on n'attend pas un événement passé
+  const poser = () => {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      // Une nouvelle version prend la main sans attendre la fermeture de tous les onglets
+      reg.addEventListener('updatefound', () => {
+        const nv = reg.installing;
+        nv && nv.addEventListener('statechange', () => {
+          if (nv.state === 'installed' && navigator.serviceWorker.controller) nv.postMessage('skip-waiting');
+        });
+      });
+      setInterval(() => reg.update(), UPD_INTERVAL_MS);   // même rythme que la vérification de version
+    }).catch(e => logSilent(e));
+  };
+  if (document.readyState === 'complete') poser(); else window.addEventListener('load', poser);
 }
 
 function App(){ return (<><AppInner/><DialogHost/><UpdateWatcher/></>); }
