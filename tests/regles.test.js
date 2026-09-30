@@ -32,7 +32,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
   'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
-  'comVolsAPlanifier','comGroupesAPlanifier','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
+  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -370,6 +370,12 @@ console.log('\nModule Commercial — transmission aux Opérations (lot C)');
     const G=T.comGroupesAPlanifier(T.comVolsAPlanifier([dem,d2,d3],F));
     attendu(G.map(g=>g.dem.clientNom+':'+g.legs.map(l=>l.i).join('')).join(' ')==='MASEN:0 Mines du Sud:23 OCP:01'&&G[1].premier==='2026-10-23',G.map(g=>g.dem.clientNom+':'+g.legs.map(l=>l.i).join('')+'@'+g.premier).join(' ')); });
   test("liste repliable : client entièrement planifié, ligne retirée", ()=>attendu(T.comGroupesAPlanifier(T.comVolsAPlanifier([dem],tout)).length===0,"ligne restante"));
+  test("saisie à la main : seulement FRY et POS proposés", ()=>attendu(T.comTypesVol(null).join()==='Ferry,Positioning',T.comTypesVol(null).join()));
+  test("saisie à la main : vol COM refusé", ()=>attendu(/uniquement à partir d'une demande du Commercial/.test(T.comControleType('Commercial',null)),"accepté"));
+  test("saisie à la main : FRY et POS acceptés", ()=>attendu(T.comControleType('Ferry',null)===null&&T.comControleType('Positioning',null)===null,"refusé"));
+  test("vol pris dans une demande : COM accepté", ()=>attendu(T.comControleType('Commercial',{flightType:'Commercial'})===null,"refusé"));
+  test("vol pris dans une demande : type verrouillé", ()=>attendu(T.comTypesVol({flightType:'Commercial'}).join()==='Commercial'&&/fixé par la demande/.test(T.comControleType('Ferry',{flightType:'Commercial'})),"modifiable"));
+  test("mise en place d'une demande : POS seulement", ()=>attendu(T.comTypesVol({flightType:'Positioning'}).join()==='Positioning'&&T.comControleType('Positioning',{flightType:'Positioning'})===null,"type"));
   test("demande annulée : plus rien à planifier", ()=>attendu(T.comVolsAPlanifier([{...dem,statut:'annulee'}],[]).length===0&&T.comEtatDemande({...dem,statut:'annulee'},[]).statut==='annulee',"à planifier"));
   test("horaires au client : vols avec passagers seulement, heures définitives", ()=>{ const t=T.comTexteHoraires(dem,T.comEtatDemande(dem,F)); attendu(/Casablanca → Nouakchott · départ 08:15, arrivée 11:17/.test(t)&&!/Rabat/.test(t),t); });
   test("client d'un devis fait depuis une fiche prospect devenue cliente", ()=>{ const r=T.comClientDuDevis(d,[{id:'p1',clientRef:'C7'}],[{id:'C7',nom:'Mines du Sud'}]); attendu(r.prospect.id==='p1'&&r.client.id==='C7',"client"); });
