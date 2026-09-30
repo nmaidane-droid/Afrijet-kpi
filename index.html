@@ -11246,13 +11246,19 @@ function DialogHost(){
 // ── Détection des nouvelles versions ─────────────────────────────────────────
 // Sur mobile, revenir sur l'application ne la recharge pas : Chrome reprend la
 // page gardée en mémoire. L'application vérifie donc elle-même, au retour au
-// premier plan et toutes les 5 minutes, si une version plus récente est en ligne.
+// premier plan et toutes les 10 secondes, si une version plus récente est en ligne.
+//  - à l'ouverture (20 premières secondes) : rechargement immédiat, sauf champ en cours de saisie ;
 //  - au retour sur l'application : rechargement automatique (rien en cours) ;
 //  - pendant l'utilisation : simple bandeau, pour ne jamais perdre une saisie.
+// Réseau pas encore prêt (ouverture, réveil) : nouvel essai après 2, 4 puis 8 s,
+// et dès que le téléphone signale le retour du réseau.
 // Référence : meta app-build + version.json produits par build.js. À défaut
 // (page servie sans construction), l'en-tête ETag de la page fait foi.
-const UPD_INTERVAL_MS = 30*1000;          // vérification légère (~60 octets), toutes les 30 secondes
+const UPD_INTERVAL_MS = 10*1000;          // vérification légère (~60 octets), toutes les 10 secondes
 const UPD_IDLE_MS     = 20*1000;          // inactivité requise pour recharger en cours d'utilisation
+const UPD_START_MS    = 20*1000;          // fenêtre d'ouverture : rechargement sans attendre l'inactivité
+const UPD_RETRY_MS    = [2000,4000,8000]; // nouveaux essais si le réseau n'est pas encore prêt
+const SW_UPDATE_MS    = 60*1000;          // relecture de sw.js, qui change rarement
 function currentBuild(){
   const m=document.querySelector('meta[name="app-build"]');
   return m ? m.getAttribute('content') : null;
@@ -11279,43 +11285,64 @@ function UpdateWatcher(){
   const baseRef=useRef(currentBuild());      // version affichée
   const busyRef=useRef(false);
   const lastTouchRef=useRef(Date.now());
-  // Aucune saisie en cours : pas de champ actif, pas de dialogue ouvert, pas de toucher récent
-  const idle=()=>{
+  const startRef=useRef(Date.now());          // heure d'ouverture de la page
+  // Saisie en cours : champ actif ou dialogue ouvert
+  const saisie=()=>{
     const a=document.activeElement, tag=a&&a.tagName;
     const editing=tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||(a&&a.isContentEditable);
     const dialog=!!document.querySelector('[role="dialog"]');
-    return !editing && !dialog && Date.now()-lastTouchRef.current>=UPD_IDLE_MS;
+    return editing||dialog;
   };
+  // Aucune saisie en cours et pas de toucher récent
+  const idle=()=>!saisie() && Date.now()-lastTouchRef.current>=UPD_IDLE_MS;
+  // À l'ouverture, rien n'a encore été saisi : on n'attend pas l'inactivité
+  const ouverture=()=>Date.now()-startRef.current<UPD_START_MS && !saisie();
   const reloadNow=()=>{
     try{ SYNC.flushAll(); }catch(e){ logSilent(e); }   // envoyer ce qui est en attente
     setTimeout(()=>location.reload(),400);
   };
+  // Renvoie false si le serveur n'a pas pu être joint (réseau pas encore prêt), null si occupé
   const check=async(auto)=>{
-    if(busyRef.current) return; busyRef.current=true;
+    if(busyRef.current) return null; busyRef.current=true;
     try{
       const remote=await fetchRemoteBuild();
-      if(!remote) return;
-      if(!baseRef.current){ baseRef.current=remote; return; }   // première mesure (mode ETag)
-      if(remote===baseRef.current) return;
+      if(!remote) return false;
+      if(!baseRef.current){ baseRef.current=remote; return true; }   // première mesure (mode ETag)
+      if(remote===baseRef.current) return true;
       // Garde-fou : un seul rechargement automatique par version, pour ne jamais
       // boucler si un cache servait encore l'ancienne page.
       const tried=sessionStorage.getItem('afrijet_reload_for');
       // Retour sur l'application, ou utilisation sans saisie en cours → rechargement automatique
-      if((auto||idle()) && tried!==remote){ sessionStorage.setItem('afrijet_reload_for',remote); reloadNow(); }
+      if((auto||ouverture()||idle()) && tried!==remote){ sessionStorage.setItem('afrijet_reload_for',remote); reloadNow(); }
       else setAvail(true);
+      return true;
     } finally { busyRef.current=false; }
+  };
+  // Vérification avec nouveaux essais si le réseau n'est pas encore prêt
+  const retryRef=useRef([]);
+  const checkReprises=async(auto)=>{
+    retryRef.current.forEach(clearTimeout); retryRef.current=[];
+    if((await check(auto))!==false) return;
+    UPD_RETRY_MS.forEach(ms=>{ retryRef.current.push(setTimeout(async()=>{
+      if((await check(auto))===true){ retryRef.current.forEach(clearTimeout); retryRef.current=[]; }
+    },ms)); });
   };
   useEffect(()=>{
     window.__afrijetCheckUpdate=check;   // utilisé par les tests
-    check(false);
-    const onVis=()=>{ if(document.visibilityState==="visible") check(true); };
+    checkReprises(false);
+    const onVis=()=>{ if(document.visibilityState==="visible") checkReprises(true); };
+    const onOnline=()=>{ if(document.visibilityState==="visible") check(false); };
+    const onShow=e=>{ if(e.persisted) checkReprises(true); };   // page restaurée depuis la mémoire
     document.addEventListener("visibilitychange",onVis);
     window.addEventListener("focus",onVis);
+    window.addEventListener("online",onOnline);
+    window.addEventListener("pageshow",onShow);
     const id=setInterval(()=>{ if(document.visibilityState==="visible") check(false); },UPD_INTERVAL_MS);
     const touch=()=>{ lastTouchRef.current=Date.now(); };
     const EV=["pointerdown","keydown","input","wheel","touchmove"];
     EV.forEach(e=>document.addEventListener(e,touch,{capture:true,passive:true}));
     return ()=>{ document.removeEventListener("visibilitychange",onVis); window.removeEventListener("focus",onVis); clearInterval(id);
+      window.removeEventListener("online",onOnline); window.removeEventListener("pageshow",onShow); retryRef.current.forEach(clearTimeout);
       EV.forEach(e=>document.removeEventListener(e,touch,{capture:true})); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
@@ -11342,7 +11369,7 @@ if ('serviceWorker' in navigator) {
           if (nv.state === 'installed' && navigator.serviceWorker.controller) nv.postMessage('skip-waiting');
         });
       });
-      setInterval(() => reg.update(), UPD_INTERVAL_MS);   // même rythme que la vérification de version
+      setInterval(() => reg.update(), SW_UPDATE_MS);      // sw.js change rarement : toutes les 60 s
     }).catch(e => logSilent(e));
   };
   if (document.readyState === 'complete') poser(); else window.addEventListener('load', poser);
