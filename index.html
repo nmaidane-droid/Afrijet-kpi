@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.16";
+const APP_VERSION = "2.17";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -7915,7 +7915,7 @@ function comProchainNumero(devis, annee){
 }
 
 // ── Lot B : calcul des devis, identique à Fiches Airshow 2.4 (buildLegs, dvLegs, fuelAirports, lineAmt)
-const COM_DV={BASE:"GMME",SPEED:400,AIRWAYS:1.10,TAXI:15,VALID:15,RANGE:1750};
+const COM_DV={BASE:"GMME",SPEED:450,AIRWAYS:1.10,TAXI:15,VALID:15,RANGE:1750};
 const comNrm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
 const comAptListe=j=>((j&&j.aeroports)||[]).map(a=>({icao:a[0],iata:a[1]||"",nom:a[2],ville:a[3],pays:a[4],lat:a[5],lon:a[6],alias:a[7]||""}));
 const comAptBy=(apts,icao)=>(apts||[]).find(a=>a.icao===icao)||null;
