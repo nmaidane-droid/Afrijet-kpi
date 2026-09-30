@@ -102,7 +102,7 @@ const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813
 const PROFILES = [
   {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
    pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
-   forms:["avion","crew","vol","frat","regl","sat"],
+   forms:["avion","crew","vol","frat","regl","sat","clients"],
    tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes"] },
   {id:"eqp",   label:"Équipage",   icon:"👨‍✈️", color:"#0369A1",
    pwdHash:"a52e38e3b5f9ef8b577b932c0377e1fe367325f900586baad157cfe688975d11",
@@ -7479,8 +7479,6 @@ function ScreenForms({ onManuel, sgs, satis, setSatis, onNoteVol, onSubmitVol, o
           return (
           <button key={fm.id} onClick={()=>{
             if(!allowed){ return; }
-            // Clients : module commercial encore à construire
-            if(fm.id==="clients"){ uiAlert("🚧 Clients — en cours de développement."); return; }
             if(fm.id==="rapport"){ if(onReport) onReport(); return; }
             setActive(fm.id);
           }}
@@ -7683,13 +7681,7 @@ function ScreenForms({ onManuel, sgs, satis, setSatis, onNoteVol, onSubmitVol, o
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"||profileId==="dir"}/>}
       {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}
         modesOK={profileId==="sgs"?["re","dgac","as"]:null} respSgs={sgs?sgs.responsable:null}/>}
-      {effectiveActive==="clients"  && (
-        <Card accent="#0891B2"><FHeader icon="🏢" title="Clients" subtitle="Module commercial" color="#0891B2"/>
-          <div style={{textAlign:"center",padding:"18px 10px"}}>
-            <div style={{fontSize:34,marginBottom:8}}>🚧</div>
-            <div style={{fontSize:15,fontWeight:800,color:C.navy,marginBottom:6}}>En cours de développement</div>
-            <div style={{fontSize:12.5,color:C.slate,lineHeight:1.5}}>Le suivi commercial sera disponible dans une prochaine version.</div>
-          </div></Card>)}
+      {effectiveActive==="clients"  && <FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="ops"}/>}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
   );
@@ -10974,7 +10966,11 @@ function ProfileSelectScreen({ onSelect }) {
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:12,width:"100%",maxWidth:340,justifyContent:"center"}}>
         {PROFILES.map(p=>(
-          <button key={p.id} onClick={()=>onSelect(p.id)}
+          <button key={p.id} onClick={()=>{
+              // Commercial : module encore à construire, on n'ouvre pas la connexion
+              if(p.id==="comm"){ uiAlert("🚧 Commercial — en cours de développement."); return; }
+              onSelect(p.id);
+            }}
             style={{background:p.color,border:"none",borderRadius:14,padding:"18px 12px",cursor:"pointer",
               display:"flex",flexDirection:"column",alignItems:"center",gap:8,
               boxShadow:"0 4px 12px rgba(0,0,0,.3)",...NOTAP,
@@ -11472,7 +11468,8 @@ function AppMain({ onLogout, profileId }) {
   useEffect(()=>{ const f=()=>setShowAccounts(true); window.addEventListener("open-accounts",f); return ()=>window.removeEventListener("open-accounts",f); },[]);
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
   // Tuile Finances : profil Finances seul. Tuile SGS : profil SGS et Administrateur.
-  const canForm = (id) => id==="fin" ? profile.id==="fin"
+  const canForm = (id) => id==="clients" ? ["ops","rdoa"].includes(profile.id)   // Clients : Opérations et Administrateur
+                        : id==="fin" ? profile.id==="fin"
                         : id==="sgs" ? ["sgs","rdoa","dir"].includes(profile.id)   // la Direction consulte, sans modifier
                         : id==="journal" ? ["dir","sgs","rdoa"].includes(profile.id)
                         // FRAT : rôle CM1 seulement, dès que la personne est identifiée (compte nominatif)
