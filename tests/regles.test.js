@@ -32,7 +32,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
   'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
-  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
+  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -472,6 +472,17 @@ console.log('\nModule Commercial — tableau de bord');
   const Rtout=T.comTableau(P,D,[],[],'tout',NOW);
   test("tout : les deux devis acceptés", ()=>attendu(Rtout.caSigne===1277000&&Rtout.nbAcceptes===2,String(Rtout.caSigne)));
   test("aucune donnée : pas de division par zéro", ()=>{ const r=T.comTableau([],[],[],[],'mois',NOW); attendu(r.taux===null&&r.delai===null&&r.caSigne===0&&r.minutes===0,JSON.stringify([r.taux,r.delai])); });
+}
+
+
+console.log('\nRestauration — résumé affiché avant confirmation');
+{
+  const d={flights:[{},{}],crew:[{}],prospects:[{},{},{},{},{}],devis:[{numero:'A',version:1},{numero:'A',version:2},{numero:'B',version:1}],clients:[{},{}],demandes:[{}]};
+  const r=T.restoreResume(d);
+  test("résumé : ligne Commercial avec prospects, devis, clients et demandes", ()=>attendu(/Commercial : 5 prospects · 2 devis · 2 clients · 1 demande de vols/.test(r),r));
+  test("résumé : un devis à deux versions compte une fois", ()=>attendu(/ 2 devis /.test(r),r));
+  test("résumé : ligne d'exploitation inchangée", ()=>attendu(/^2 vols · 0 danger · 0 action · 0 enquête · 1 membre d'équipage/.test(r),r));
+  test("résumé : ancienne sauvegarde sans module Commercial", ()=>attendu(/Commercial : 0 prospect · 0 devis · 0 client · 0 demande de vols/.test(T.restoreResume({flights:[]})),T.restoreResume({flights:[]})));
 }
 
 
