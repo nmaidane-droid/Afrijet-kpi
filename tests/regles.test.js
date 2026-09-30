@@ -32,7 +32,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
   'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
-  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
+  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -432,6 +432,46 @@ console.log('\nModule Commercial — équipage et avion valables jusqu\'au retou
   test("équipage et avion valables jusqu'au retour : accepté", ()=>attendu(T.comControleDossier({...aller,cm1:'BENALI OMAR',cm2:''},'2026-10-24',crewD,acD('31/12/26')).length===0,"refusé"));
   test("dernier vol du dossier : pas de contrôle supplémentaire (le contrôle habituel suffit)", ()=>attendu(T.comControleDossier({...aller,date:'2026-10-24'},'2026-10-24',crewD,acD('22/10/26')).length===0,"contrôle en double"));
   test("vol hors dossier : contrôlé à sa seule date", ()=>attendu(T.comControleDossier(aller,'',crewD,acD('22/10/26')).length===0,"contrôlé au-delà"));
+}
+
+
+console.log('\nModule Commercial — tableau de bord');
+{
+  const NOW='2026-10-25T10:00:00.000Z';
+  test("période : trimestre en cours", ()=>{ const p=T.comPeriode('trimestre','2026-11-15T10:00:00Z'); attendu(p.debut==='2026-10-01'&&p.fin==='2026-12-31',JSON.stringify(p)); });
+  test("période : mois de février", ()=>{ const p=T.comPeriode('mois','2026-02-10T10:00:00Z'); attendu(p.debut==='2026-02-01'&&p.fin==='2026-02-28',JSON.stringify(p)); });
+  test("période : année", ()=>{ const p=T.comPeriode('annee',NOW); attendu(p.debut==='2026-01-01'&&p.fin==='2026-12-31',JSON.stringify(p)); });
+  const L=(v,m)=>[{type:'mep',minutes:m||30},{type:'vol',minutes:v||120},{type:'immo',minutes:120},{type:'fuel',minutes:0}];
+  const dv=(numero,version,o)=>Object.assign({id:numero+version,numero,version,ficheId:'p1',totalHT:100000,validite:'2026-11-30',creePar:'Anas BENNANI',client:{nom:'X',organisation:'OCP'},lignes:L()},o);
+  const D=[
+    dv('A',1,{envoye:{date:'2026-10-05T09:00:00Z'},totalHT:450000}),
+    dv('A',2,{envoye:{date:'2026-10-08T09:00:00Z'},accepte:{date:'2026-10-12T09:00:00Z'},totalHT:500000,client:{organisation:'Mines du Sud'}}),
+    dv('B',1,{envoye:{date:'2026-10-20T09:00:00Z'},totalHT:300000,creePar:'Hicham QADRI'}),
+    dv('C',1,{envoye:{date:'2026-10-01T09:00:00Z'},validite:'2026-10-16',totalHT:999000}),
+    dv('D',1,{envoye:{date:'2026-10-10T09:00:00Z'},ficheId:'pArch',totalHT:888000}),
+    dv('E',1,{envoye:{date:'2026-09-01T09:00:00Z'},accepte:{date:'2026-09-10T09:00:00Z'},totalHT:777000}),
+    dv('F',1,{totalHT:111000})];
+  const P=[{id:'p1',statut:'client',guide:'Anas BENNANI',createdAt:'2026-10-02T09:00:00Z',source:'airshow',etape:2},
+    {id:'p2',statut:'prospect',guide:'Hicham QADRI',createdAt:'2026-10-03T09:00:00Z',source:'kpi',etape:0,suites:['devis'],relances:{}},
+    {id:'pArch',statut:'archive',guide:'Hicham QADRI',createdAt:'2026-10-04T09:00:00Z',source:'airshow',etape:1,archive:{date:'2026-10-15T09:00:00Z',motif:'Prix'}}];
+  const R=T.comTableau(P,D,[],[],'trimestre',NOW);
+  test("CA signé : dernière version acceptée, une fois par numéro", ()=>attendu(R.caSigne===500000&&R.nbAcceptes===1,R.caSigne+' / '+R.nbAcceptes));
+  test("devis accepté hors période : pas compté", ()=>attendu(!R.clients.some(c=>c.ca===777000),"compté"));
+  test("envoyés : un numéro compte une fois, jamais envoyé non compté", ()=>attendu(R.nbEnvoyes===4,String(R.nbEnvoyes)));
+  test("taux de transformation : 1 accepté sur 4 envoyés = 25 %", ()=>attendu(R.taux===25,String(R.taux)));
+  test("en négociation : ni expiré, ni archivé, ni accepté", ()=>attendu(R.caNego===300000&&R.nbNego===1,R.caNego+' / '+R.nbNego));
+  test("heures vendues : vols et mises en place du devis accepté", ()=>attendu(R.minutes===150&&R.minutesMep===30,R.minutes+' / '+R.minutesMep));
+  test("délai moyen : du premier envoi à l'acceptation (7 jours)", ()=>attendu(R.delai===7,String(R.delai)));
+  test("CA par mois : octobre, signé et en négociation", ()=>{ const o=R.mois.find(m=>m.cle==='2026-10'); attendu(R.mois.length===3&&o.signe===500000&&o.nego===300000,JSON.stringify(R.mois)); });
+  test("par commercial : auteur du devis", ()=>{ const a=R.commerciaux.find(c=>c.nom==='Anas BENNANI'), h=R.commerciaux.find(c=>c.nom==='Hicham QADRI'); attendu(a.ca===500000&&a.acceptes===1&&a.envoyes===3&&h.envoyes===1&&h.fiches===2,JSON.stringify(R.commerciaux)); });
+  test("meilleurs clients : organisation du devis accepté", ()=>attendu(R.clients.length===1&&R.clients[0].nom==='Mines du Sud',JSON.stringify(R.clients)));
+  test("motifs de perte : fiches archivées dans la période", ()=>attendu(R.motifs.length===1&&R.motifs[0].motif==='Prix'&&R.nbArchivesPeriode===1,JSON.stringify(R.motifs)));
+  test("entonnoir : état actuel, clients et archivés à part", ()=>attendu(R.entonnoir.total===3&&R.entonnoir.clients===1&&R.entonnoir.archives===1&&R.entonnoir.etapes[0].n===1,JSON.stringify(R.entonnoir)));
+  test("origine des prospects créés dans la période", ()=>attendu(R.origine.airshow===2&&R.origine.kpi===1,JSON.stringify(R.origine)));
+  test("relances en retard : prospects actifs seulement", ()=>attendu(R.relances===1,String(R.relances)));
+  const Rtout=T.comTableau(P,D,[],[],'tout',NOW);
+  test("tout : les deux devis acceptés", ()=>attendu(Rtout.caSigne===1277000&&Rtout.nbAcceptes===2,String(Rtout.caSigne)));
+  test("aucune donnée : pas de division par zéro", ()=>{ const r=T.comTableau([],[],[],[],'mois',NOW); attendu(r.taux===null&&r.delai===null&&r.caSigne===0&&r.minutes===0,JSON.stringify([r.taux,r.delai])); });
 }
 
 
