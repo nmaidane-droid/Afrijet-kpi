@@ -32,7 +32,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
   'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
-  'comVolsAPlanifier','comPrefillVol','comTexteHoraires','comClientDuDevis','comFicheClient'];
+  'comVolsAPlanifier','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -353,7 +353,10 @@ console.log('\nModule Commercial — transmission aux Opérations (lot C)');
   test("demande neuve : 4 vols à planifier", ()=>attendu(T.comEtatDemande(dem,[]).statut==='a_planifier'&&T.comVolsAPlanifier([dem],[]).length===4,"état"));
   const pVol=T.comPrefillVol(dem,dem.vols[1]), pPos=T.comPrefillVol(dem,dem.vols[0]);
   test("pré-remplissage d'un vol client : COM, client, passagers, arrivée calculée", ()=>attendu(pVol.flightType==='Commercial'&&pVol.clientId==='C7'&&pVol.pax===14&&pVol.from==='CMN'&&pVol.to==='NKC'&&pVol.dep==='08:00'&&pVol.arr==='11:02',JSON.stringify(pVol)));
-  test("pré-remplissage d'une mise en place : POS, sans client ni passagers", ()=>attendu(pPos.flightType==='Positioning'&&pPos.clientId===''&&pPos.pax===0,JSON.stringify(pPos)));
+  test("pré-remplissage d'une mise en place : POS, client du dossier, sans passagers", ()=>attendu(pPos.flightType==='Positioning'&&pPos.clientId==='C7'&&pPos.clientNom==='Mines du Sud'&&pPos.pax===0,JSON.stringify(pPos)));
+  test("liste des clients : client pas encore reçu sur ce téléphone, affiché avec son nom", ()=>{ const o=T.comOptionsClients([{id:'C1',nom:'OCP',type:'Corporate',ville:'Casablanca'}],'C7','Mines du Sud'); attendu(o.length===2&&o[0].value==='C7'&&o[0].label==='Mines du Sud',JSON.stringify(o)); });
+  test("liste des clients : client déjà connu, pas de doublon", ()=>{ const o=T.comOptionsClients([{id:'C7',nom:'Mines du Sud',type:'Corporate',ville:'Casablanca'}],'C7','Mines du Sud'); attendu(o.length===1&&o[0].sub==='Corporate · Casablanca',JSON.stringify(o)); });
+  test("liste des clients : saisie manuelle, liste inchangée", ()=>{ const o=T.comOptionsClients([{id:'C1',nom:'OCP',type:'Corporate',ville:'Casablanca'}],'',''); attendu(o.length===1&&o[0].label==='OCP',JSON.stringify(o)); });
   test("arrivée après minuit : 23:30 + 3 h 02 = 02:32", ()=>attendu(T.comPrefillVol(dem,dem.vols[2]).arr==='02:32',T.comPrefillVol(dem,dem.vols[2]).arr));
   test("heure non fixée : ni départ ni arrivée", ()=>{ const v=T.comPrefillVol(dem,dem.vols[3]); attendu(v.dep===''&&v.arr==='',JSON.stringify(v)); });
   const F=[{demandeId:'D1',demandeVol:0,date:'2026-10-22',dep:'06:45',arr:'07:10'},{demandeId:'D1',demandeVol:1,date:'2026-10-22',dep:'08:15',arr:'11:17'},{demandeId:'AUTRE',demandeVol:2}];
