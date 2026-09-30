@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.7";
+const APP_VERSION = "2.8";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -1773,7 +1773,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
   const [date,setDate]=useState(today);
   const [cm1,setCm1]=useState("");
   const [cm2,setCm2]=useState("");
-  const [flightType,setFlightType]=useState("Commercial");
+  const [flightType,setFlightType]=useState("Ferry");   // saisie à la main : FRY ou POS ; COM seulement depuis une demande du Commercial
   const [cc,setCc]=useState("");
   const [clientId,setClientId]=useState("");
   // Vol transmis par le Commercial : le formulaire est pré-rempli, les contrôles restent les mêmes
@@ -1781,7 +1781,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
   const choisirDemande=(dem,leg)=>{ const v=comPrefillVol(dem,leg);
     setFlightType(v.flightType); setFrom(v.from); setTo(v.to); setDate(v.date); setDep(v.dep); setArr(v.arr); setPax(v.pax?String(v.pax):""); setClientId(v.clientId);
     if(!num.trim()&&ac&&ac.immat) setNum(ac.immat);   // n° de vol vidé après l'enregistrement précédent : immatriculation de l'avion
-    setLien({demandeId:v.demandeId,demandeVol:v.demandeVol,minutes:leg.minutes,clientId:v.clientId,clientNom:v.clientNom,libelle:dem.devisNumero+" · "+(leg.de.iata||leg.de.icao)+" → "+(leg.vers.iata||leg.vers.icao)}); };
+    setLien({demandeId:v.demandeId,demandeVol:v.demandeVol,minutes:leg.minutes,clientId:v.clientId,clientNom:v.clientNom,flightType:v.flightType,libelle:dem.devisNumero+" · "+(leg.de.iata||leg.de.icao)+" → "+(leg.vers.iata||leg.vers.icao)}); };
   // Vol transmis : l'arrivée suit le départ saisi, avec la durée du devis
   useEffect(()=>{ if(lien&&lien.minutes){ const a=comHeurePlus(dep,lien.minutes); if(a) setArr(a); } },[dep,lien]);
 
@@ -1789,6 +1789,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
   const load=Math.round(pn/SIEGES*100);
 
   const submit=()=>{
+    { const e=comControleType(flightType,lien); if(e){ uiAlert("⚠️ "+e); return; } }
     // Vol transmis dont le départ vient d'être saisi : l'arrivée est calculée ici si elle manque encore
     const arrV=arr||(lien&&lien.minutes?comHeurePlus(dep,lien.minutes):"");
     if(!num.trim()||!dep){uiAlert("N° vol et départ requis");return;}
@@ -1832,7 +1833,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
       cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0,dureeMin:planDuree,
       ...(lien?{demandeId:lien.demandeId,demandeVol:lien.demandeVol}:{})});
     setLien(null);
-    setNum("");setFrom("");setTo("");setDep("");setArr("");setPax("");setFlightType("Commercial");
+    setNum("");setFrom("");setTo("");setDep("");setArr("");setPax("");setFlightType("Ferry");
     setCm1("");setCm2("");setCc("");
   };
   return (
@@ -1841,13 +1842,13 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
       <ComVolsAPlanifierListe liste={aPlanifier} lien={lien} onChoisir={choisirDemande}/>
       {lien&&<div style={{display:"flex",alignItems:"center",gap:8,background:"#E6F1FB",border:"1px solid #B5D4F4",borderRadius:10,padding:"8px 10px",marginBottom:14,fontSize:12,color:"#0C447C"}}>
         <span style={{flex:1}}>Rempli depuis la demande {lien.libelle}. Complétez l'équipage, puis validez.</span>
-        <span role="button" onClick={()=>setLien(null)} style={{fontWeight:700,cursor:"pointer"}}>Détacher</span></div>}
+        <span role="button" onClick={()=>{ setLien(null); if(flightType==="Commercial") setFlightType("Ferry"); }} style={{fontWeight:700,cursor:"pointer"}}>Détacher</span></div>}
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div>
           <FLabel>Type de vol</FLabel>
           <div style={{display:"flex",gap:8}}>
-            {[{v:"Commercial",c:"#00936A",code:"COM"},{v:"Ferry",c:"#0369A1",code:"FRY"},{v:"Positioning",c:"#D97706",code:"POS"}].map(t=>(
-              <button key={t.v} onClick={()=>setFlightType(t.v)}
+            {[{v:"Commercial",c:"#00936A",code:"COM"},{v:"Ferry",c:"#0369A1",code:"FRY"},{v:"Positioning",c:"#D97706",code:"POS"}].filter(t=>comTypesVol(lien).includes(t.v)).map(t=>(
+              <button key={t.v} onClick={()=>!lien&&setFlightType(t.v)}
                 style={{flex:1,height:40,borderRadius:10,border:"2px solid "+(flightType===t.v?t.c:"#CBD5E1"),
                   background:flightType===t.v?t.c:"white",color:flightType===t.v?"white":C.slate,
                   fontWeight:700,fontSize:12,...TAP}}>
@@ -1855,6 +1856,8 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
               </button>
             ))}
           </div>
+          {lien?<div style={{fontSize:11,color:C.slate,marginTop:4}}>🔒 Type fixé par la demande du Commercial</div>
+            :<div style={{fontSize:11,color:C.slate,marginTop:4}}>Un vol commercial (COM) se planifie depuis « Vols à planifier », à partir d'une demande du Commercial.</div>}
         </div>
         {/* Client selector - custom dropdown */}
         {((clients&&clients.length>0)||(lien&&lien.clientId))&&(
@@ -8010,6 +8013,15 @@ function comVolsAPlanifier(demandes,flights){
   (demandes||[]).filter(d=>d.statut==="active").forEach(d=>comEtatDemande(d,flights).legs.forEach(l=>{ if(!l.vol) out.push({dem:d,leg:l}); }));
   // Par date, puis demande par demande, dans le même ordre que les vols du devis (un vol sans heure ne passe pas devant)
   return out.sort((a,b)=>String(a.leg.date).localeCompare(String(b.leg.date))||String(a.dem.transmisLe).localeCompare(String(b.dem.transmisLe))||a.leg.i-b.leg.i);
+}
+// Règle : un vol commercial (COM) ne se planifie qu'à partir d'une demande du Commercial.
+// Saisie à la main : ferry (FRY) et positionnement (POS) seulement. Vol pris dans une demande : type fixé par la demande.
+function comTypesVol(lien){ return lien&&lien.flightType?[lien.flightType]:["Ferry","Positioning"]; }
+function comControleType(flightType,lien){
+  if(lien&&lien.flightType&&flightType!==lien.flightType) return "Le type de ce vol est fixé par la demande du Commercial.";
+  if(flightType==="Commercial"&&!lien) return "Un vol commercial se planifie uniquement à partir d'une demande du Commercial (Vols à planifier).";
+  if(!["Commercial","Ferry","Positioning"].includes(flightType)) return "Type de vol inconnu.";
+  return null;
 }
 // Vols à planifier regroupés par demande (un client, un devis), triés par date du premier vol restant
 function comGroupesAPlanifier(liste){
