@@ -32,7 +32,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
   'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
-  'comVolsAPlanifier','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
+  'comVolsAPlanifier','comGroupesAPlanifier','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -364,6 +364,12 @@ console.log('\nModule Commercial — transmission aux Opérations (lot C)');
   test("vol supprimé du planning : redevient à planifier", ()=>attendu(T.comEtatDemande(dem,F.slice(0,1)).planifies===1,"reste planifié"));
   const tout=[0,1,2,3].map(i=>({demandeId:'D1',demandeVol:i,date:'2026-10-2'+(i<2?2:3),dep:'10:00',arr:'12:00'}));
   test("tous planifiés : « Vols planifiés »", ()=>attendu(T.comEtatDemande(dem,tout).statut==='planifie'&&T.comVolsAPlanifier([dem],tout).length===0,"état"));
+  test("liste repliable : une ligne par client, vols dans l'ordre du devis", ()=>{
+    const d2={...dem,id:'D2',clientNom:'OCP',transmisLe:'2026-10-15T09:00:00.000Z',vols:[{...dem.vols[1],date:'2026-10-25'},{...dem.vols[2],date:'2026-10-26'}].map((v,k)=>({...v,i:k}))};
+    const d3={...dem,id:'D3',clientNom:'MASEN',transmisLe:'2026-10-13T09:00:00.000Z',vols:[{...dem.vols[1],i:0,date:'2026-10-20'}]};
+    const G=T.comGroupesAPlanifier(T.comVolsAPlanifier([dem,d2,d3],F));
+    attendu(G.map(g=>g.dem.clientNom+':'+g.legs.map(l=>l.i).join('')).join(' ')==='MASEN:0 Mines du Sud:23 OCP:01'&&G[1].premier==='2026-10-23',G.map(g=>g.dem.clientNom+':'+g.legs.map(l=>l.i).join('')+'@'+g.premier).join(' ')); });
+  test("liste repliable : client entièrement planifié, ligne retirée", ()=>attendu(T.comGroupesAPlanifier(T.comVolsAPlanifier([dem],tout)).length===0,"ligne restante"));
   test("demande annulée : plus rien à planifier", ()=>attendu(T.comVolsAPlanifier([{...dem,statut:'annulee'}],[]).length===0&&T.comEtatDemande({...dem,statut:'annulee'},[]).statut==='annulee',"à planifier"));
   test("horaires au client : vols avec passagers seulement, heures définitives", ()=>{ const t=T.comTexteHoraires(dem,T.comEtatDemande(dem,F)); attendu(/Casablanca → Nouakchott · départ 08:15, arrivée 11:17/.test(t)&&!/Rabat/.test(t),t); });
   test("client d'un devis fait depuis une fiche prospect devenue cliente", ()=>{ const r=T.comClientDuDevis(d,[{id:'p1',clientRef:'C7'}],[{id:'C7',nom:'Mines du Sud'}]); attendu(r.prospect.id==='p1'&&r.client.id==='C7',"client"); });
