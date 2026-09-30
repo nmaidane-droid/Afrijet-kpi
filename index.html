@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.10";
+const APP_VERSION = "2.11";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -8093,6 +8093,70 @@ function comClientDuDevis(d,prospects,clients){
 // Fiche client présentée comme une fiche prospect pour l'éditeur de devis
 const comFicheClient=c=>({id:c.id,nom:c.contact||c.nom,fonction:"",organisation:c.nom,tel:c.tel||"",email:c.email||"",notes:[],historique:[],statut:"client",estClient:true});
 
+// ── Lot D : tableau de bord commercial ───────────────────────────────────────
+const COM_MOIS=["Janv.","Févr.","Mars","Avr.","Mai","Juin","Juil.","Août","Sept.","Oct.","Nov.","Déc."];
+// Période : ce mois, trimestre ou année civils en cours, ou tout. Bornes au format AAAA-MM-JJ.
+function comPeriode(code,now){
+  const d=new Date(now), y=d.getFullYear(), m=d.getMonth(), p=n=>String(n).padStart(2,"0");
+  const fin=(yy,mm)=>{ const x=new Date(yy,mm+1,0); return x.getFullYear()+"-"+p(x.getMonth()+1)+"-"+p(x.getDate()); };
+  if(code==="mois") return {debut:y+"-"+p(m+1)+"-01",fin:fin(y,m)};
+  if(code==="trimestre"){ const q=Math.floor(m/3)*3; return {debut:y+"-"+p(q+1)+"-01",fin:fin(y,q+2)}; }
+  if(code==="annee") return {debut:y+"-01-01",fin:y+"-12-31"};
+  return {debut:"0000-01-01",fin:"9999-12-31"};
+}
+// Tous les chiffres du tableau. Un numéro de devis compte une seule fois, quelles que soient ses versions.
+function comTableau(prospects,devis,demandes,flights,code,now){
+  const P=comPeriode(code,now), jour=s=>String(s||"").slice(0,10), dans=s=>{ const j=jour(s); return !!j&&j>=P.debut&&j<=P.fin; };
+  const aujourdhui=jour(new Date(now).toISOString());
+  // Regroupement des versions par numéro
+  const N=new Map();
+  (devis||[]).forEach(d=>{ if(!N.has(d.numero)) N.set(d.numero,[]); N.get(d.numero).push(d); });
+  const dossiers=[...N.entries()].map(([numero,V])=>{
+    V=V.slice().sort((a,b)=>a.version-b.version);
+    const acc=V.filter(v=>v.accepte).pop()||null, der=V[V.length-1];
+    const envois=V.map(v=>v.envoye&&v.envoye.date).filter(Boolean).sort();
+    const envoi=envois[0]||(acc?acc.accepte.date:"");
+    return {numero,V,acc,der,envoi,auteur:V[0].creePar||"—"};
+  });
+  const archives=new Set((prospects||[]).filter(p=>p.statut==="archive").map(p=>p.id));
+  const acceptes=dossiers.filter(x=>x.acc&&dans(x.acc.accepte.date));
+  const envoyes=dossiers.filter(x=>x.envoi&&dans(x.envoi));
+  const negociation=dossiers.filter(x=>!x.acc&&x.der.envoye&&jour(x.der.validite)>=aujourdhui&&!archives.has(x.der.ficheId)&&dans(x.envoi));
+  const minutes=t=>acceptes.reduce((s,x)=>s+(x.acc.lignes||[]).filter(l=>t.includes(l.type)).reduce((a,l)=>a+(Number(l.minutes)||0),0),0);
+  const delais=acceptes.filter(x=>x.envoi&&x.envoi<=x.acc.accepte.date).map(x=>(Date.parse(jour(x.acc.accepte.date))-Date.parse(jour(x.envoi)))/864e5);
+  // Entonnoir : état actuel de toutes les fiches
+  const actifs=(prospects||[]).filter(comEstActif);
+  const entonnoir={etapes:COM_ETAPES.map((l,i)=>({l,n:actifs.filter(p=>(p.etape||0)===i).length})),
+    clients:(prospects||[]).filter(p=>p.statut==="client").length,archives:archives.size,total:(prospects||[]).length};
+  // Opérations : demandes transmises dans la période
+  const Dm=(demandes||[]).filter(x=>x.statut==="active"&&dans(x.transmisLe)), E=Dm.map(x=>comEtatDemande(x,flights));
+  // CA par mois : signé (date d'acceptation) et en négociation (date d'envoi)
+  const mois=[]; { const debut=code==="tout"?(dossiers.map(x=>jour(x.envoi||(x.acc&&x.acc.accepte.date))).filter(Boolean).sort()[0]||aujourdhui):P.debut;
+    let y=Number(debut.slice(0,4)), m=Number(debut.slice(5,7))-1; const fin=code==="tout"?aujourdhui:P.fin;
+    for(let k=0;k<24;k++){ const cle=y+"-"+String(m+1).padStart(2,"0"); if(cle>fin.slice(0,7)) break; mois.push({cle,l:COM_MOIS[m]+(code==="annee"||code==="trimestre"||code==="mois"?"":" "+String(y).slice(2)),signe:0,nego:0}); m++; if(m>11){ m=0; y++; } }
+    if(code==="tout"&&mois.length>12) mois.splice(0,mois.length-12); }
+  acceptes.forEach(x=>{ const r=mois.find(z=>z.cle===jour(x.acc.accepte.date).slice(0,7)); if(r) r.signe+=x.acc.totalHT; });
+  negociation.forEach(x=>{ const r=mois.find(z=>z.cle===jour(x.envoi).slice(0,7)); if(r) r.nego+=x.der.totalHT; });
+  // Par commercial : fiches créées dans la période, devis envoyés, acceptés, CA signé
+  const noms=new Set([...(prospects||[]).filter(p=>dans(p.createdAt)).map(p=>p.guide),...envoyes.map(x=>x.auteur),...acceptes.map(x=>x.auteur)].filter(n=>n&&n!=="—"));
+  const commerciaux=[...noms].map(n=>({nom:n,fiches:(prospects||[]).filter(p=>p.guide===n&&dans(p.createdAt)).length,envoyes:envoyes.filter(x=>x.auteur===n).length,
+    acceptes:acceptes.filter(x=>x.auteur===n).length,ca:acceptes.filter(x=>x.auteur===n).reduce((s,x)=>s+x.acc.totalHT,0)})).sort((a,b)=>b.ca-a.ca||b.envoyes-a.envoyes||a.nom.localeCompare(b.nom));
+  const parClient=new Map(); acceptes.forEach(x=>{ const c=(x.acc.client&&(x.acc.client.organisation||x.acc.client.nom))||"—"; parClient.set(c,(parClient.get(c)||0)+x.acc.totalHT); });
+  const motifs=new Map(); (prospects||[]).filter(p=>p.statut==="archive"&&p.archive&&dans(p.archive.date)).forEach(p=>motifs.set(p.archive.motif,(motifs.get(p.archive.motif)||0)+1));
+  const crees=(prospects||[]).filter(p=>dans(p.createdAt));
+  return {periode:P,
+    caSigne:acceptes.reduce((s,x)=>s+x.acc.totalHT,0),nbAcceptes:acceptes.length,
+    caNego:negociation.reduce((s,x)=>s+x.der.totalHT,0),nbNego:negociation.length,
+    nbEnvoyes:envoyes.length,taux:envoyes.length?Math.round(acceptes.length/envoyes.length*100):null,
+    minutes:minutes(["vol","mep"]),minutesMep:minutes(["mep"]),
+    delai:delais.length?Math.round(delais.reduce((a,b)=>a+b,0)/delais.length):null,
+    relances:actifs.filter(p=>comADesRelances(p,new Date(now))).length,
+    entonnoir,ops:{demandes:Dm.length,planifies:E.reduce((s,e)=>s+e.planifies,0),aPlanifier:E.reduce((s,e)=>s+e.total-e.planifies,0)},
+    mois,commerciaux,clients:[...parClient.entries()].map(([nom,ca])=>({nom,ca})).sort((a,b)=>b.ca-a.ca).slice(0,5),
+    motifs:[...motifs.entries()].map(([motif,n])=>({motif,n})).sort((a,b)=>b.n-a.n),nbArchivesPeriode:[...motifs.values()].reduce((a,b)=>a+b,0),
+    origine:{airshow:crees.filter(p=>p.source==="airshow").length,kpi:crees.filter(p=>p.source!=="airshow").length}};
+}
+
 // ══ Module Commercial — écrans (lot A) ═══════════════════════════════════════
 const COM_BLEU="#0891B2";
 const comQui=()=>userLabel(sgsCurrentUser())||"Commercial";
@@ -8124,7 +8188,7 @@ function CommercialModule({ com, clients, setClients, flights, satis, profileId,
   const actifs=prospects.filter(comEstActif);
   const dues=actifs.filter(p=>comADesRelances(p,now)).length;
   const majProspect=(id,fn)=>com.setProspects(L=>(L||[]).map(p=>p.id===id?fn(p):p));
-  const NAV=[["pros","Prospects",dues],["cli","Clients",0],["dev","Devis",0],["imp","Importer",0]];
+  const NAV=[["pros","Prospects",dues],["cli","Clients",0],["dev","Devis",0],["imp","Importer",0],["tab","Tableau",0]];
   const go=k=>{ setTab(k); setVue(null); };
   // Fiche servant au devis : fiche prospect, ou fiche client présentée comme telle
   const ficheDe=id=>prospects.find(x=>x.id===id)||(()=>{ const c=(clients||[]).find(x=>x.id===id); return c?comFicheClient(c):null; })();
@@ -8136,7 +8200,7 @@ function CommercialModule({ com, clients, setClients, flights, satis, profileId,
     corps=<ComDevisDetail d={d} canEdit={canEdit} com={com} fiche={d?ficheDe(d.ficheId):null} flights={flights} demandes={demandes.filter(x=>d&&x.devisId===d.id)}
       nouvelleVersion={x=>setVue({k:"edit",ficheId:x.ficheId,parentId:x.id,retour:vue})} accepter={x=>setVue({k:"accepter",id:x.id,retour:vue})}/>; }
   else if(vue&&vue.k==="accepter") corps=<ComAccepter d={devis.find(x=>x.id===vue.id)} prospects={prospects} clients={clients} setClients={setClients} com={com}
-      onDone={()=>setVue({k:"devis",id:vue.id,retour:vue.retour})}/>;
+      onDone={()=>setVue({k:"devis",id:vue.id,retour:vue.retour&&vue.retour.k==="devis"?vue.retour.retour:vue.retour})}/>;   // retour : l'écran d'où l'on venait, pas le même devis
   else if(vue&&vue.k==="edit") corps=<ComDevisEdit key={vue.ficheId+(vue.parentId||"")} fiche={ficheDe(vue.ficheId)} parent={vue.parentId?devis.find(x=>x.id===vue.parentId):null} com={com}
       onDone={id=>setVue({k:"devis",id,retour:vue.retour||{k:"fiche",id:vue.ficheId}})}/>;
   else if(vue&&vue.k==="nouvelle") corps=<ComNouvelleFiche onSave={p=>{ com.setProspects(L=>[...(L||[]),p]); setVue({k:"fiche",id:p.id}); }}/>;
@@ -8145,6 +8209,7 @@ function CommercialModule({ com, clients, setClients, flights, satis, profileId,
       extra={c=><ComClientCommercial c={c} prospects={prospects} devis={devis} demandes={demandes} flights={flights} canEdit={canEdit}
         ouvrirDevis={id=>setVue({k:"devis",id})} nouveauDevis={()=>setVue({k:"edit",ficheId:c.id})}/>}/>;
   else if(tab==="dev") corps=<ComDevisListe devis={devis} ouvrir={id=>setVue({k:"devis",id})}/>;
+  else if(tab==="tab") corps=<ComTableau com={com} flights={flights}/>;
   else corps=<ComImport com={com} clients={clients} setClients={setClients} canEdit={canEdit}/>;
   const titre=vue?(vue.k==="fiche"?((prospects.find(x=>x.id===vue.id)||{}).nom||"Fiche"):vue.k==="devis"?((devis.find(x=>x.id===vue.id)||{}).numero||"Devis"):vue.k==="edit"?(vue.parentId?"Nouvelle version":"Nouveau devis"):vue.k==="accepter"?"Le client accepte":"Nouvelle fiche"):"Commercial";
   const retour=()=>{ if(vue&&vue.retour) setVue(vue.retour); else if(vue) setVue(null); else onBack(); };
@@ -8155,7 +8220,7 @@ function CommercialModule({ com, clients, setClients, flights, satis, profileId,
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:14.5,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{titre}</div>
           <div style={{fontSize:11,opacity:.85}}>{comQui()}{canEdit?"":" · consultation"}</div></div>
       </div>
-      {!vue&&<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",background:"white",borderBottom:"1px solid "+C.border}}>
+      {!vue&&<div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",background:"white",borderBottom:"1px solid "+C.border}}>
         {NAV.map(([k,l,n])=>{ const on=tab===k; return <div key={k} role="button" onClick={()=>go(k)} style={{position:"relative",textAlign:"center",padding:"11px 0 9px",fontSize:12,...TAP,
           color:on?COM_BLEU:C.slate,fontWeight:on?800:600,borderBottom:"2.5px solid "+(on?COM_BLEU:"transparent")}}>{l}
           {n>0&&<span style={{position:"absolute",top:3,right:"calc(50% - 38px)",minWidth:16,height:16,borderRadius:8,background:"#DC2626",color:"white",fontSize:9.5,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{n}</span>}</div>; })}
@@ -8792,6 +8857,63 @@ function ComVolsAPlanifierListe({ liste, lien, onChoisir }){
         </div>}
       </div>; })}
   </div>);
+}
+
+// ── Lot D : écran Tableau ───────────────────────────────────────────────────
+function ComTableau({ com, flights }){
+  const [code,setCode]=useState("trimestre");
+  const T=comTableau(com.prospects,com.devis,com.demandes,flights,code,Date.now());
+  const k=(v,l,s,c)=><div style={{background:"white",border:"1px solid "+C.border,borderRadius:12,padding:"10px 12px"}}>
+    <div style={{fontSize:19,fontWeight:800,color:C.navy}}>{v}</div><div style={{fontSize:11,color:C.slate}}>{l}</div>{s&&<div style={{fontSize:10.5,marginTop:2,color:c||C.slate}}>{s}</div>}</div>;
+  const barre=(l,n,m,col,txt)=><div key={l} style={{display:"flex",alignItems:"center",gap:8,margin:"5px 0",fontSize:12}}>
+    <span style={{width:100,color:C.navy}}>{l}</span><div style={{flex:1,background:"#EEF2F7",borderRadius:5,height:16,overflow:"hidden"}}>
+      <div style={{width:(m?Math.max(n?4:0,Math.round(n/m*100)):0)+"%",height:"100%",background:col}}/></div><b style={{width:58,textAlign:"right"}}>{txt!=null?txt:n}</b></div>;
+  const h=m=>Math.floor(m/60)+" h "+String(m%60).padStart(2,"0");
+  const fr=d=>String(d).split("-").reverse().join("/");
+  const mmax=Math.max(1,...T.mois.map(x=>x.signe+x.nego)), emax=Math.max(1,...T.entonnoir.etapes.map(e=>e.n),T.entonnoir.clients,T.entonnoir.archives);
+  const cmax=Math.max(1,...T.clients.map(c=>c.ca)), fmax=Math.max(1,...T.motifs.map(x=>x.n));
+  const P=[["mois","Ce mois"],["trimestre","Trimestre"],["annee","Année"],["tout","Tout"]];
+  const kmad=n=>n>=1000?comGrp3(Math.round(n/1000))+" k":comGrp3(n);
+  return (<>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{P.map(([c,l])=><span key={c} role="button" onClick={()=>setCode(c)} style={{borderRadius:12,padding:"5px 11px",fontSize:11.5,fontWeight:700,...TAP,
+      background:code===c?COM_BLEU:"white",color:code===c?"white":C.navy,border:"1px solid "+(code===c?COM_BLEU:"#CBD5E1")}}>{l}</span>)}</div>
+    <div style={{fontSize:11.5,color:C.slate,marginTop:-4}}>{code==="tout"?"Depuis le début":fr(T.periode.debut)+" — "+fr(T.periode.fin)} · tous les commerciaux</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+      {k(comGrp3(T.caSigne),"CA signé (MAD HT)",T.nbAcceptes+" devis accepté(s)","#00936A")}
+      {k(comGrp3(T.caNego),"CA en négociation",T.nbNego+" devis envoyé(s) en cours","#854F0B")}
+      {k(T.taux==null?"—":T.taux+" %","Taux de transformation",T.nbAcceptes+" accepté(s) sur "+T.nbEnvoyes+" envoyé(s)")}
+      {k(h(T.minutes),"Heures vendues","dont "+h(T.minutesMep)+" de mise en place")}
+      {k(T.delai==null?"—":T.delai+" j","Délai moyen","de l'envoi à l'acceptation")}
+      {k(T.relances,"Relances en retard",T.relances?"à traiter aujourd'hui":"aucune",T.relances?"#A32D2D":null)}
+    </div>
+    <ComCarte><ComLbl>Entonnoir des prospects (état actuel)</ComLbl>
+      {T.entonnoir.etapes.map((e,i)=>barre(e.l,e.n,emax,["#94A3B8","#7DD3E3","#22A7C4",COM_BLEU][i]))}
+      {barre("Devenus clients",T.entonnoir.clients,emax,"#00936A")}{barre("Archivés",T.entonnoir.archives,emax,"#CBD5E1")}
+      <div style={{fontSize:11,color:C.slate,marginTop:6}}>{T.entonnoir.total} prospect(s) au total.</div></ComCarte>
+    <ComCarte><ComLbl>Opérations</ComLbl>
+      <ComLigne l="Demandes transmises" v={<b>{T.ops.demandes}</b>}/><ComLigne l="Vols planifiés" v={<b style={{color:"#00936A"}}>{T.ops.planifies}</b>}/>
+      <ComLigne l="Vols à planifier" v={<b style={{color:"#854F0B"}}>{T.ops.aPlanifier}</b>}/></ComCarte>
+    <ComCarte><ComLbl>CA par mois (MAD HT)</ComLbl>
+      {T.mois.every(x=>!x.signe&&!x.nego)?<div style={{fontSize:12,color:C.slate}}>Aucun devis envoyé ou accepté sur la période.</div>:
+      <div style={{display:"flex",gap:4,alignItems:"flex-end",overflowX:"auto"}}>{T.mois.map(x=><div key={x.cle} style={{flex:1,minWidth:26,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+        <div style={{fontSize:9.5,color:C.slate,whiteSpace:"nowrap"}}>{x.signe+x.nego?kmad(x.signe+x.nego):""}</div>
+        <div style={{height:120,width:"70%",maxWidth:34,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+          <div style={{height:Math.round(x.nego/mmax*120),background:"#FAC775",borderRadius:"4px 4px 0 0"}}/><div style={{height:Math.round(x.signe/mmax*120),background:"#00936A"}}/></div>
+        <span style={{fontSize:10.5,color:C.slate,whiteSpace:"nowrap"}}>{x.l}</span></div>)}</div>}
+      <div style={{display:"flex",gap:14,fontSize:11,color:C.slate,marginTop:8,justifyContent:"center"}}><span><span style={{display:"inline-block",width:10,height:10,background:"#00936A",borderRadius:2}}/> signé</span>
+        <span><span style={{display:"inline-block",width:10,height:10,background:"#FAC775",borderRadius:2}}/> en négociation</span></div></ComCarte>
+    <ComCarte><ComLbl>Par commercial</ComLbl>
+      {!T.commerciaux.length?<div style={{fontSize:12,color:C.slate}}>Aucune activité sur la période.</div>:<>
+      <div style={{display:"grid",gridTemplateColumns:"1.6fr .7fr .8fr .8fr 1.2fr",gap:4,fontSize:10.5,color:C.slate,fontWeight:700,paddingBottom:4}}><span>Nom</span><span>Fiches</span><span>Envoyés</span><span>Acceptés</span><span style={{textAlign:"right"}}>CA signé</span></div>
+      {T.commerciaux.map(c=><div key={c.nom} style={{display:"grid",gridTemplateColumns:"1.6fr .7fr .8fr .8fr 1.2fr",gap:4,fontSize:12,padding:"6px 0",borderTop:"1px solid "+C.border}}>
+        <b>{c.nom}</b><span>{c.fiches}</span><span>{c.envoyes}</span><span>{c.acceptes}</span><b style={{textAlign:"right"}}>{comGrp3(c.ca)}</b></div>)}</>}</ComCarte>
+    <ComCarte><ComLbl>Meilleurs clients (CA signé)</ComLbl>
+      {!T.clients.length?<div style={{fontSize:12,color:C.slate}}>Aucun devis accepté sur la période.</div>:T.clients.map(c=>barre(c.nom,c.ca,cmax,"#00936A",kmad(c.ca)))}</ComCarte>
+    <ComCarte><ComLbl>Motifs de perte · {T.nbArchivesPeriode} fiche(s) archivée(s)</ComLbl>
+      {!T.motifs.length?<div style={{fontSize:12,color:C.slate}}>Aucune fiche archivée sur la période.</div>:T.motifs.map(x=>barre(x.motif,x.n,fmax,"#94A3B8"))}</ComCarte>
+    <ComCarte><ComLbl>Origine des prospects créés sur la période</ComLbl>
+      <ComLigne l="Fiches Airshow (salon)" v={<b>{T.origine.airshow}</b>}/><ComLigne l="Saisies dans le KPI" v={<b>{T.origine.kpi}</b>}/></ComCarte>
+  </>);
 }
 
 // ── Screens ──────────────────────────────────────────────────────────────────
