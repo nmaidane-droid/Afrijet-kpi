@@ -26,7 +26,9 @@ function extract(name){
 }
 const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','auditV','auditId','auditName','auditFields','SGS_ACC_FONCTIONS','sgsAccAllowed','sgsAccCheck','sgsPlanAuto','sgsDureeMin','sgsCrtsvDac','sgsFormPers','sgsFormSeuil','sgsFormRes','sgsFormOK','sgsFormNoms','SGS_FRAT_Q','SGS_FRAT_SEUILS','sgsFratScore','sgsFratCouleur','sgsChgStatut','sgsChgAnalyse','sgsAnaNorm','sgsAnaResume','sgsFr','sgsJours','sgsFiltreEvenements','sgsNorm','sgsMatch','SGS_ROUGE','SGS_VERT','SGS_NIVEAUX','sgsRisque','sgsRisqueCourant','SGS_SPI','SAFETY_EVENTS','NDS_MOIS','CREW_ITEMS','crewItemsFor','joursAvant','statutEcheance','titresEchus',
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
-  'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS'];
+  'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS',
+  'COM_ETAPES','COM_RELANCES','COM_DEFAUTS','comParamsValides','comMigrFiche','comNorm','comTel9','comDoublon','COM_SECTEUR_TYPE',
+  'comDevenirClient','comUnion','comFusionImport','comDueInfo','comADesRelances','comRelance','comEtape','comNote','comProchainNumero'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -193,6 +195,93 @@ console.log('\nEnregistrements simultanés');
   test("dictionnaire : chaque clé garde sa dernière valeur", ()=>attendu(f.a===9&&f.b===7,"écrasé"));
 }
 test("identifiant stable d'un vol", ()=>attendu(T.itemId({num:"CN-KTA",date:"2026-09-24",dep:"09:00",from:"CMN",to:"FEZ"},0)===T.itemId({num:"CN-KTA",date:"2026-09-24",dep:"09:00",from:"CMN",to:"FEZ",pax:9},0),"instable"));
+
+
+console.log('\nModule Commercial — import Fiches Airshow');
+{
+  // Fiches au format réel de la sauvegarde Airshow 2.4 (schémas d'étapes v2 et v3 mélangés)
+  const NOW='2026-10-11T08:00:00.000Z', QUI='Anas BENNANI';
+  const fiche=(id,o)=>Object.assign({id,numero:1,nom:'N '+id,fonction:'',organisation:'',tel:'',email:'',suites:[],potentiel:'chaud',clientId:'cid-'+id,
+    guide:'Hicham QADRI',createdAt:'2026-09-29T10:00:00.000Z',updatedAt:'2026-09-29T11:00:00.000Z',version:1,etape:0,etapesV:3,
+    relances:{brochure:null,devis:null,j2:null,j7:null},notes:[],historique:[{date:'2026-09-29T10:00:00.000Z',auteur:'Hicham QADRI',texte:'Fiche créée'}]},o||{});
+  const dv=(id,o)=>Object.assign({id,numero:'DEV-2026-0001',version:1,ficheId:'f1',date:'2026-09-29T12:00:00.000Z',tarif:70000,totalHT:375668,tva:75134,ttc:450802,lignes:[],envoye:null},o||{});
+  const sauv=(fiches,devis)=>({app:'fiches-airshow',format:1,date:'2026-09-30T10:39:25.425Z',fiches,devis,seq:{fiches:fiches.length,devis:devis.length}});
+  const vide={prospects:[],devis:[],clients:[]};
+
+  test("fichier étranger refusé", ()=>attendu(T.comFusionImport(vide,{app:'autre',format:1,fiches:[],devis:[]},NOW,QUI).erreur,"accepté"));
+  test("format inconnu refusé", ()=>attendu(T.comFusionImport(vide,{app:'fiches-airshow',format:2,fiches:[],devis:[]},NOW,QUI).erreur,"accepté"));
+  test("ancienne fiche v2 « Devis envoyé » (1) → étape 2 comme Airshow", ()=>{ const f=T.comMigrFiche({etape:1,etapesV:2,relances:{devis:{},j2:null,j7:null}}); attendu(f.etape===2&&f.etapesV===3&&f.relances.brochure===null,JSON.stringify(f)); });
+  test("très ancienne fiche v1 « Contrat » (4) → étape 4", ()=>{ const f=T.comMigrFiche({etape:4}); attendu(f.etape===4&&f.etapesV===3,JSON.stringify(f)); });
+  test("fiche v3 inchangée", ()=>attendu(T.comMigrFiche({etape:2,etapesV:3,relances:{brochure:null}}).etape===2,"modifiée"));
+
+  const F=sauv([fiche('f1',{etape:1,etapesV:2,organisation:'AGAFAY JET',relances:{devis:{date:'2026-09-29T11:59:52.148Z',auteur:'H'},j2:null,j7:null}}),
+               fiche('f2',{organisation:'OCP',tel:'06 61 00 00 01'}),fiche('f3',{etape:4,organisation:'Mines du Sud'})],
+             [dv('d1'),dv('d2',{numero:'DEV-2026-0003',date:'2026-09-29T12:20:00.000Z',envoye:null})]);
+  const clients=[{id:'C1',nom:'OCP',tel:'',email:''}];
+  const r=T.comFusionImport({prospects:[],devis:[],clients},F,NOW,QUI), R=r.rapport;
+  test("import : 3 fiches et 2 devis", ()=>attendu(R.fichesNouvelles===3&&R.devisNouveaux===2&&r.devis.length===2,JSON.stringify(R)));
+  test("import : le clientId d'Airshow (identifiant du téléphone) est renommé", ()=>attendu(r.prospects.every(p=>!('clientId' in p)&&p.airshowCid),"clientId conservé"));
+  test("import : étape Airshow convertie (Devis envoyé)", ()=>attendu(r.prospects.find(p=>p.id==='f1').etape===2,"étape"));
+  test("import : doublon avec un client existant signalé", ()=>attendu(R.doublons.length===1&&R.doublons[0].client==='OCP',JSON.stringify(R.doublons)));
+  test("import : « Contrat » dans Airshow → devient client", ()=>{ const p=r.prospects.find(x=>x.id==='f3'); attendu(R.contrats===1&&p.statut==='client'&&r.clients.some(c=>c.id===p.clientRef&&c.nom==='Mines du Sud'),"non converti"); });
+  test("import : historique « Fiche importée » ajouté", ()=>attendu(r.prospects[0].historique.some(h=>/importée/.test(h.texte)),"absent"));
+  test("import : dernier numéro et dernier tarif", ()=>attendu(R.dernierNumero==='DEV-2026-0003'&&R.dernierTarif.tarif===70000,JSON.stringify(R)));
+  const r2=T.comFusionImport({prospects:r.prospects,devis:r.devis,clients:r.clients},F,NOW,QUI);
+  test("réimport du même fichier : rien ne change", ()=>attendu(r2.rapport.fichesNouvelles===0&&r2.rapport.fichesMaj===0&&r2.rapport.devisNouveaux===0&&r2.prospects.length===3&&r2.clients.length===r.clients.length,JSON.stringify(r2.rapport)));
+  // La fiche a évolué dans Airshow après l'import, et le KPI y a ajouté une note
+  const loc=r.prospects.map(p=>p.id==='f2'?{...p,notes:[{date:'2026-10-10T09:00:00.000Z',auteur:QUI,texte:'note KPI'}],statut:'prospect'}:p);
+  const F3=sauv([fiche('f2',{organisation:'OCP',updatedAt:'2026-10-12T09:00:00.000Z',potentiel:'froid',notes:[{date:'2026-10-12T08:00:00.000Z',auteur:'Marc',texte:'note Airshow'}]})],[dv('d2',{numero:'DEV-2026-0003',envoye:{date:'2026-10-12T09:00:00.000Z',auteur:'Marc'}})]);
+  const r3=T.comFusionImport({prospects:loc,devis:r.devis,clients:r.clients},F3,NOW,QUI), p3=r3.prospects.find(p=>p.id==='f2');
+  test("fiche plus récente dans Airshow : mise à jour, notes des deux côtés gardées", ()=>attendu(r3.rapport.fichesMaj===1&&p3.potentiel==='froid'&&p3.notes.length===2&&p3.notes[0].texte==='note Airshow',JSON.stringify(p3.notes)));
+  test("devis envoyé depuis dans Airshow : envoi repris", ()=>attendu(r3.rapport.devisMaj===1&&r3.devis.find(d=>d.id==='d2').envoye.auteur==='Marc',"envoi perdu"));
+  const cli=r.prospects.find(x=>x.id==='f3');
+  const r4=T.comFusionImport({prospects:r.prospects,devis:r.devis,clients:r.clients},sauv([{...fiche('f3',{etape:1,organisation:'Mines du Sud'}),updatedAt:'2026-10-20T00:00:00.000Z'}],[]),NOW,QUI);
+  test("un client ne redevient jamais prospect à l'import", ()=>attendu(r4.prospects.find(x=>x.id==='f3').statut==='client'&&r4.prospects.find(x=>x.id==='f3').clientRef===cli.clientRef,"redevenu prospect"));
+}
+
+console.log('\nModule Commercial — prospect devenu client');
+{
+  const NOW='2026-10-14T16:05:00.000Z';
+  const p={id:'p1',nom:'Karim ALAOUI',fonction:'Directeur général',organisation:'Mines du Sud',tel:'+212 6 61 24 18 90',email:'k@ms.ma',secteur:'mines',historique:[]};
+  const a=T.comDevenirClient(p,[{id:'C9',nom:'MASEN'}],NOW,'Anas','devis DEV-2026-0024 v1 accepté');
+  test("nouveau client créé avec les coordonnées du prospect", ()=>attendu(!a.existant&&a.clients.length===2&&a.client.nom==='Mines du Sud'&&a.client.type==='Corporate'&&a.client.tel===p.tel&&a.client.prospectId==='p1',JSON.stringify(a.client)));
+  test("le prospect passe au statut client, relié à sa fiche client", ()=>attendu(a.prospect.statut==='client'&&a.prospect.clientRef===a.client.id&&/accepté/.test(a.prospect.historique.pop().texte),"statut"));
+  const b=T.comDevenirClient(p,[{id:'C1',nom:'MINES DU SUD'}],NOW,'Anas','x');
+  test("doublon : le client existant est réutilisé, pas de seconde fiche", ()=>attendu(b.existant&&b.clients.length===1&&b.prospect.clientRef==='C1',"dupliqué"));
+  const c=T.comDevenirClient({...p,organisation:''},[{id:'C2',nom:'Autre',tel:'0661241890'}],NOW,'Anas','x');
+  test("doublon reconnu au téléphone (9 derniers chiffres)", ()=>attendu(c.existant&&c.prospect.clientRef==='C2',"non reconnu"));
+}
+
+console.log('\nModule Commercial — relances et étapes (règles Airshow)');
+{
+  const base={id:'r1',statut:'prospect',etape:0,suites:['devis'],createdAt:'2026-10-08T10:00:00.000Z',relances:{brochure:null,devis:null,j2:null,j7:null},historique:[]};
+  const J=(s)=>new Date(s+'T12:00:00');
+  test("avant tout envoi : action attendue 2 jours après la visite", ()=>{ const i=T.comDueInfo(base,J('2026-10-10')); attendu(i.pre&&i.k==='devis'&&i.diff===0,JSON.stringify(i)); });
+  test("à J+1 : pas encore dû", ()=>attendu(!T.comADesRelances(base,J('2026-10-09')),"dû trop tôt"));
+  const env=T.comRelance(base,'devis','2026-10-11T09:41:00.000Z','Anas');
+  test("devis envoyé : étape « Devis envoyé »", ()=>attendu(env.etape===2&&env.relances.devis.auteur==='Anas',"étape"));
+  test("relance J+2 due 2 jours après l'envoi", ()=>{ const i=T.comDueInfo(env,J('2026-10-13')); attendu(i.k==='J+2'&&i.diff===0,JSON.stringify(i)); });
+  const j2=T.comRelance(env,'j2','2026-10-13T09:00:00.000Z','Anas');
+  test("après J+2 : relance J+7 due 7 jours après l'envoi", ()=>{ const i=T.comDueInfo(j2,J('2026-10-18')); attendu(i.k==='J+7'&&i.diff===0,JSON.stringify(i)); });
+  test("J+7 faite : suivi terminé", ()=>attendu(T.comDueInfo(T.comRelance(j2,'j7','2026-10-18T09:00:00.000Z','Anas'),J('2026-10-30'))===null,"encore dû"));
+  test("brochure envoyée : étape « Brochure »", ()=>attendu(T.comRelance(base,'brochure','2026-10-09T09:00:00.000Z','A').etape===1,"étape"));
+  test("relance cochée deux fois : annulée", ()=>{ const g=T.comRelance(env,'devis','2026-10-12T09:00:00.000Z','A'); attendu(g.relances.devis===null&&/annulé/.test(g.historique.pop().texte),"non annulée"); });
+  test("un client n'a plus de relance", ()=>attendu(T.comDueInfo({...env,statut:'client'},J('2026-10-30'))===null,"relance client"));
+  test("changement d'étape journalisé", ()=>{ const g=T.comEtape(base,3,'2026-10-12T09:00:00.000Z','A'); attendu(g.etape===3&&/Rendez-vous/.test(g.historique.pop().texte),"étape"); });
+  test("étape « Contrat » impossible pour un prospect", ()=>attendu(T.comEtape(base,4,'x','A')===base,"contrat accepté"));
+  test("note ajoutée en tête, note vide ignorée", ()=>{ const g=T.comNote({...base,notes:[{texte:'ancienne'}]},' nouvelle ','x','A'); attendu(g.notes[0].texte==='nouvelle'&&T.comNote(base,'  ','x','A')===base,"note"); });
+}
+
+console.log('\nModule Commercial — paramètres et numérotation');
+{
+  test("valeurs par défaut identiques à Airshow", ()=>attendu(T.COM_DEFAUTS.tarifVol===75000&&T.COM_DEFAUTS.tarifImmo===75000&&T.COM_DEFAUTS.immoMin===2&&T.COM_DEFAUTS.fuelRef===10&&T.COM_DEFAUTS.conso===1100,"défauts"));
+  test("paramètres valides acceptés (espaces et virgule)", ()=>{ const v=T.comParamsValides({tarifVol:'75 000',tarifImmo:70000,immoMin:2,fuelRef:'10,5',conso:1100,signataire:' Hicham QADRI '}); attendu(v&&v.tarifVol===75000&&v.fuelRef===10.5&&v.signataire==='Hicham QADRI',JSON.stringify(v)); });
+  test("tarif hors limites refusé (bornes d'Airshow)", ()=>attendu(T.comParamsValides({tarifVol:500,tarifImmo:0,immoMin:2,fuelRef:10,conso:1100,signataire:'HQ'})===null,"accepté"));
+  test("référence carburant nulle refusée", ()=>attendu(T.comParamsValides({tarifVol:75000,tarifImmo:0,immoMin:2,fuelRef:0,conso:1100,signataire:'HQ'})===null,"accepté"));
+  test("signataire vide refusé", ()=>attendu(T.comParamsValides({tarifVol:75000,tarifImmo:0,immoMin:2,fuelRef:10,conso:1100,signataire:' '})===null,"accepté"));
+  test("numéro suivant après l'import", ()=>attendu(T.comProchainNumero([{numero:'DEV-2026-0003'},{numero:'DEV-2026-0017'},{numero:'x'}],2026)==='DEV-2026-0018',"numéro"));
+  test("premier numéro sans devis", ()=>attendu(T.comProchainNumero([],2026)==='DEV-2026-0001',"numéro"));
+}
 
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
