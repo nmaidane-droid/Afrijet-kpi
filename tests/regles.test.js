@@ -32,7 +32,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
   'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
-  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
+  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -393,6 +393,45 @@ console.log('\nModule Commercial — archivage des prospects');
   test("réactivation : la fiche redevient un prospect suivi", ()=>{ const r=T.comReactiver(a,'2026-10-12T09:00:00.000Z','Anas'); attendu(r.statut==='prospect'&&!r.archive&&T.comEstActif(r),"réactivation"); });
   test("réimport Airshow : une fiche archivée le reste", ()=>{ const F={app:'fiches-airshow',format:1,fiches:[{...f,statut:undefined,updatedAt:'2026-10-20T00:00:00.000Z',etapesV:3}],devis:[]};
     const r=T.comFusionImport({prospects:[a],devis:[],clients:[]},F,'n','A'); attendu(r.prospects[0].statut==='archive',r.prospects[0].statut); });
+}
+
+
+console.log('\nModule Commercial — équipage repris d\'un vol à l\'autre du même devis');
+{
+  const crew=[{nom:'MAIDANE',prenom:'NOUR',role:'TRI'},{nom:'CHERKAOUI',prenom:'SAID',role:'TRI'},{nom:'ALAMI',prenom:'KARIM',role:'CM1'},{nom:'BENALI',prenom:'OMAR',role:'CM1'},
+    {nom:'IDRISSI',prenom:'OMAR',role:'CM2'},{nom:'CHRAIBI',prenom:'NADIA',role:'CC'}];
+  const dem={id:'D1'}, L=i=>({i});
+  const vol=(i,cm1,cm2,cc)=>({demandeId:'D1',demandeVol:i,cm1,cm2,cc});
+  test("premier vol du devis : rien n'est proposé", ()=>attendu(T.comEquipageSuivant(dem,L(0),[],crew)===null,"proposé"));
+  test("CDB + OPL : on garde, CDB en CM1, OPL en CM2", ()=>{ const e=T.comEquipageSuivant(dem,L(1),[vol(0,'ALAMI KARIM','IDRISSI OMAR','CHRAIBI NADIA')],crew); attendu(e.cm1==='ALAMI KARIM'&&e.cm2==='IDRISSI OMAR'&&e.cc==='CHRAIBI NADIA',JSON.stringify(e)); });
+  test("TRI + OPL : on garde, TRI en CM1, OPL en CM2", ()=>{ const e=T.comEquipageSuivant(dem,L(1),[vol(0,'MAIDANE NOUR','IDRISSI OMAR','')],crew); attendu(e.cm1==='MAIDANE NOUR'&&e.cm2==='IDRISSI OMAR',JSON.stringify(e)); });
+  test("OPL saisi en CM1 par erreur : le commandant repasse en CM1", ()=>{ const e=T.comEquipageSuivant(dem,L(1),[vol(0,'IDRISSI OMAR','ALAMI KARIM','')],crew); attendu(e.cm1==='ALAMI KARIM'&&e.cm2==='IDRISSI OMAR',JSON.stringify(e)); });
+  test("2 CDB : on alterne", ()=>{ const e=T.comEquipageSuivant(dem,L(1),[vol(0,'ALAMI KARIM','BENALI OMAR','')],crew); attendu(e.cm1==='BENALI OMAR'&&e.cm2==='ALAMI KARIM',JSON.stringify(e)); });
+  test("TRI + CDB : on alterne", ()=>{ const e=T.comEquipageSuivant(dem,L(1),[vol(0,'MAIDANE NOUR','ALAMI KARIM','')],crew); attendu(e.cm1==='ALAMI KARIM'&&e.cm2==='MAIDANE NOUR',JSON.stringify(e)); });
+  test("TRI + TRI : on alterne", ()=>{ const e=T.comEquipageSuivant(dem,L(1),[vol(0,'MAIDANE NOUR','CHERKAOUI SAID','')],crew); attendu(e.cm1==='CHERKAOUI SAID',JSON.stringify(e)); });
+  test("2 CDB sur 4 vols : Alami, Benali, Alami, Benali en CM1", ()=>{ const F=[vol(0,'ALAMI KARIM','BENALI OMAR','')];
+    for(let i=1;i<4;i++){ const e=T.comEquipageSuivant(dem,L(i),F,crew); F.push(vol(i,e.cm1,e.cm2,e.cc)); }
+    attendu(F.map(f=>f.cm1.split(' ')[0]).join(',')==='ALAMI,BENALI,ALAMI,BENALI',F.map(f=>f.cm1).join(',')); });
+  test("vols planifiés dans le désordre : le vol 3 reprend l'ordre du vol 1", ()=>{ const e=T.comEquipageSuivant(dem,L(2),[vol(0,'ALAMI KARIM','BENALI OMAR','')],crew); attendu(e.cm1==='ALAMI KARIM'&&e.cm2==='BENALI OMAR',JSON.stringify(e)); });
+  test("vol d'un autre devis : rien n'est proposé", ()=>attendu(T.comEquipageSuivant({id:'D2'},L(1),[vol(0,'ALAMI KARIM','BENALI OMAR','')],crew)===null,"proposé"));
+  test("vol précédent sans équipage : rien n'est proposé", ()=>attendu(T.comEquipageSuivant(dem,L(1),[vol(0,'','','')],crew)===null,"proposé"));
+}
+
+
+console.log('\nModule Commercial — équipage et avion valables jusqu\'au retour du dossier');
+{
+  const crewD=[{nom:'ALAMI',prenom:'KARIM',role:'CM1',dates:{med:'2026-10-22',qt:'2027-12-31',opc:'2027-12-31'}},{nom:'BENALI',prenom:'OMAR',role:'CM1',dates:{med:'2027-06-30',qt:'2027-12-31',opc:'2027-12-31'}}];
+  const acD=m=>[{id:'AC1',immat:'CN-KTA',mels:m?[{mel:'MEL 34-41',sys:'Radar',sev:'B',exp:m}]:[]}];
+  const dem={vols:[{date:'2026-10-21'},{date:'2026-10-21'},{date:'2026-10-24'},{date:'2026-10-24'}]};
+  const aller={date:'2026-10-21',acId:'AC1',cm1:'ALAMI KARIM',cm2:'BENALI OMAR'};
+  test("fin du dossier : date du dernier vol", ()=>attendu(T.comFinDossier(dem)==='2026-10-24',T.comFinDossier(dem)));
+  test("aller : valable à sa date", ()=>attendu(T.volCompromis(aller,crewD,acD(null)).length===0,"bloqué"));
+  test("médical qui expire entre l'aller et le retour : refusé", ()=>{ const p=T.comControleDossier(aller,'2026-10-24',crewD,acD(null)); attendu(p.length===1&&p[0].type==='crew'&&/ALAMI KARIM/.test(p[0].label),JSON.stringify(p)); });
+  test("MEL qui expire entre l'aller et le retour : refusée", ()=>{ const p=T.comControleDossier({...aller,cm1:'BENALI OMAR',cm2:''},'2026-10-24',crewD,acD('22/10/26')); attendu(p.length===1&&p[0].type==='mel',JSON.stringify(p)); });
+  test("expiration le jour même du retour : acceptée", ()=>attendu(T.comControleDossier({...aller,cm1:'BENALI OMAR',cm2:''},'2026-10-24',crewD,acD('24/10/26')).length===0,"refusée"));
+  test("équipage et avion valables jusqu'au retour : accepté", ()=>attendu(T.comControleDossier({...aller,cm1:'BENALI OMAR',cm2:''},'2026-10-24',crewD,acD('31/12/26')).length===0,"refusé"));
+  test("dernier vol du dossier : pas de contrôle supplémentaire (le contrôle habituel suffit)", ()=>attendu(T.comControleDossier({...aller,date:'2026-10-24'},'2026-10-24',crewD,acD('22/10/26')).length===0,"contrôle en double"));
+  test("vol hors dossier : contrôlé à sa seule date", ()=>attendu(T.comControleDossier(aller,'',crewD,acD('22/10/26')).length===0,"contrôlé au-delà"));
 }
 
 
