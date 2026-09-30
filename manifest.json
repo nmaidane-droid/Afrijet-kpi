@@ -1,7 +1,7 @@
 {
   "name": "Afrijet Sahara KPI",
   "short_name": "Afrijet KPI",
-  "description": "Dashboard KPI operationnel — EMB 145 CN-KTA",
+  "description": "Dashboard KPI operationnel — EMB-140 LR CN-KTA",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0F1F3D",
