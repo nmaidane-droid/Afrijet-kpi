@@ -30,7 +30,9 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'COM_ETAPES','COM_RELANCES','COM_DEFAUTS','comParamsValides','comMigrFiche','comNorm','comTel9','comDoublon','COM_SECTEUR_TYPE',
   'comDevenirClient','comUnion','comFusionImport','comDueInfo','comADesRelances','comRelance','comEtape','comNote','comProchainNumero',
   'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
-  'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours'];
+  'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
+  'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
+  'comVolsAPlanifier','comPrefillVol','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -324,6 +326,58 @@ console.log('\nModule Commercial — calcul des devis (identique à Fiches Airsh
   test("devis envoyé : relances J+2 et J+7 repartent, étape « Devis envoyé »", ()=>{ const g=T.comDevisEnvoye(f,'DEV-2026-0004 v1','2026-10-11T09:00:00.000Z','Anas'); attendu(g.relances.devis.auteur==='Anas'&&g.relances.j2===null&&g.etape===2,JSON.stringify(g.relances)); });
   test("introduction de secours sans IA", ()=>attendu(/^Suite à notre échange/.test(T.comIntroSecours({organisation:'OCP'},by('GMMN'),by('GMMH'))),"texte"));
   test("contexte de l'IA : libellés en clair", ()=>attendu(T.comContexteIA({nom:'A',groupe:'10a18',types:['delegation'],notes:[{texte:'n'}]},by('GMMN'),by('GMMH'),true).groupe==='10 à 18',"libellé"));
+}
+
+
+console.log('\nModule Commercial — transmission aux Opérations (lot C)');
+{
+  const apts=T.comAptListe(JSON.parse(fs.readFileSync(require('path').join(__dirname,'..','aeroports.json'),'utf8')));
+  const d={id:'dv1',numero:'DEV-2026-0024',version:1,ficheId:'p1',lignes:[
+    {type:'mep',libelle:'Mise en place',de:{icao:'GMME',ville:'Rabat'},vers:{icao:'GMMN',ville:'Casablanca'},minutes:25},
+    {type:'vol',libelle:'Vol aller',de:{icao:'GMMN',ville:'Casablanca'},vers:{icao:'GQNO',ville:'Nouakchott'},minutes:182},
+    {type:'vol',libelle:'Vol retour',de:{icao:'GQNO',ville:'Nouakchott'},vers:{icao:'GMMN',ville:'Casablanca'},minutes:182},
+    {type:'mep',libelle:"Retour de l'avion",de:{icao:'GMMN',ville:'Casablanca'},vers:{icao:'GMME',ville:'Rabat'},minutes:25},
+    {type:'immo',libelle:'Immobilisation',minutes:120},{type:'fuel',libelle:'Surcharge carburant',montant:9108}]};
+  const legs=T.comLegsDevis(d);
+  test("vols à planifier : mises en place et vols clients seulement", ()=>attendu(legs.length===4&&legs.every(l=>l.type==='mep'||l.type==='vol'),JSON.stringify(legs.map(l=>l.type))));
+  const S={vols:[{date:'2026-10-22',heure:'06:45'},{date:'2026-10-22',heure:'08:00'},{date:'2026-10-23',heure:'23:30'},{date:'2026-10-23',heure:''}],pax:'14',note:'Bagages lourds'};
+  test("saisie complète acceptée", ()=>attendu(T.comValiderSaisie(legs,S,'2026-10-14')===null,T.comValiderSaisie(legs,S,'2026-10-14')));
+  test("date manquante refusée", ()=>attendu(/date souhaitée/.test(T.comValiderSaisie(legs,{...S,vols:[{date:''},...S.vols.slice(1)]},'2026-10-14')),"acceptée"));
+  test("date passée refusée", ()=>attendu(/passée/.test(T.comValiderSaisie(legs,S,'2026-10-23')),"acceptée"));
+  test("dates dans le désordre refusées", ()=>attendu(/ordre des vols/.test(T.comValiderSaisie(legs,{...S,vols:[S.vols[0],{date:'2026-10-21'},S.vols[2],S.vols[3]]},'2026-10-14')),"acceptée"));
+  test("heure incorrecte refusée", ()=>attendu(/Heure incorrecte/.test(T.comValiderSaisie(legs,{...S,vols:[{date:'2026-10-22',heure:'25:00'},...S.vols.slice(1)]},'2026-10-14')),"acceptée"));
+  test("19 passagers refusés, 0 refusé", ()=>attendu(T.comValiderSaisie(legs,{...S,pax:19},'2026-10-14')&&T.comValiderSaisie(legs,{...S,pax:0},'2026-10-14'),"accepté"));
+  const dem=T.comCreerDemande(d,{id:'C7',nom:'Mines du Sud'},S,apts,'2026-10-14T16:05:00.000Z','Anas BENNANI','D1');
+  test("demande : codes IATA des aéroports", ()=>attendu(dem.vols.map(v=>v.de.iata+'-'+v.vers.iata).join(' ')==='RBA-CMN CMN-NKC NKC-CMN CMN-RBA',dem.vols.map(v=>v.de.iata+'-'+v.vers.iata).join(' ')));
+  test("demande : client, passagers, note, dates", ()=>attendu(dem.clientId==='C7'&&dem.pax===14&&dem.note==='Bagages lourds'&&dem.vols[2].date==='2026-10-23'&&dem.statut==='active',JSON.stringify(dem).slice(0,200)));
+  test("demande neuve : 4 vols à planifier", ()=>attendu(T.comEtatDemande(dem,[]).statut==='a_planifier'&&T.comVolsAPlanifier([dem],[]).length===4,"état"));
+  const pVol=T.comPrefillVol(dem,dem.vols[1]), pPos=T.comPrefillVol(dem,dem.vols[0]);
+  test("pré-remplissage d'un vol client : COM, client, passagers, arrivée calculée", ()=>attendu(pVol.flightType==='Commercial'&&pVol.clientId==='C7'&&pVol.pax===14&&pVol.from==='CMN'&&pVol.to==='NKC'&&pVol.dep==='08:00'&&pVol.arr==='11:02',JSON.stringify(pVol)));
+  test("pré-remplissage d'une mise en place : POS, sans client ni passagers", ()=>attendu(pPos.flightType==='Positioning'&&pPos.clientId===''&&pPos.pax===0,JSON.stringify(pPos)));
+  test("arrivée après minuit : 23:30 + 3 h 02 = 02:32", ()=>attendu(T.comPrefillVol(dem,dem.vols[2]).arr==='02:32',T.comPrefillVol(dem,dem.vols[2]).arr));
+  test("heure non fixée : ni départ ni arrivée", ()=>{ const v=T.comPrefillVol(dem,dem.vols[3]); attendu(v.dep===''&&v.arr==='',JSON.stringify(v)); });
+  const F=[{demandeId:'D1',demandeVol:0,date:'2026-10-22',dep:'06:45',arr:'07:10'},{demandeId:'D1',demandeVol:1,date:'2026-10-22',dep:'08:15',arr:'11:17'},{demandeId:'AUTRE',demandeVol:2}];
+  test("avancement : 2 sur 4, la demande d'un autre dossier ne compte pas", ()=>{ const e=T.comEtatDemande(dem,F); attendu(e.statut==='partiel'&&e.planifies===2&&T.comVolsAPlanifier([dem],F).map(x=>x.leg.i).join()==='2,3',JSON.stringify(e.planifies)); });
+  test("vol supprimé du planning : redevient à planifier", ()=>attendu(T.comEtatDemande(dem,F.slice(0,1)).planifies===1,"reste planifié"));
+  const tout=[0,1,2,3].map(i=>({demandeId:'D1',demandeVol:i,date:'2026-10-2'+(i<2?2:3),dep:'10:00',arr:'12:00'}));
+  test("tous planifiés : « Vols planifiés »", ()=>attendu(T.comEtatDemande(dem,tout).statut==='planifie'&&T.comVolsAPlanifier([dem],tout).length===0,"état"));
+  test("demande annulée : plus rien à planifier", ()=>attendu(T.comVolsAPlanifier([{...dem,statut:'annulee'}],[]).length===0&&T.comEtatDemande({...dem,statut:'annulee'},[]).statut==='annulee',"à planifier"));
+  test("horaires au client : vols avec passagers seulement, heures définitives", ()=>{ const t=T.comTexteHoraires(dem,T.comEtatDemande(dem,F)); attendu(/Casablanca → Nouakchott · départ 08:15, arrivée 11:17/.test(t)&&!/Rabat/.test(t),t); });
+  test("client d'un devis fait depuis une fiche prospect devenue cliente", ()=>{ const r=T.comClientDuDevis(d,[{id:'p1',clientRef:'C7'}],[{id:'C7',nom:'Mines du Sud'}]); attendu(r.prospect.id==='p1'&&r.client.id==='C7',"client"); });
+  test("client d'un devis fait directement depuis la fiche client", ()=>{ const r=T.comClientDuDevis({...d,ficheId:'C8'},[],[{id:'C8',nom:'MASEN'}]); attendu(!r.prospect&&r.client.nom==='MASEN',"client"); });
+  test("fiche client présentée à l'éditeur de devis", ()=>{ const f=T.comFicheClient({id:'C8',nom:'MASEN',contact:'M. Alami',tel:'05',email:'a@b.ma'}); attendu(f.id==='C8'&&f.organisation==='MASEN'&&f.nom==='M. Alami'&&f.estClient,JSON.stringify(f)); });
+}
+
+console.log('\nModule Commercial — archivage des prospects');
+{
+  const f={id:'a1',statut:'prospect',etape:1,suites:['devis'],createdAt:'2026-10-01T09:00:00.000Z',relances:{brochure:{date:'2026-10-02T09:00:00.000Z'},devis:null,j2:null,j7:null},historique:[]};
+  const a=T.comArchiver(f,'Prix','budget dépassé','2026-10-10T09:00:00.000Z','Anas');
+  test("archivage avec motif : statut, motif, historique", ()=>attendu(a.statut==='archive'&&a.archive.motif==='Prix'&&/Archivée : Prix \(budget dépassé\)/.test(a.historique.pop().texte),"archivage"));
+  test("motif inconnu : rien n'est archivé", ()=>attendu(T.comArchiver(f,'Autre chose','','x','A')===f,"archivé"));
+  test("fiche archivée : plus de relance, plus active", ()=>attendu(T.comDueInfo(a,new Date('2026-10-30T12:00:00'))===null&&!T.comEstActif(a),"relance"));
+  test("réactivation : la fiche redevient un prospect suivi", ()=>{ const r=T.comReactiver(a,'2026-10-12T09:00:00.000Z','Anas'); attendu(r.statut==='prospect'&&!r.archive&&T.comEstActif(r),"réactivation"); });
+  test("réimport Airshow : une fiche archivée le reste", ()=>{ const F={app:'fiches-airshow',format:1,fiches:[{...f,statut:undefined,updatedAt:'2026-10-20T00:00:00.000Z',etapesV:3}],devis:[]};
+    const r=T.comFusionImport({prospects:[a],devis:[],clients:[]},F,'n','A'); attendu(r.prospects[0].statut==='archive',r.prospects[0].statut); });
 }
 
 
