@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.15";
+const APP_VERSION = "2.16";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -3380,11 +3380,15 @@ const SGS_BARR_T=[{k:'maitrise',l:'Maîtrise',d:"empêche l'apparition de l'év�
 const SGS_BARR_F=[{k:'ok',l:'A fonctionné',c:'#1D9E75'},{k:'mal',l:'A mal fonctionné',c:'#BA7517'},{k:'non',l:"N'a pas fonctionné",c:'#DC2626'}];
 // Date de réception d'un compte rendu : le jour de son enregistrement dans l'application, qui le
 // transmet aussitôt au SGS. Compte rendu anonyme : le mois seulement, comme la date de l'événement.
-// Sans horodatage valable (données anciennes) : rien, la date reste à saisir.
+// Sans horodatage valable (données anciennes ou de démonstration) : la date de l'événement,
+// un compte rendu étant enregistré le jour même.
+const sgsHorodate=e=>!!(e&&typeof e.timestamp==="string"&&/^\d{4}-\d{2}-\d{2}T/.test(e.timestamp)&&!isNaN(Date.parse(e.timestamp)));
 function sgsReceptionAuto(e){
-  const t=e&&typeof e.timestamp==="string"&&/^\d{4}-\d{2}-\d{2}T/.test(e.timestamp)&&!isNaN(Date.parse(e.timestamp))?e.timestamp:"";
-  if(!t) return "";
-  const j=new Date(t), p=n=>String(n).padStart(2,"0"), jour=j.getFullYear()+"-"+p(j.getMonth()+1)+"-"+p(j.getDate());
+  if(!e) return "";
+  let jour="";
+  if(sgsHorodate(e)){ const j=new Date(e.timestamp), p=n=>String(n).padStart(2,"0"); jour=j.getFullYear()+"-"+p(j.getMonth()+1)+"-"+p(j.getDate()); }
+  else if(/^\d{4}-\d{2}-\d{2}/.test(String(e.date||""))) jour=String(e.date).slice(0,10);
+  if(!jour) return "";
   return e.anonyme?jour.slice(0,7):jour;
 }
 const sgsMoisFr=m=>{ const M=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"]; return /^\d{4}-\d{2}/.test(String(m||""))?M[Number(m.slice(5,7))-1]+" "+m.slice(0,4):""; };
@@ -3419,7 +3423,7 @@ function SgsAnalyseEditor({ e, init, nomResp, onSave, onCancel }){
       {step===1&&<>
         <SgsField label="Date de réception du rapport">{sgsReceptionAuto(e)
           ? <div style={{...sgsInput,background:"#F1F5F9",color:C.text,display:"flex",alignItems:"center"}}>{e.anonyme?sgsMoisFr(d.reception):sgsFr(d.reception)}
-              <span style={{marginLeft:"auto",fontSize:11,color:C.slate}}>reçu à l'enregistrement dans l'application</span></div>
+              <span style={{marginLeft:"auto",fontSize:11,color:C.slate}}>{sgsHorodate(e)?"reçu à l'enregistrement dans l'application":"date de l'événement"}</span></div>
           : inp('reception','','date')}</SgsField>
         <div style={{fontSize:11,color:C.slate,marginTop:-6}}>Le manuel prévoit une transmission du compte rendu dans les 72 heures.</div>
         <SgsField label="Date de la réunion du groupe d'analyse">{inp('dateReunion','','date')}</SgsField>
