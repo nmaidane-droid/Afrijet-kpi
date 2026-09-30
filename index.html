@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.14";
+const APP_VERSION = "2.15";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -3378,6 +3378,16 @@ const sgsPill=(t,bg,fg)=><span style={{fontSize:10,fontWeight:800,borderRadius:6
 // ── Fiche d'analyse d'événement — formulaire ENR/SGS-FOR/SMS-05 (méthode des barrières) ──
 const SGS_BARR_T=[{k:'maitrise',l:'Maîtrise',d:"empêche l'apparition de l'événement indésirable"},{k:'recuperation',l:'Récupération',d:"rattrape l'événement indésirable une fois apparu"},{k:'protection',l:'Protection',d:"limite les conséquences de l'événement ultime"}];
 const SGS_BARR_F=[{k:'ok',l:'A fonctionné',c:'#1D9E75'},{k:'mal',l:'A mal fonctionné',c:'#BA7517'},{k:'non',l:"N'a pas fonctionné",c:'#DC2626'}];
+// Date de réception d'un compte rendu : le jour de son enregistrement dans l'application, qui le
+// transmet aussitôt au SGS. Compte rendu anonyme : le mois seulement, comme la date de l'événement.
+// Sans horodatage valable (données anciennes) : rien, la date reste à saisir.
+function sgsReceptionAuto(e){
+  const t=e&&typeof e.timestamp==="string"&&/^\d{4}-\d{2}-\d{2}T/.test(e.timestamp)&&!isNaN(Date.parse(e.timestamp))?e.timestamp:"";
+  if(!t) return "";
+  const j=new Date(t), p=n=>String(n).padStart(2,"0"), jour=j.getFullYear()+"-"+p(j.getMonth()+1)+"-"+p(j.getDate());
+  return e.anonyme?jour.slice(0,7):jour;
+}
+const sgsMoisFr=m=>{ const M=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"]; return /^\d{4}-\d{2}/.test(String(m||""))?M[Number(m.slice(5,7))-1]+" "+m.slice(0,4):""; };
 function sgsAnaNorm(a){ if(!a) return null; return {...a, dateReunion:a.dateReunion||a.date||'', barrieres:a.barrieres||[]}; }
 function sgsAnaResume(a, e, masque){
   a=sgsAnaNorm(a); if(!a) return '-';
@@ -3389,7 +3399,8 @@ function sgsAnaResume(a, e, masque){
 }
 function SgsAnalyseEditor({ e, init, nomResp, onSave, onCancel }){
   const [d,setD]=useState(()=>({ responsable:nomResp, reception:'', dateReunion:sgsToday(), participants:'', consequences:'', chronologie:'', ei:safetyLabels(e).join(', '), eiAttention:'non', eu:'',
-    barrieres:[], causes:'', robustesse:'', recommandations:'', conclusion:'', destAction:'', copieInfo:'', retourDemande:e.anonyme?'anonyme':'non', retourDate:'', retourMoyen:'', ...(init?sgsAnaNorm(init):{}) }));   // fiche neuve : garder la date du jour
+    barrieres:[], causes:'', robustesse:'', recommandations:'', conclusion:'', destAction:'', copieInfo:'', retourDemande:e.anonyme?'anonyme':'non', retourDate:'', retourMoyen:'', ...(init?sgsAnaNorm(init):{}),
+    ...((init&&init.reception)?{}:{reception:sgsReceptionAuto(e)}) }));   // réception : saisie antérieure conservée, sinon jour d'enregistrement   // fiche neuve : garder la date du jour
   const [step,setStep]=useState(1);
   const up=p=>setD(x=>({...x,...p}));
   const upB=(i,p)=>up({barrieres:d.barrieres.map((b,k)=>k===i?{...b,...p}:b)});
@@ -3406,7 +3417,10 @@ function SgsAnalyseEditor({ e, init, nomResp, onSave, onCancel }){
     <div style={{marginBottom:14}}><SgsStepper steps={STEPS} value={step} onPick={setStep}/></div>
     <div style={{display:"flex",flexDirection:"column",gap:11,minHeight:240}}>
       {step===1&&<>
-        <SgsField label="Date de réception du rapport">{inp('reception','','date')}</SgsField>
+        <SgsField label="Date de réception du rapport">{sgsReceptionAuto(e)
+          ? <div style={{...sgsInput,background:"#F1F5F9",color:C.text,display:"flex",alignItems:"center"}}>{e.anonyme?sgsMoisFr(d.reception):sgsFr(d.reception)}
+              <span style={{marginLeft:"auto",fontSize:11,color:C.slate}}>reçu à l'enregistrement dans l'application</span></div>
+          : inp('reception','','date')}</SgsField>
         <div style={{fontSize:11,color:C.slate,marginTop:-6}}>Le manuel prévoit une transmission du compte rendu dans les 72 heures.</div>
         <SgsField label="Date de la réunion du groupe d'analyse">{inp('dateReunion','','date')}</SgsField>
         {late20&&<div style={{fontSize:11.5,color:"#B45309",fontWeight:700,marginTop:-6}}>Plus de 20 jours après l'événement : le manuel impose une réunion sous 20 jours (SGS 02-01 § 1.2).</div>}
@@ -4957,12 +4971,12 @@ function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHaza
                 style={{padding:"5px 9px",borderRadius:8,fontSize:10.5,fontWeight:700,border:"1.5px dashed #0F766E",background:"white",color:"#0F766E",...TAP}}>+ Danger</button>
               {e.form&&<button onClick={()=>{ try{ sgsCrPDF(e,ES,nomResp); sgsToast('Compte rendu '+e.form+' exporté'); }catch(err){ uiAlert("❌ Erreur PDF : "+(err.message||err)); } }} style={{padding:"5px 9px",borderRadius:8,fontSize:10.5,fontWeight:700,border:"1.5px solid "+C.border,background:"white",color:C.navy,...TAP}}>📄 PDF {e.form}</button>}
             </div>
-            {(()=>{ const k=sgsEventKey(e), an=sgsAnaNorm((ES[k]||{}).analyse), rec=an&&an.reception, dt=rec?Math.round((new Date(rec)-new Date(e.date))/86400000):null;
+            {(()=>{ const k=sgsEventKey(e), an=sgsAnaNorm((ES[k]||{}).analyse), rec=an&&an.reception, dt=rec&&!e.anonyme?Math.round((new Date(rec)-new Date(e.date))/86400000):null;
               const def=an?an.barrieres.filter(b=>b.fonct&&b.fonct!=='ok').length:0;
               return an
                 ? <div role="button" onClick={()=>setEdit({kind:'analyse',key:k,e})} style={{marginTop:10,borderLeft:"3px solid #0F766E",background:"#F0FDFA",padding:"8px 10px",fontSize:12,color:C.text,lineHeight:1.45,...TAP}}>
                     <div style={{display:"flex",gap:6}}><b style={{color:"#0F766E",flex:1}}>Analyse du {sgsFr(an.dateReunion)}</b><span style={{color:"#0F766E",fontWeight:700,fontSize:11.5}}>✎ Modifier</span></div>
-                    {rec&&<div style={{fontSize:11.5,color:dt>3?"#B91C1C":C.slate,fontWeight:dt>3?700:400}}>Rapport reçu le {sgsFr(rec)} · {dt>3?'transmis en '+dt+' jours (délai prévu : 72 h)':'transmis dans les 72 h'}</div>}
+                    {rec&&(e.anonyme?<div style={{fontSize:11.5,color:C.slate}}>Rapport reçu en {sgsMoisFr(rec)} (rapport anonyme)</div>:<div style={{fontSize:11.5,color:dt>3?"#B91C1C":C.slate,fontWeight:dt>3?700:400}}>Rapport reçu le {sgsFr(rec)} · {dt>3?'transmis en '+dt+' jours (délai prévu : 72 h)':'transmis dans les 72 h'}</div>)}
                     {an.participants&&<div style={{color:C.slate,fontSize:11.5}}>{an.participants.replace(/\n/g,', ')}</div>}
                     {an.ei&&<div><b>EI :</b> {an.ei}{an.eu?' → EU : '+an.eu:''}</div>}
                     {an.barrieres.length>0&&<div><b>Barrières :</b> {an.barrieres.length}{def?', dont '+def+' défaillante(s)':', toutes ont fonctionné'}</div>}
