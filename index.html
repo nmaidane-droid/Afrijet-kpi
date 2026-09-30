@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.12";
+const APP_VERSION = "2.13";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -1851,8 +1851,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
       <FHeader icon="🛫" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0369A1"/>
       <ComVolsAPlanifierListe liste={aPlanifier} lien={lien} onChoisir={choisirDemande}/>
       {lien&&<div style={{display:"flex",alignItems:"center",gap:8,background:"#E6F1FB",border:"1px solid #B5D4F4",borderRadius:10,padding:"8px 10px",marginBottom:14,fontSize:12,color:"#0C447C"}}>
-        <span style={{flex:1}}>Rempli depuis la demande {lien.libelle}. Complétez l'équipage, puis validez.</span>
-        <span role="button" onClick={()=>{ setLien(null); if(flightType==="Commercial") setFlightType("Ferry"); }} style={{fontWeight:700,cursor:"pointer"}}>Détacher</span></div>}
+        <span style={{flex:1}}>Rempli depuis la demande {lien.libelle}. Complétez l'équipage, puis validez.</span></div>}
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div>
           <FLabel>Type de vol</FLabel>
