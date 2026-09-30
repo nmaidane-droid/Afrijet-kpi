@@ -7683,7 +7683,13 @@ function ScreenForms({ onManuel, sgs, satis, setSatis, onNoteVol, onSubmitVol, o
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"||profileId==="dir"}/>}
       {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}
         modesOK={profileId==="sgs"?["re","dgac","as"]:null} respSgs={sgs?sgs.responsable:null}/>}
-      {effectiveActive==="clients"  && <FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="comm"}/>}
+      {effectiveActive==="clients"  && (
+        <Card accent="#0891B2"><FHeader icon="🏢" title="Clients" subtitle="Module commercial" color="#0891B2"/>
+          <div style={{textAlign:"center",padding:"18px 10px"}}>
+            <div style={{fontSize:34,marginBottom:8}}>🚧</div>
+            <div style={{fontSize:15,fontWeight:800,color:C.navy,marginBottom:6}}>En cours de développement</div>
+            <div style={{fontSize:12.5,color:C.slate,lineHeight:1.5}}>Le suivi commercial sera disponible dans une prochaine version.</div>
+          </div></Card>)}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
   );
