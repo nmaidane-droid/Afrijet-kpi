@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.4";
+const APP_VERSION = "2.5";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -823,6 +823,9 @@ const WORLD_AIRPORTS = [
 function FAirport({ label, value, onChange }) {
   const [q, setQ]   = useState(value||"");
   const [open,setO] = useState(false);
+  // Valeur changée de l'extérieur (pré-remplissage, remise à zéro après enregistrement) : le champ suit.
+  // Pendant la frappe, la valeur reçue est la saisie en majuscules : rien ne bouge.
+  useEffect(()=>{ if(String(value||"")!==String(q||"").toUpperCase()) setQ(value||""); },[value]);
   const res = q.length>=2
     ? WORLD_AIRPORTS.filter(a=>a.c.toUpperCase().startsWith(q.toUpperCase())||a.n.toLowerCase().includes(q.toLowerCase())).slice(0,8)
     : [];
@@ -1750,7 +1753,7 @@ const INIT_FIN = [
 ];
 
 // ── Forms ────────────────────────────────────────────────────────────────────
-function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights }) {
+function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aPlanifier }) {
   const today=new Date().toISOString().slice(0,10);
   const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
 
@@ -1773,11 +1776,21 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights }) 
   const [flightType,setFlightType]=useState("Commercial");
   const [cc,setCc]=useState("");
   const [clientId,setClientId]=useState("");
+  // Vol transmis par le Commercial : le formulaire est pré-rempli, les contrôles restent les mêmes
+  const [lien,setLien]=useState(null);
+  const choisirDemande=(dem,leg)=>{ const v=comPrefillVol(dem,leg);
+    setFlightType(v.flightType); setFrom(v.from); setTo(v.to); setDate(v.date); setDep(v.dep); setArr(v.arr); setPax(v.pax?String(v.pax):""); setClientId(v.clientId);
+    if(!num.trim()&&ac&&ac.immat) setNum(ac.immat);   // n° de vol vidé après l'enregistrement précédent : immatriculation de l'avion
+    setLien({demandeId:v.demandeId,demandeVol:v.demandeVol,minutes:leg.minutes,libelle:dem.devisNumero+" · "+(leg.de.iata||leg.de.icao)+" → "+(leg.vers.iata||leg.vers.icao)}); };
+  // Vol transmis : l'arrivée suit le départ saisi, avec la durée du devis
+  useEffect(()=>{ if(lien&&lien.minutes){ const a=comHeurePlus(dep,lien.minutes); if(a) setArr(a); } },[dep,lien]);
 
   const pn=Math.min(SIEGES,Math.max(0,Number(pax)||0));
   const load=Math.round(pn/SIEGES*100);
 
   const submit=()=>{
+    // Vol transmis dont le départ vient d'être saisi : l'arrivée est calculée ici si elle manque encore
+    const arrV=arr||(lien&&lien.minutes?comHeurePlus(dep,lien.minutes):"");
     if(!num.trim()||!dep){uiAlert("N° vol et départ requis");return;}
     // Contrôles de cohérence de saisie
     const paxSaisi=Number(pax)||0;
@@ -1794,7 +1807,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights }) 
     if(date<todayStr){uiAlert("⚠️ La date du vol ne peut pas être dans le passé.");return;}
     // MEL et titres équipage sont contrôlés À LA DATE DU VOL, pas à la date du
     // jour : un titre qui expire entre aujourd'hui et le vol bloque dès maintenant.
-    const projet={date,acId,dep,arr,cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim()};
+    const projet={date,acId,dep,arr:arrV,cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim()};
     const pb=[...volCompromis(projet, crew, aircraft), ...chevauchements(projet, flights)];
     if(pb.length){
       const mel=pb.filter(p=>p.type==='mel'), eq=pb.filter(p=>p.type==='crew'), ov=pb.filter(p=>p.type==='overlap');
@@ -1807,22 +1820,28 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights }) 
     }
     // Pre-calculate planned duration
     let planDuree=0;
-    if(dep&&arr){
+    if(dep&&arrV){
       const [dh,dm]=dep.split(":").map(Number);
-      const [ah,am]=arr.split(":").map(Number);
+      const [ah,am]=arrV.split(":").map(Number);
       const diff=(ah*60+am)-(dh*60+dm);
       if(diff>0) planDuree=diff;
     }
-    onSubmit({num:num.trim().toUpperCase(),from:from_,to,dep,arr,depReal:"",arrReal:"",
+    onSubmit({num:num.trim().toUpperCase(),from:from_,to,dep,arr:arrV,depReal:"",arrReal:"",
       status:"Planifie",pax:pn,load,date,acId,sieges:SIEGES,flightType:flightType||"Commercial",clientId:clientId||"",
       carbDep:0,carbArr:0,consomme:0,consoH:0,fuelPct:0,delayMin:0,
-      cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0,dureeMin:planDuree});
-    setNum("");setFrom("");setTo("");setDep("");setPax("");setFlightType("Commercial");
+      cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0,dureeMin:planDuree,
+      ...(lien?{demandeId:lien.demandeId,demandeVol:lien.demandeVol}:{})});
+    setLien(null);
+    setNum("");setFrom("");setTo("");setDep("");setArr("");setPax("");setFlightType("Commercial");
     setCm1("");setCm2("");setCc("");
   };
   return (
     <Card accent="#0F1F3D">
       <FHeader icon="🛫" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0369A1"/>
+      <ComVolsAPlanifierListe liste={aPlanifier} lien={lien} onChoisir={choisirDemande}/>
+      {lien&&<div style={{display:"flex",alignItems:"center",gap:8,background:"#E6F1FB",border:"1px solid #B5D4F4",borderRadius:10,padding:"8px 10px",marginBottom:14,fontSize:12,color:"#0C447C"}}>
+        <span style={{flex:1}}>Rempli depuis la demande {lien.libelle}. Complétez l'équipage, puis validez.</span>
+        <span role="button" onClick={()=>setLien(null)} style={{fontWeight:700,cursor:"pointer"}}>Détacher</span></div>}
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div>
           <FLabel>Type de vol</FLabel>
@@ -5329,7 +5348,7 @@ function FormFin({ onSubmit, saved }) {
   );
 }
 
-function ClientDetail({ c, flights, satis, canEdit, onBack, onEdit, onDel }) {
+function ClientDetail({ c, flights, satis, canEdit, onBack, onEdit, onDel, extra }) {
   const [histPer,setHistPer]=useState("Tout");
   const vols=flights.filter(f=>f.clientId===c.id&&f.status==="Termine");
   const totalH=vols.reduce((s,f)=>s+(f.dureeMin||0),0);
@@ -5366,6 +5385,7 @@ function ClientDetail({ c, flights, satis, canEdit, onBack, onEdit, onDel }) {
         <div key={i} style={{fontSize:12,color:C.text,padding:"4px 0",borderBottom:"1px solid "+C.border}}><span style={{marginRight:8}}>{icon}</span>{v}</div>
       ):null)}
       {c.notes&&<div style={{marginTop:10,fontSize:11,color:C.slate,fontStyle:"italic"}}>{c.notes}</div>}
+      {extra&&extra(c)}
       <div style={{marginTop:14}}>
         <SectionTitle>Historique vols</SectionTitle>
         <div style={{display:"flex",gap:6,margin:"8px 0"}}>
@@ -5390,7 +5410,7 @@ function ClientDetail({ c, flights, satis, canEdit, onBack, onEdit, onDel }) {
     </Card>
   );
 }
-function FormClients({ clients, setClients, flights, satis, canEdit }) {
+function FormClients({ clients, setClients, flights, satis, canEdit, extra }) {
   const [selected,setSelected]=useState(null);
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
@@ -5449,7 +5469,7 @@ function FormClients({ clients, setClients, flights, satis, canEdit }) {
   if(selected){
     const c=clients.find(x=>x.id===selected);
     if(!c){setSelected(null);return null;}
-    return <ClientDetail satis={satis} c={c} flights={flights} canEdit={canEdit}
+    return <ClientDetail satis={satis} c={c} flights={flights} canEdit={canEdit} extra={extra}
       onBack={()=>setSelected(null)}
       onEdit={()=>openEdit(c)}
       onDel={async()=>{ await del(c.id); setSelected(null); }}/>;
@@ -7380,7 +7400,7 @@ function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitV
       safetyData,
       clients,
       ndsArchive,
-      ...(com?{prospects:com.prospects,devis:com.devis,comParams:com.params,comImports:com.imports}:{}),
+      ...(com?{prospects:com.prospects,devis:com.devis,comParams:com.params,comImports:com.imports,demandes:com.demandes}:{}),
       ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,satisfaction:satis,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv}:{}),
     };
     setProgress(p=>({...p,currentStep:1,pct:40}));
@@ -7440,6 +7460,7 @@ function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitV
   // Pastilles des tuiles : FRAT rouges non décidés, et comptes rendus reçus au SGS
   const pastille = (id)=>{
     if(id==="frat") return ((sgs&&sgs.reg&&sgs.reg.frat)||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&!f.decision2).length;
+    if(id==="vol") return comVolsAPlanifier(com&&com.demandes,flights).length;   // vols transmis par le Commercial
     if(id==="commercial") return ((com&&com.prospects)||[]).filter(p=>comADesRelances(p,new Date())).length;   // relances du jour
     if(id==="sgs"){ const ES=(sgs&&sgs.evStatus)||{};
       return (safetyData||[]).filter(e=>!((ES[sgsEventKey(e)]||{}).statut)||((ES[sgsEventKey(e)]||{}).statut)==='recu').length; }
@@ -7678,7 +7699,8 @@ function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitV
             </div>
         )}
       </div>
-      {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)} flights={flights}/>}
+      {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)} flights={flights}
+        aPlanifier={comVolsAPlanifier(com&&com.demandes,flights)}/>}
       {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
       {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} crew={crew} saved={saved} profil={profileId}/>}
@@ -7811,7 +7833,7 @@ function comFusionImport(ex, fichier, now, auteur){
 }
 // Relance attendue — identique à dueInfo() d'Airshow. diff : jours avant l'échéance (négatif = en retard).
 function comDueInfo(f, now){
-  if(!f||f.statut==="client"||f.etape>=4) return null;
+  if(!f||(f.statut&&f.statut!=="prospect")||f.etape>=4) return null;   // client ou fiche archivée : plus de relance
   const sod=d=>{ const x=new Date(d); x.setHours(0,0,0,0); return x; };
   const jours=d=>Math.round((d-sod(now||Date.now()))/864e5);
   const R=f.relances||{};
@@ -7934,6 +7956,83 @@ function comContexteIA(f,dep,arr,ar){
 }
 const comIntroSecours=(f,dep,arr)=>"Suite à notre échange, nous avons le plaisir de vous adresser notre proposition d'affrètement"+(dep&&arr?" entre "+dep.ville+" et "+arr.ville:"")+(f&&f.organisation?" pour "+f.organisation:"")+".";
 
+// ── Lot C : demandes de vols transmises aux Opérations, fiche client, archivage ──────────
+const COM_MOTIFS=["Prix","Date ou disponibilité","Concurrent","Projet abandonné","Pas de réponse","Doublon ou fiche d'essai","Autre"];
+const comEstActif=p=>!!p&&(!p.statut||p.statut==="prospect");
+// Archiver un prospect (perdu, doublon, fiche d'essai) : jamais supprimé, motif obligatoire
+function comArchiver(f,motif,precision,now,auteur){
+  if(!COM_MOTIFS.includes(motif)) return f;
+  const p=String(precision||"").trim().slice(0,300);
+  return {...f,statut:"archive",archive:{date:now,auteur,motif,precision:p},updatedAt:now,
+    historique:[...(f.historique||[]),{date:now,auteur,texte:"Archivée : "+motif+(p?" ("+p+")":"")}]};
+}
+function comReactiver(f,now,auteur){
+  if(f.statut!=="archive") return f;
+  const g={...f,statut:"prospect",updatedAt:now,historique:[...(f.historique||[]),{date:now,auteur,texte:"Réactivée"}]}; delete g.archive; return g;
+}
+// Vols d'un devis à planifier : mises en place et vols clients (ni immobilisation ni carburant)
+const comLegsDevis=d=>(d&&d.lignes||[]).filter(l=>l.type==="mep"||l.type==="vol").map((l,i)=>({i,type:l.type,libelle:l.libelle,de:{...l.de},vers:{...l.vers},minutes:l.minutes}));
+// Heure + durée, sur 24 h (un vol peut arriver après minuit)
+function comHeurePlus(h,min){
+  if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(h||""))) return "";
+  const t=((Number(h.slice(0,2))*60+Number(h.slice(3))+Math.round(Number(min)||0))%1440+1440)%1440;
+  return String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");
+}
+// Contrôle de la saisie à l'acceptation : dates obligatoires, jamais passées, dans l'ordre des vols ; 1 à 18 passagers
+function comValiderSaisie(legs,s,aujourdhui){
+  if(!legs.length) return "Ce devis ne contient aucun vol à planifier.";
+  for(const l of legs){
+    const x=(s.vols||[])[l.i]||{};
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(x.date||"")) return "Indiquez la date souhaitée pour : "+l.libelle+".";
+    if(x.date<aujourdhui) return "La date de « "+l.libelle+" » est passée.";
+    if(x.heure&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(x.heure)) return "Heure incorrecte pour « "+l.libelle+" » (HH:MM).";
+  }
+  for(let k=1;k<legs.length;k++){ if(s.vols[legs[k].i].date<s.vols[legs[k-1].i].date) return "Les dates doivent suivre l'ordre des vols : « "+legs[k].libelle+" » est avant « "+legs[k-1].libelle+" »."; }
+  const n=Number(s.pax); if(!Number.isInteger(n)||n<1||n>18) return "Nombre de passagers : de 1 à 18.";
+  return null;
+}
+// Demande de vols transmise aux Opérations
+function comCreerDemande(d,client,s,apts,now,auteur,id){
+  const iata=icao=>{ const a=comAptBy(apts,icao); return a&&a.iata?a.iata:icao; };
+  return {id,devisId:d.id,devisNumero:d.numero,version:d.version,ficheId:d.ficheId,clientId:client.id,clientNom:client.nom,
+    pax:Number(s.pax),note:String(s.note||"").trim().slice(0,600),statut:"active",transmisLe:now,transmisPar:auteur,
+    vols:comLegsDevis(d).map(l=>({...l,de:{...l.de,iata:iata(l.de.icao)},vers:{...l.vers,iata:iata(l.vers.icao)},date:s.vols[l.i].date,heure:s.vols[l.i].heure||""}))};
+}
+// Avancement : un vol est planifié tant qu'un vol du planning lui est relié (s'il est supprimé, il redevient « à planifier »)
+function comEtatDemande(dem,flights){
+  const legs=(dem.vols||[]).map(v=>({...v,vol:(flights||[]).find(f=>f.demandeId===dem.id&&f.demandeVol===v.i)||null}));
+  const planifies=legs.filter(l=>l.vol).length, total=legs.length;
+  const statut=dem.statut==="annulee"?"annulee":planifies===total?"planifie":planifies?"partiel":"a_planifier";
+  return {legs,planifies,total,statut};
+}
+function comVolsAPlanifier(demandes,flights){
+  const out=[];
+  (demandes||[]).filter(d=>d.statut==="active").forEach(d=>comEtatDemande(d,flights).legs.forEach(l=>{ if(!l.vol) out.push({dem:d,leg:l}); }));
+  // Par date, puis demande par demande, dans le même ordre que les vols du devis (un vol sans heure ne passe pas devant)
+  return out.sort((a,b)=>String(a.leg.date).localeCompare(String(b.leg.date))||String(a.dem.transmisLe).localeCompare(String(b.dem.transmisLe))||a.leg.i-b.leg.i);
+}
+// Pré-remplissage du formulaire Vol (les contrôles du formulaire restent inchangés)
+function comPrefillVol(dem,leg){
+  const com=leg.type==="vol";
+  return {flightType:com?"Commercial":"Positioning",from:leg.de.iata||leg.de.icao,to:leg.vers.iata||leg.vers.icao,date:leg.date,
+    dep:leg.heure||"",arr:leg.heure?comHeurePlus(leg.heure,leg.minutes):"",pax:com?dem.pax:0,clientId:com?dem.clientId:"",demandeId:dem.id,demandeVol:leg.i};
+}
+// Horaires à envoyer au client (vols avec passagers seulement)
+function comTexteHoraires(dem,etat){
+  const L=etat.legs.filter(l=>l.type==="vol"&&l.vol);
+  if(!L.length) return "";
+  const j=s=>String(s||"").split("-").reverse().join("/");
+  return "AFRIJET Sahara — vos vols ("+dem.devisNumero+")\n"+L.map(l=>j(l.vol.date)+" · "+l.de.ville+" → "+l.vers.ville+" · départ "+(l.vol.dep||"—")+", arrivée "+(l.vol.arr||"—")).join("\n");
+}
+// Client d'un devis : devis fait depuis une fiche prospect, ou directement depuis une fiche client
+function comClientDuDevis(d,prospects,clients){
+  const p=(prospects||[]).find(x=>x.id===d.ficheId)||null;
+  const c=(clients||[]).find(x=>x.id===d.ficheId)||(p&&p.clientRef?(clients||[]).find(x=>x.id===p.clientRef):null)||null;
+  return {prospect:p,client:c};
+}
+// Fiche client présentée comme une fiche prospect pour l'éditeur de devis
+const comFicheClient=c=>({id:c.id,nom:c.contact||c.nom,fonction:"",organisation:c.nom,tel:c.tel||"",email:c.email||"",notes:[],historique:[],statut:"client",estClient:true});
+
 // ══ Module Commercial — écrans (lot A) ═══════════════════════════════════════
 const COM_BLEU="#0891B2";
 const comQui=()=>userLabel(sgsCurrentUser())||"Commercial";
@@ -7959,28 +8058,35 @@ const comChoix=(k,v)=>Array.isArray(v)?v.map(x=>COM_CHOIX[k][x]).filter(Boolean)
 function CommercialModule({ com, clients, setClients, flights, satis, profileId, onBack }){
   const canEdit=["comm","rdoa"].includes(profileId);
   const [tab,setTab]=useState("pros");
-  const [vue,setVue]=useState(null);           // {k:"fiche"|"devis"|"nouvelle", id}
+  const [vue,setVue]=useState(null);           // {k:"fiche"|"devis"|"edit"|"accepter"|"nouvelle", id}
   const now=new Date();
-  const prospects=com.prospects||[], devis=com.devis||[];
-  const actifs=prospects.filter(p=>p.statut!=="client");
+  const prospects=com.prospects||[], devis=com.devis||[], demandes=com.demandes||[];
+  const actifs=prospects.filter(comEstActif);
   const dues=actifs.filter(p=>comADesRelances(p,now)).length;
   const majProspect=(id,fn)=>com.setProspects(L=>(L||[]).map(p=>p.id===id?fn(p):p));
   const NAV=[["pros","Prospects",dues],["cli","Clients",0],["dev","Devis",0],["imp","Importer",0]];
   const go=k=>{ setTab(k); setVue(null); };
+  // Fiche servant au devis : fiche prospect, ou fiche client présentée comme telle
+  const ficheDe=id=>prospects.find(x=>x.id===id)||(()=>{ const c=(clients||[]).find(x=>x.id===id); return c?comFicheClient(c):null; })();
   let corps;
   if(vue&&vue.k==="fiche") corps=<ComFiche p={prospects.find(x=>x.id===vue.id)} devis={devis} clients={clients} canEdit={canEdit}
       maj={fn=>majProspect(vue.id,fn)} com={com} setClients={setClients} ouvrirDevis={id=>setVue({k:"devis",id,retour:vue})}
-      nouveauDevis={()=>setVue({k:"edit",ficheId:vue.id,retour:vue})}/>;
-  else if(vue&&vue.k==="devis") corps=<ComDevisDetail d={devis.find(x=>x.id===vue.id)} canEdit={canEdit} com={com} fiche={prospects.find(x=>x.id===(devis.find(y=>y.id===vue.id)||{}).ficheId)}
-      nouvelleVersion={d=>setVue({k:"edit",ficheId:d.ficheId,parentId:d.id,retour:vue})}/>;
-  else if(vue&&vue.k==="edit") corps=<ComDevisEdit key={vue.ficheId+(vue.parentId||"")} fiche={prospects.find(x=>x.id===vue.ficheId)} parent={vue.parentId?devis.find(x=>x.id===vue.parentId):null} com={com}
-      onDone={id=>setVue({k:"devis",id,retour:{k:"fiche",id:vue.ficheId}})}/>;
+      nouveauDevis={()=>setVue({k:"edit",ficheId:vue.id,retour:vue})} accepter={d=>setVue({k:"accepter",id:d.id,retour:vue})}/>;
+  else if(vue&&vue.k==="devis"){ const d=devis.find(x=>x.id===vue.id);
+    corps=<ComDevisDetail d={d} canEdit={canEdit} com={com} fiche={d?ficheDe(d.ficheId):null} flights={flights} demandes={demandes.filter(x=>d&&x.devisId===d.id)}
+      nouvelleVersion={x=>setVue({k:"edit",ficheId:x.ficheId,parentId:x.id,retour:vue})} accepter={x=>setVue({k:"accepter",id:x.id,retour:vue})}/>; }
+  else if(vue&&vue.k==="accepter") corps=<ComAccepter d={devis.find(x=>x.id===vue.id)} prospects={prospects} clients={clients} setClients={setClients} com={com}
+      onDone={()=>setVue({k:"devis",id:vue.id,retour:vue.retour})}/>;
+  else if(vue&&vue.k==="edit") corps=<ComDevisEdit key={vue.ficheId+(vue.parentId||"")} fiche={ficheDe(vue.ficheId)} parent={vue.parentId?devis.find(x=>x.id===vue.parentId):null} com={com}
+      onDone={id=>setVue({k:"devis",id,retour:vue.retour||{k:"fiche",id:vue.ficheId}})}/>;
   else if(vue&&vue.k==="nouvelle") corps=<ComNouvelleFiche onSave={p=>{ com.setProspects(L=>[...(L||[]),p]); setVue({k:"fiche",id:p.id}); }}/>;
-  else if(tab==="pros") corps=<ComProspects liste={actifs} devenus={prospects.filter(p=>p.statut==="client")} now={now} canEdit={canEdit} ouvrir={id=>setVue({k:"fiche",id})} nouvelle={()=>setVue({k:"nouvelle"})}/>;
-  else if(tab==="cli") corps=<FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={canEdit}/>;
+  else if(tab==="pros") corps=<ComProspects liste={actifs} devenus={prospects.filter(p=>p.statut==="client")} archives={prospects.filter(p=>p.statut==="archive")} now={now} canEdit={canEdit} ouvrir={id=>setVue({k:"fiche",id})} nouvelle={()=>setVue({k:"nouvelle"})}/>;
+  else if(tab==="cli") corps=<FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={canEdit}
+      extra={c=><ComClientCommercial c={c} prospects={prospects} devis={devis} demandes={demandes} flights={flights} canEdit={canEdit}
+        ouvrirDevis={id=>setVue({k:"devis",id})} nouveauDevis={()=>setVue({k:"edit",ficheId:c.id})}/>}/>;
   else if(tab==="dev") corps=<ComDevisListe devis={devis} ouvrir={id=>setVue({k:"devis",id})}/>;
   else corps=<ComImport com={com} clients={clients} setClients={setClients} canEdit={canEdit}/>;
-  const titre=vue?(vue.k==="fiche"?((prospects.find(x=>x.id===vue.id)||{}).nom||"Fiche"):vue.k==="devis"?((devis.find(x=>x.id===vue.id)||{}).numero||"Devis"):vue.k==="edit"?(vue.parentId?"Nouvelle version":"Nouveau devis"):"Nouvelle fiche"):"Commercial";
+  const titre=vue?(vue.k==="fiche"?((prospects.find(x=>x.id===vue.id)||{}).nom||"Fiche"):vue.k==="devis"?((devis.find(x=>x.id===vue.id)||{}).numero||"Devis"):vue.k==="edit"?(vue.parentId?"Nouvelle version":"Nouveau devis"):vue.k==="accepter"?"Le client accepte":"Nouvelle fiche"):"Commercial";
   const retour=()=>{ if(vue&&vue.retour) setVue(vue.retour); else if(vue) setVue(null); else onBack(); };
   return (
     <div style={{position:"fixed",inset:0,zIndex:400,background:C.bg,display:"flex",flexDirection:"column"}}>
@@ -7999,10 +8105,10 @@ function CommercialModule({ com, clients, setClients, flights, satis, profileId,
     </div>);
 }
 
-function ComProspects({ liste, devenus, now, canEdit, ouvrir, nouvelle }){
+function ComProspects({ liste, devenus, archives, now, canEdit, ouvrir, nouvelle }){
   const [q,setQ]=useState(""), [et,setEt]=useState(-1);
   const nq=comNorm(q);
-  const L=(et===-2?(devenus||[]):liste).filter(p=>(et<0||p.etape===et)&&(!nq||comNorm([p.nom,p.organisation,p.fonction,p.devisDe,p.devisVers].join(" ")).includes(nq)));
+  const L=(et===-2?(devenus||[]):et===-3?(archives||[]):liste).filter(p=>(et<0||p.etape===et)&&(!nq||comNorm([p.nom,p.organisation,p.fonction,p.devisDe,p.devisVers].join(" ")).includes(nq)));
   const tri=(a,b)=>{ const x=comDueInfo(a,now), y=comDueInfo(b,now); return (x?x.diff:999)-(y?y.diff:999)||String(a.nom).localeCompare(String(b.nom)); };
   const dues=L.filter(p=>comADesRelances(p,now)).sort(tri), autres=L.filter(p=>!comADesRelances(p,now)).sort(tri);
   const puce=(i,l,n)=><span key={i} role="button" onClick={()=>setEt(i)} style={{borderRadius:12,padding:"4px 10px",fontSize:11.5,fontWeight:700,...TAP,
@@ -8016,7 +8122,7 @@ function ComProspects({ liste, devenus, now, canEdit, ouvrir, nouvelle }){
       <div style={{fontSize:11,fontWeight:700,color:d.c,marginTop:2}}>{d.t}</div></div>; };
   return (<>
     <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Nom, organisation, ville…" style={comInp}/>
-    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{puce(-1,"Tous",liste.length)}{COM_ETAPES.map((l,i)=>puce(i,l,liste.filter(p=>p.etape===i).length))}{(devenus||[]).length>0&&puce(-2,"Devenus clients",(devenus||[]).length)}</div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{puce(-1,"Tous",liste.length)}{COM_ETAPES.map((l,i)=>puce(i,l,liste.filter(p=>p.etape===i).length))}{(devenus||[]).length>0&&puce(-2,"Devenus clients",(devenus||[]).length)}{(archives||[]).length>0&&puce(-3,"Archivés",(archives||[]).length)}</div>
     {canEdit&&<button onClick={nouvelle} style={comBtn("white",COM_BLEU,COM_BLEU)}>+ Nouvelle fiche prospect</button>}
     {liste.length===0&&<ComCarte><div style={{fontSize:12.5,color:C.slate,lineHeight:1.5}}>Aucun prospect. Importez la sauvegarde de Fiches Airshow (onglet <b>Importer</b>) ou créez une fiche.</div></ComCarte>}
     {dues.length>0&&<ComLbl>Relances du jour · {dues.length}</ComLbl>}{dues.map(carte)}
@@ -8043,23 +8149,15 @@ function ComNouvelleFiche({ onSave }){
     <button onClick={save} style={comBtn(COM_BLEU,"white")}>Enregistrer la fiche</button></div></ComCarte>);
 }
 
-function ComFiche({ p, devis, clients, canEdit, maj, com, setClients, ouvrirDevis, nouveauDevis }){
+function ComFiche({ p, devis, clients, canEdit, maj, com, setClients, ouvrirDevis, nouveauDevis, accepter }){
   const [note,setNote]=useState("");
+  const [arch,setArch]=useState(null);          // {motif, precision} pendant l'archivage
   if(!p) return <ComCarte>Fiche introuvable.</ComCarte>;
   const now=new Date(), iso=now.toISOString(), qui=comQui();
   const pc=COM_POT[p.potentiel]||[C.border,C.slate];
   const D=devis.filter(d=>d.ficheId===p.id).sort((a,b)=>String(b.numero).localeCompare(String(a.numero))||b.version-a.version);
   const client=p.clientRef?(clients||[]).find(c=>c.id===p.clientRef):null;
   const est=p.statut==="client";
-  const accepter=async d=>{
-    const ex=comDoublon(p,clients);
-    if(!(await uiConfirm("Le client accepte le devis "+d.numero+" v"+d.version+" ("+comMad(d.totalHT)+" HT) ?\n\n"+
-      (ex?"« "+(p.organisation||p.nom)+" » rejoindra le client existant « "+ex.nom+" ».":"« "+(p.organisation||p.nom)+" » deviendra client.")))) return;
-    const r=comDevenirClient(p,clients,iso,qui,"devis "+d.numero+" v"+d.version+" accepté");
-    setClients(r.clients); maj(()=>r.prospect);
-    com.setDevis(L=>(L||[]).map(x=>x.id===d.id?{...x,accepte:{date:iso,auteur:qui}}:x));
-    sgsToast((p.organisation||p.nom)+" est maintenant client");
-  };
   const reg=k=>{ const v=p.relances&&p.relances[k]; return <div key={k} role="button" onClick={()=>canEdit&&!est&&maj(f=>comRelance(f,k,new Date().toISOString(),qui))}
     style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid "+C.border,fontSize:12.5,...(canEdit&&!est?TAP:{})}}>
     <span>{COM_RELANCES[k]}</span><span style={{fontWeight:700,color:v?"#00936A":C.slateL}}>{v?"✓ "+comDate(v.date)+" · "+v.auteur:"—"}</span></div>; };
@@ -8073,7 +8171,7 @@ function ComFiche({ p, devis, clients, canEdit, maj, com, setClients, ouvrirDevi
         {p.tel&&<a href={"tel:"+p.tel.replace(/\s/g,"")} style={{color:COM_BLEU,textDecoration:"none"}}>📞 {p.tel}</a>}
         {p.email&&<a href={"mailto:"+p.email} style={{color:COM_BLEU,textDecoration:"none"}}>✉️ {p.email}</a>}</div>
       {est&&client&&<div style={{fontSize:11.5,color:"#065F46",marginTop:8}}>Fiche client : {client.nom} · depuis le {comDate(client.clientDepuis)}</div>}</ComCarte>
-    {!est&&<ComCarte><ComLbl>Étape</ComLbl><div style={{display:"flex",gap:4}}>{COM_ETAPES.map((l,i)=><div key={i} role="button"
+    {comEstActif(p)&&<ComCarte><ComLbl>Étape</ComLbl><div style={{display:"flex",gap:4}}>{COM_ETAPES.map((l,i)=><div key={i} role="button"
         onClick={async()=>{ if(!canEdit) return; if(await uiConfirm("Passer la fiche à l'étape « "+l+" » ?")) maj(f=>comEtape(f,i,new Date().toISOString(),qui)); }}
         style={{flex:1,textAlign:"center",...(canEdit?TAP:{})}}><div style={{height:6,borderRadius:3,background:i<=p.etape?COM_BLEU:"#E2E8F0"}}/>
         <div style={{fontSize:10,marginTop:4,color:i===p.etape?COM_BLEU:C.slate,fontWeight:i===p.etape?800:600}}>{l}</div></div>)}</div>
@@ -8087,7 +8185,7 @@ function ComFiche({ p, devis, clients, canEdit, maj, com, setClients, ouvrirDevi
       <ComLigne l="Suite souhaitée" v={comChoix("suites",p.suites)||"—"}/>
       <ComLigne l="Suivi par" v={p.guide||"—"}/>
       {p.source==="airshow"&&<ComLigne l="Origine" v={"Fiches Airshow n° "+(p.numero||"—")+" · importée le "+comDate(p.importeLe)}/>}</ComCarte>
-    {!est&&<ComCarte><ComLbl>Relances</ComLbl>{Object.keys(COM_RELANCES).map(reg)}
+    {comEstActif(p)&&<ComCarte><ComLbl>Relances</ComLbl>{Object.keys(COM_RELANCES).map(reg)}
       {canEdit&&<div style={{fontSize:11,color:C.slate,marginTop:6}}>Touchez une ligne pour la cocher ou l'annuler.</div>}</ComCarte>}
     <ComCarte><ComLbl>Devis · {D.length}</ComLbl>
       {D.length===0&&<div style={{fontSize:12,color:C.slate}}>Aucun devis pour l'instant.</div>}
@@ -8097,13 +8195,25 @@ function ComFiche({ p, devis, clients, canEdit, maj, com, setClients, ouvrirDevi
           <span style={{fontSize:12.5}}><b style={{color:C.navy}}>{d.numero} · v{d.version}</b><br/><span style={{color:C.slate,fontSize:11.5}}>
             {d.accepte?"accepté le "+comDate(d.accepte.date):d.envoye?"envoyé le "+comDate(d.envoye.date):"non envoyé"}</span></span>
           <b style={{fontSize:12.5,color:C.navy}}>{comMad(d.totalHT)}</b></div>
-        {canEdit&&!est&&!d.accepte&&<button onClick={()=>accepter(d)} style={{...comBtn("#00936A","white"),height:36,marginTop:6,fontSize:12.5}}>Le client accepte ce devis</button>}
+        {canEdit&&p.statut!=="archive"&&!d.accepte&&<button onClick={()=>accepter(d)} style={{...comBtn("#00936A","white"),height:36,marginTop:6,fontSize:12.5}}>Le client accepte ce devis</button>}
       </div>)}</ComCarte>
     <ComCarte><ComLbl>Notes · {(p.notes||[]).length}</ComLbl>
       {canEdit&&<div style={{display:"flex",gap:6,marginBottom:8}}><input value={note} onChange={e=>setNote(e.target.value)} placeholder="Ajouter une note" style={{...comInp,height:38}}/>
         <button onClick={()=>{ if(!note.trim()) return; maj(f=>comNote(f,note,new Date().toISOString(),qui)); setNote(""); }} style={{...comBtn(COM_BLEU,"white"),width:80,height:38}}>Ajouter</button></div>}
       {(p.notes||[]).map((n,i)=><div key={i} style={{fontSize:12.5,lineHeight:1.45,padding:"6px 0",borderTop:i?"1px solid "+C.border:"none"}}>
         <b>{n.auteur} · {comDateH(n.date)}</b><br/>{n.texte}</div>)}</ComCarte>
+    {p.statut==="archive"&&p.archive&&<ComCarte style={{borderLeft:"4px solid #888780",borderRadius:"0 12px 12px 0"}}>
+      <div style={{fontSize:12.5}}><b>Fiche archivée</b> le {comDate(p.archive.date)} par {p.archive.auteur} · motif : {p.archive.motif}{p.archive.precision?" ("+p.archive.precision+")":""}</div>
+      {canEdit&&<button onClick={()=>maj(f=>comReactiver(f,new Date().toISOString(),qui))} style={{...comBtn("white",COM_BLEU,COM_BLEU),marginTop:8,height:36}}>Réactiver la fiche</button>}</ComCarte>}
+    {canEdit&&comEstActif(p)&&(arch?<ComCarte><ComLbl>Archiver ce prospect</ComLbl>
+        <CustomSelect value={arch.motif} onChange={v=>setArch(o=>({...o,motif:v}))} placeholder="-- Motif --" options={COM_MOTIFS.map(m=>({value:m,label:m}))}/>
+        <input value={arch.precision} onChange={e=>setArch(o=>({...o,precision:e.target.value}))} placeholder="Précision (facultatif)" style={{...comInp,marginTop:8}}/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}}>
+          <button onClick={()=>setArch(null)} style={{...comBtn("white",C.navy,"#CBD5E1"),height:38}}>Annuler</button>
+          <button onClick={()=>{ if(!arch.motif){ uiAlert("Choisissez un motif."); return; } maj(f=>comArchiver(f,arch.motif,arch.precision,new Date().toISOString(),qui)); setArch(null); }}
+            style={{...comBtn("#5F5E5A","white"),height:38}}>Archiver</button></div>
+        <div style={{fontSize:11,color:C.slate,marginTop:6}}>La fiche n'est jamais supprimée : elle reste consultable dans « Archivés » et peut être réactivée.</div></ComCarte>
+      :<button onClick={()=>setArch({motif:"",precision:""})} style={comBtn("white",C.slate,"#CBD5E1")}>Archiver ce prospect (perdu, doublon, essai)</button>)}
     <ComCarte><ComLbl>Historique</ComLbl>
       {[...(p.historique||[])].reverse().map((h,i)=><div key={i} style={{fontSize:12,lineHeight:1.55}}><span style={{color:C.slate}}>{comDateH(h.date)}</span> {h.texte} <span style={{color:C.slateL}}>· {h.auteur}</span></div>)}</ComCarte>
   </>);
@@ -8123,7 +8233,7 @@ function ComDevisListe({ devis, ouvrir }){
   </>);
 }
 
-function ComDevisDetail({ d, canEdit, com, fiche, nouvelleVersion }){
+function ComDevisDetail({ d, canEdit, com, fiche, nouvelleVersion, flights, demandes, accepter }){
   if(!d) return <ComCarte>Devis introuvable.</ComCarte>;
   const qui=comQui(), rc=comRecalcul(d);
   const envoye=async()=>{
@@ -8141,8 +8251,11 @@ function ComDevisDetail({ d, canEdit, com, fiche, nouvelleVersion }){
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
       <button onClick={()=>comOuvrirPdf(d)} style={comBtn("white",C.navy,"#CBD5E1")}>📄 Ouvrir le PDF</button>
       <button onClick={envoyer} style={comBtn("#25D366","white")}>📤 Envoyer</button></div>
-    {canEdit&&!d.envoye&&<button onClick={envoye} style={comBtn(COM_BLEU,"white")}>✓ Marquer comme envoyé</button>}
+    {canEdit&&!d.envoye&&!d.accepte&&<button onClick={envoye} style={comBtn(COM_BLEU,"white")}>✓ Marquer comme envoyé</button>}
     {canEdit&&fiche&&!d.accepte&&<button onClick={()=>nouvelleVersion(d)} style={comBtn("white",COM_BLEU,COM_BLEU)}>Modifier · créera la v{d.version+1}</button>}
+    {canEdit&&!d.accepte&&fiche&&fiche.statut!=="archive"&&<button onClick={()=>accepter(d)} style={comBtn("#00936A","white")}>Le client accepte ce devis</button>}
+    {canEdit&&d.accepte&&!(demandes||[]).some(x=>x.statut==="active")&&<button onClick={()=>accepter(d)} style={comBtn("#00936A","white")}>📤 Transmettre aux Opérations</button>}
+    {(demandes||[]).map(x=><ComDemandeCarte key={x.id} dem={x} flights={flights} canEdit={canEdit} com={com}/>)}
     <ComCarte>{(d.lignes||[]).map((l,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:"1px solid "+C.border}}>
         <div><div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{l.libelle}</div>
           <div style={{fontSize:11,color:C.slate}}>{l.type==="immo"?l.jours+" jour(s) supplémentaire(s)":l.type==="fuel"?"":(l.de&&l.de.ville)+" → "+(l.vers&&l.vers.ville)+" · "+l.distance+" NM"}</div></div>
@@ -8502,6 +8615,113 @@ function ComDevisEdit({ fiche, parent, com, onDone }){
     <button onClick={valider} disabled={busy||!L.length||hr} style={{...comBtn(COM_BLEU,"white"),opacity:busy||!L.length||hr?.45:1}}>{busy?"Validation…":"✓ Valider le devis"}</button>
     <div style={{fontSize:11,color:C.slate,textAlign:"center"}}>Numéro attribué et montants recalculés par le serveur à la validation</div>
   </>);
+}
+
+// ── Lot C : écrans ───────────────────────────────────────────────────────────
+// Le client accepte le devis : dates souhaitées, passagers, note, puis transmission aux Opérations
+function ComAccepter({ d, prospects, clients, setClients, com, onDone }){
+  const legs=comLegsDevis(d), {prospect,client}=comClientDuDevis(d,prospects,clients);
+  const [s,setS]=useState({vols:legs.map(()=>({date:"",heure:""})),pax:"",note:""}), [busy,setBusy]=useState(false);
+  const aujourdhui=new Date().toISOString().slice(0,10), qui=comQui();
+  const setV=(i,k,v)=>setS(o=>({...o,vols:o.vols.map((x,j)=>j===i?{...x,[k]:v}:x)}));
+  const valider=async()=>{
+    const err=comValiderSaisie(legs,s,aujourdhui); if(err){ uiAlert("⚠️ "+err); return; }
+    const nom=(client&&client.nom)||(prospect&&(prospect.organisation||prospect.nom))||"le client";
+    if(!(await uiConfirm((d.accepte?"":"Le client accepte le devis "+d.numero+" v"+d.version+".\n")+"Transmettre "+legs.length+" vol(s) aux Opérations pour "+nom+" ?"))) return;
+    setBusy(true);
+    const iso=new Date().toISOString(), apts=await comAeroports();
+    let cli=client;
+    if(!cli&&prospect){ const r=comDevenirClient(prospect,clients,iso,qui,"devis "+d.numero+" v"+d.version+" accepté");
+      setClients(r.clients); com.setProspects(L=>(L||[]).map(p=>p.id===prospect.id?r.prospect:p)); cli=r.client; }
+    if(!cli){ setBusy(false); uiAlert("⚠️ Client introuvable pour ce devis."); return; }
+    if(!d.accepte) com.setDevis(L=>(L||[]).map(x=>x.id===d.id?{...x,accepte:{date:iso,auteur:qui}}:x));
+    const dem=comCreerDemande(d,cli,s,apts,iso,qui,"D"+Date.now().toString(36)+Math.random().toString(36).slice(2,5));
+    com.setDemandes(L=>[...(L||[]),dem]);
+    if(prospect) com.setProspects(L=>(L||[]).map(p=>p.id===prospect.id?{...p,updatedAt:iso,historique:[...(p.historique||[]),{date:iso,auteur:qui,texte:"Demande de "+legs.length+" vol(s) transmise aux Opérations ("+d.numero+")"}]}:p));
+    setBusy(false); sgsToast("Demande transmise aux Opérations"); onDone();
+  };
+  const tag=t=><span style={{background:t==="vol"?"#E6F1FB":"#F1EFE8",color:t==="vol"?"#0C447C":"#444441",borderRadius:5,padding:"1px 6px",fontSize:10.5,fontWeight:700}}>{t==="vol"?"COM":"POS"}</span>;
+  return (<>
+    <ComCarte><div style={{display:"flex",justifyContent:"space-between"}}><b style={{fontSize:14,color:C.navy}}>{d.numero} · v{d.version}</b><b style={{color:C.navy}}>{comMad(d.totalHT)}</b></div>
+      <div style={{fontSize:12,color:C.slate}}>{[d.client&&d.client.nom,d.client&&d.client.organisation].filter(Boolean).join(" · ")}</div></ComCarte>
+    {!client&&prospect&&<ComCarte style={{background:"#D1FAE5",borderColor:"#00936A"}}><div style={{fontSize:12,color:"#065F46",lineHeight:1.45}}>
+      <b>{prospect.organisation||prospect.nom} devient client</b> à la transmission. La fiche prospect, ses notes et son historique sont conservés.</div></ComCarte>}
+    <ComCarte><ComLbl>Dates souhaitées par le client</ComLbl>
+      {legs.map(l=><div key={l.i} style={{padding:"8px 0",borderTop:l.i?"1px solid "+C.border:"none"}}>
+        <div style={{fontSize:12.5,marginBottom:6}}>{tag(l.type)} <b>{l.libelle}</b> <span style={{color:C.slate}}>· {l.de.ville} → {l.vers.ville} · {comHm(l.minutes)}</span></div>
+        <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:8}}>
+          <input type="date" min={aujourdhui} value={s.vols[l.i].date} onChange={e=>setV(l.i,"date",e.target.value)} style={comInp}/>
+          <input type="time" value={s.vols[l.i].heure} onChange={e=>setV(l.i,"heure",e.target.value)} style={comInp}/></div></div>)}
+      <div style={{fontSize:11,color:C.slate,marginTop:6}}>Heure facultative : les Opérations fixent l'heure définitive.</div></ComCarte>
+    <ComCarte><div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:C.navy}}>Passagers</span>
+        <input type="number" inputMode="numeric" min="1" max="18" value={s.pax} onChange={e=>setS(o=>({...o,pax:e.target.value}))} style={{...comInp,width:80,textAlign:"center",fontWeight:700}}/></div>
+      <div style={{marginTop:10}}><ComLbl>Note pour les Opérations</ComLbl>
+        <textarea rows={3} value={s.note} onChange={e=>setS(o=>({...o,note:e.target.value}))} placeholder="Bagages, contact sur place, contraintes…" style={{...comInp,height:"auto",padding:10,lineHeight:1.4}}/></div></ComCarte>
+    <button onClick={valider} disabled={busy} style={{...comBtn("#00936A","white"),opacity:busy?.5:1}}>📤 Transmettre aux Opérations</button>
+  </>);
+}
+
+// Avancement d'une demande, vu du Commercial
+function ComDemandeCarte({ dem, flights, canEdit, com }){
+  const e=comEtatDemande(dem,flights), qui=comQui();
+  const lib={a_planifier:["À planifier","#BA7517"],partiel:[e.planifies+" sur "+e.total+" planifié(s)","#BA7517"],planifie:["Vols planifiés","#00936A"],annulee:["Demande annulée","#991B1B"]}[e.statut];
+  const annuler=async()=>{
+    if(e.planifies){ uiAlert("⚠️ "+e.planifies+" vol(s) déjà planifié(s) : demandez aux Opérations de les annuler dans le planning."); return; }
+    const m=await uiPrompt("Motif de l'annulation de la demande "+dem.devisNumero+" :",""); if(m===null||m===undefined) return;
+    if(!String(m).trim()){ uiAlert("Le motif est obligatoire."); return; }
+    const iso=new Date().toISOString();
+    com.setDemandes(L=>(L||[]).map(x=>x.id===dem.id?{...x,statut:"annulee",annuleLe:iso,annulePar:qui,motifAnnulation:String(m).trim().slice(0,300)}:x));
+  };
+  const envoyerHoraires=async()=>{ const t=comTexteHoraires(dem,e); if(!t) return;
+    if(navigator.share){ try{ await navigator.share({text:t}); return; }catch(x){ if(x&&x.name==="AbortError") return; } }
+    window.open("https://wa.me/?text="+encodeURIComponent(t),"_blank"); };
+  return (<ComCarte><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><ComLbl>Demande aux Opérations</ComLbl>
+      <span style={{fontSize:11,fontWeight:800,color:lib[1]}}>{lib[0]}</span></div>
+    <div style={{fontSize:11.5,color:C.slate,marginBottom:4}}>Transmise le {comDateH(dem.transmisLe)} par {dem.transmisPar} · {dem.pax} passager(s)</div>
+    {e.legs.map(l=><div key={l.i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"5px 0",borderTop:"1px solid "+C.border,fontSize:12}}>
+      <span><b>{l.type==="vol"?"COM":"POS"}</b> {l.de.iata||l.de.icao} → {l.vers.iata||l.vers.icao}</span>
+      <span style={{color:l.vol?"#00936A":C.slate,fontWeight:l.vol?700:400}}>{l.vol?comDate(l.vol.date)+" · "+(l.vol.dep||"—")+"–"+(l.vol.arr||"—"):"souhaité "+comDate(l.date)+(l.heure?" "+l.heure:"")}</span></div>)}
+    {dem.note&&<div style={{fontSize:11.5,color:C.slate,marginTop:4}}>Note : {dem.note}</div>}
+    {dem.statut==="annulee"&&<div style={{fontSize:11.5,color:"#991B1B",marginTop:4}}>Annulée le {comDate(dem.annuleLe)} par {dem.annulePar} : {dem.motifAnnulation}</div>}
+    {e.planifies>0&&dem.statut!=="annulee"&&<button onClick={envoyerHoraires} style={{...comBtn("#25D366","white"),marginTop:8,height:38}}>📤 Envoyer les horaires au client</button>}
+    {canEdit&&dem.statut==="active"&&e.planifies===0&&<button onClick={annuler} style={{...comBtn("white","#991B1B","#FCA5A5"),marginTop:8,height:36,fontSize:12.5}}>Annuler la demande</button>}
+  </ComCarte>);
+}
+
+// Partie commerciale de la fiche client : devis, demandes, nouveau devis
+function ComClientCommercial({ c, prospects, devis, demandes, flights, canEdit, ouvrirDevis, nouveauDevis }){
+  const fiches=new Set([c.id,...(prospects||[]).filter(p=>p.clientRef===c.id).map(p=>p.id)]);
+  const D=(devis||[]).filter(d=>fiches.has(d.ficheId)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const Dm=(demandes||[]).filter(x=>x.clientId===c.id&&x.statut==="active");
+  return (<div style={{margin:"14px 0",padding:12,background:"#F0F9FB",borderRadius:12,border:"1px solid #A5DCE8"}}>
+    <div style={{fontSize:11,fontWeight:800,color:"#0E5A6B",textTransform:"uppercase",letterSpacing:".04em",marginBottom:6}}>Commercial</div>
+    {c.clientDepuis&&<div style={{fontSize:11.5,color:C.slate,marginBottom:6}}>Client depuis le {comDate(c.clientDepuis)}{c.origine==="prospect"?" · issu d'une fiche prospect":""}</div>}
+    <div style={{fontSize:12.5,fontWeight:700,color:C.navy,margin:"4px 0"}}>Devis · {D.length}</div>
+    {D.length===0&&<div style={{fontSize:12,color:C.slate}}>Aucun devis.</div>}
+    {D.map(d=><div key={d.id} role="button" onClick={()=>ouvrirDevis(d.id)} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderTop:"1px solid #CDE9EF",fontSize:12,...TAP}}>
+      <span><b>{d.numero} · v{d.version}</b><br/><span style={{color:C.slate}}>{d.accepte?"accepté le "+comDate(d.accepte.date):d.envoye?"envoyé le "+comDate(d.envoye.date):"non envoyé"}</span></span><b>{comMad(d.totalHT)}</b></div>)}
+    {Dm.length>0&&<div style={{fontSize:12.5,fontWeight:700,color:C.navy,margin:"8px 0 4px"}}>Demandes en cours · {Dm.length}</div>}
+    {Dm.map(x=>{ const e=comEtatDemande(x,flights); return <div key={x.id} style={{fontSize:12,padding:"4px 0"}}>{x.devisNumero} · {e.statut==="planifie"?"vols planifiés":e.planifies+" sur "+e.total+" planifié(s)"}</div>; })}
+    {canEdit&&<button onClick={nouveauDevis} style={{...comBtn(COM_BLEU,"white"),marginTop:10,height:40}}>📄 Nouveau devis</button>}
+  </div>);
+}
+
+// Vols à planifier, vus des Opérations, en tête du formulaire Vol
+function ComVolsAPlanifierListe({ liste, lien, onChoisir }){
+  if(!liste||!liste.length) return null;
+  const groupes=[]; liste.forEach(x=>{ let g=groupes.find(y=>y.dem.id===x.dem.id); if(!g){ g={dem:x.dem,legs:[]}; groupes.push(g); } g.legs.push(x.leg); });
+  return (<div style={{background:"#FFF7E6",border:"1px solid #FAC775",borderRadius:12,padding:12,marginBottom:14}}>
+    <div style={{fontSize:12.5,fontWeight:800,color:"#854F0B",marginBottom:6}}>🛫 Vols à planifier · {liste.length}</div>
+    {groupes.map(g=><div key={g.dem.id} style={{background:"white",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+      <div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{g.dem.clientNom}</div>
+      <div style={{fontSize:11,color:C.slate}}>{g.dem.devisNumero} · {g.dem.pax} passager(s) · transmis par {g.dem.transmisPar}</div>
+      {g.dem.note&&<div style={{fontSize:11.5,marginTop:3}}>Note : {g.dem.note}</div>}
+      {g.legs.map(l=>{ const on=lien&&lien.demandeId===g.dem.id&&lien.demandeVol===l.i;
+        return <div key={l.i} role="button" onClick={()=>onChoisir(g.dem,l)} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 0",borderTop:"1px solid "+C.border,fontSize:12,...TAP,background:on?"#E6F1FB":"transparent"}}>
+          <span><b>{l.type==="vol"?"COM":"POS"}</b> {l.de.iata||l.de.icao} → {l.vers.iata||l.vers.icao} · {String(l.date).split("-").reverse().join("/")}{l.heure?" "+l.heure:""}</span>
+          <b style={{color:on?"#0C447C":"#0369A1"}}>{on?"en cours ✓":"Planifier ›"}</b></div>; })}
+    </div>)}
+  </div>);
 }
 
 // ── Screens ──────────────────────────────────────────────────────────────────
@@ -10031,7 +10251,7 @@ function auditFields(a,b){ const ch={}; const ks=new Set([...Object.keys(a||{}),
 
 // ══ Consultation du journal d'audit (lot 3) ═════════════════════════
 const AUDIT_MODULES={sgsHazards:"Dangers",sgsActions:"Actions",sgsEvStatus:"Statut et analyse des comptes rendus",safety:"Comptes rendus",flights:"Vols",crew:"Équipage",aircraft:"Avions",
-  clients:"Clients",prospects:"Prospects",devis:"Devis",comParams:"Paramètres des devis",comImports:"Imports Fiches Airshow",sgsManual:"Indicateurs saisis",sgsMeetings:"Safety Meetings",sgsRevues:"Revues de sécurité",sgsChanges:"Changements",sgsAudits:"Audits",sgsFormations:"Formations",
+  clients:"Clients",prospects:"Prospects",devis:"Devis",comParams:"Paramètres des devis",comImports:"Imports Fiches Airshow",demandes:"Demandes de vols",sgsManual:"Indicateurs saisis",sgsMeetings:"Safety Meetings",sgsRevues:"Revues de sécurité",sgsChanges:"Changements",sgsAudits:"Audits",sgsFormations:"Formations",
   sgsFrat:"FRAT",sgsSt:"Sous-traitants",sgsItw:"Interviews",sgsReco:"Recommandations",sgsPlan:"Planning SGS",sgsOsv:"Contrôles OSV",sgsResponsable:"Signataire SGS",
   connexion:"Connexions",comptes:"Comptes",["export PDF"]:"Exports PDF",essai:"Installation",
   melHist:"Historique des MEL",fin:"Finances",maint:"Maintenance",satisfaction:"Enquêtes de satisfaction",
@@ -12388,6 +12608,7 @@ function AppMain({ onLogout, profileId }) {
   useEffect(()=>{ let vivant=true; const lire=()=>sbGet(PFX+"comParams").then(r=>{ if(vivant&&r) setComParams({...COM_DEFAUTS,...unwrapEnv(r).v}); });
     lire(); const t=setInterval(lire,5*60*1000); return ()=>{ vivant=false; clearInterval(t); }; },[]);
   const [comImports,setComImports] = usePersist("comImports",[]);
+  const [demandes,setDemandes]   = usePersist("demandes",[]);   // vols transmis par le Commercial aux Opérations
   const [aircraft,setAircraft] = usePersist("aircraft",INIT_AIRCRAFT);
   const [dismissed,setDism]  = usePersist("dismissed",[]);
   const [alertHist,setAlertHist] = usePersist("alertHist",[]);
@@ -12468,7 +12689,7 @@ function AppMain({ onLogout, profileId }) {
   // téléchargé, qui resterait intrusif — l'Export manuel s'en charge.
   const AUTO_BACKUP_MS = 30*60*1000;
   const stateRef = useRef({});
-  stateRef.current = { flights, maintData, crew, finData, kpis, dismissed, safetyData, clients, ndsArchive, prospects, devis, comParams, comImports,
+  stateRef.current = { flights, maintData, crew, finData, kpis, dismissed, safetyData, clients, ndsArchive, prospects, devis, comParams, comImports, demandes,
     sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings, sgsResponsable, sgsRevues, sgsChanges, sgsAudits, sgsFormations, sgsFrat, sgsSt,  sgsItw, sgsReco, sgsPlan, sgsOsv, satisfaction:satis };
   const buildBackup = () => ({ version:"1.0", exportDate:new Date().toISOString(), auto:true, ...stateRef.current });
   const lastAutoRef = useRef(0);
@@ -12507,6 +12728,7 @@ function AppMain({ onLogout, profileId }) {
     if(data.prospects) setProspects(data.prospects);
     if(data.devis)     setDevis(data.devis);
     if(data.comImports)setComImports(data.comImports);
+    if(data.demandes)  setDemandes(data.demandes);
     if(data.alertHist) setAlertHist(data.alertHist);
     if(data.melHist)   setMelHist(data.melHist);
     if(data.aircraft)  setAircraft(data.aircraft);
@@ -12562,7 +12784,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);
     setClients(INIT_CLIENTS);setNdsArchive([]);   // sinon ces deux-là reviennent depuis le cloud
-    setProspects([]);setDevis([]);setComImports([]);   // les Paramètres (tarifs) sont conservés
+    setProspects([]);setDevis([]);setComImports([]);setDemandes([]);   // les Paramètres (tarifs) sont conservés
     setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);setSgsRevues([]);setSgsChanges([]);setSgsAudits([]);setSgsFormations([]);setSgsFrat([]);setSgsItw([]);setSgsReco([]);setSgsPlan([]);setSgsOsv([]);setSatis([]);
     setReport(null);setReset(false);setTab("forms");
   };
@@ -12646,7 +12868,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
-        {tab==="forms"   && <ScreenForms onManuel={()=>setManuelOuvert(true)} com={{prospects,setProspects,devis,setDevis,params:comParams,setParams:setComParams,imports:comImports,setImports:setComImports}} satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
+        {tab==="forms"   && <ScreenForms onManuel={()=>setManuelOuvert(true)} com={{prospects,setProspects,devis,setDevis,params:comParams,setParams:setComParams,imports:comImports,setImports:setComImports,demandes,setDemandes}} satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
           sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,reg:{revues:sgsRevues,setRevues:setSgsRevues,changes:sgsChanges,setChanges:setSgsChanges,audits:sgsAudits,setAudits:setSgsAudits,formations:sgsFormations,setFormations:setSgsFormations,frat:sgsFrat,setFrat:setSgsFrat,st:sgsSt,setSt:setSgsSt,itw:sgsItw,setItw:setSgsItw,reco:sgsReco,setReco:setSgsReco,plan:sgsPlan,setPlan:setSgsPlan,osv:sgsOsv,setOsv:setSgsOsv},ndsArchive}}
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
           onSubmitMaint={d=>{
