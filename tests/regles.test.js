@@ -28,7 +28,9 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'melDateToISO','volCompromis','plageVol','chevauchements','unwrapEnv',
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS',
   'COM_ETAPES','COM_RELANCES','COM_DEFAUTS','comParamsValides','comMigrFiche','comNorm','comTel9','comDoublon','COM_SECTEUR_TYPE',
-  'comDevenirClient','comUnion','comFusionImport','comDueInfo','comADesRelances','comRelance','comEtape','comNote','comProchainNumero'];
+  'comDevenirClient','comUnion','comFusionImport','comDueInfo','comADesRelances','comRelance','comEtape','comNote','comProchainNumero',
+  'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
+  'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -281,6 +283,47 @@ console.log('\nModule Commercial — paramètres et numérotation');
   test("signataire vide refusé", ()=>attendu(T.comParamsValides({tarifVol:75000,tarifImmo:0,immoMin:2,fuelRef:10,conso:1100,signataire:' '})===null,"accepté"));
   test("numéro suivant après l'import", ()=>attendu(T.comProchainNumero([{numero:'DEV-2026-0003'},{numero:'DEV-2026-0017'},{numero:'x'}],2026)==='DEV-2026-0018',"numéro"));
   test("premier numéro sans devis", ()=>attendu(T.comProchainNumero([],2026)==='DEV-2026-0001',"numéro"));
+}
+
+
+console.log('\nModule Commercial — calcul des devis (identique à Fiches Airshow)');
+{
+  // Les 3 devis réels de la sauvegarde Airshow du 30/09/2026 (champs de calcul seulement)
+  const REELS=[{"numero": "DEV-2026-0001", "version": 1, "tarif": 70000, "immobilisation": 1, "base": {"icao": "GMME", "ville": "Rabat"}, "retour": {"icao": "GMME", "ville": "Rabat"}, "totalHT": 375668, "tva": 75134, "ttc": 450802, "national": true, "lignes": [{"type": "mep", "libelle": "Mise en place", "jours": 0, "de": {"icao": "GMME", "ville": "Rabat"}, "vers": {"icao": "GMMN", "ville": "Casablanca"}, "national": true, "passagers": false, "distance": 58, "minutes": 25, "montant": 29167}, {"type": "vol", "libelle": "Vol aller", "jours": 0, "de": {"icao": "GMMN", "ville": "Casablanca"}, "vers": {"icao": "GMMH", "ville": "Dakhla"}, "national": true, "passagers": true, "distance": 727, "minutes": 136, "montant": 158667}, {"type": "vol", "libelle": "Vol retour", "jours": 0, "de": {"icao": "GMMH", "ville": "Dakhla"}, "vers": {"icao": "GMMN", "ville": "Casablanca"}, "national": true, "passagers": true, "distance": 727, "minutes": 136, "montant": 158667}, {"type": "mep", "libelle": "Retour de l'avion", "jours": 0, "de": {"icao": "GMMN", "ville": "Casablanca"}, "vers": {"icao": "GMME", "ville": "Rabat"}, "national": true, "passagers": false, "distance": 58, "minutes": 25, "montant": 29167}]}, {"numero": "DEV-2026-0002", "version": 1, "tarif": 70000, "immobilisation": 1, "base": {"icao": "GMME", "ville": "Rabat"}, "retour": {"icao": "GMME", "ville": "Rabat"}, "totalHT": 207668, "tva": 41534, "ttc": 249202, "national": true, "lignes": [{"type": "mep", "libelle": "Mise en place", "jours": 0, "de": {"icao": "GMME", "ville": "Rabat"}, "vers": {"icao": "GMMN", "ville": "Casablanca"}, "national": true, "passagers": false, "distance": 58, "minutes": 25, "montant": 29167}, {"type": "vol", "libelle": "Vol aller", "jours": 0, "de": {"icao": "GMMN", "ville": "Casablanca"}, "vers": {"icao": "GMFO", "ville": "Oujda"}, "national": true, "passagers": true, "distance": 294, "minutes": 64, "montant": 74667}, {"type": "vol", "libelle": "Vol retour", "jours": 0, "de": {"icao": "GMFO", "ville": "Oujda"}, "vers": {"icao": "GMMN", "ville": "Casablanca"}, "national": true, "passagers": true, "distance": 294, "minutes": 64, "montant": 74667}, {"type": "mep", "libelle": "Retour de l'avion", "jours": 0, "de": {"icao": "GMMN", "ville": "Casablanca"}, "vers": {"icao": "GMME", "ville": "Rabat"}, "national": true, "passagers": false, "distance": 58, "minutes": 25, "montant": 29167}]}, {"numero": "DEV-2026-0003", "version": 1, "tarif": 70000, "immobilisation": 2, "base": {"icao": "GMME", "ville": "Rabat"}, "retour": {"icao": "GMME", "ville": "Rabat"}, "totalHT": 1236668, "tva": 0, "ttc": 1236668, "national": false, "lignes": [{"type": "mep", "libelle": "Mise en place", "jours": 0, "de": {"icao": "GMME", "ville": "Rabat"}, "vers": {"icao": "GMMN", "ville": "Casablanca"}, "national": true, "passagers": false, "distance": 58, "minutes": 25, "montant": 29167}, {"type": "vol", "libelle": "Vol aller", "jours": 0, "de": {"icao": "GMMN", "ville": "Casablanca"}, "vers": {"icao": "FCBB", "ville": "Brazzaville"}, "national": false, "passagers": true, "distance": 2606, "minutes": 445, "montant": 519167}, {"type": "vol", "libelle": "Vol retour", "jours": 0, "de": {"icao": "FCBB", "ville": "Brazzaville"}, "vers": {"icao": "GMMN", "ville": "Casablanca"}, "national": false, "passagers": true, "distance": 2606, "minutes": 445, "montant": 519167}, {"type": "mep", "libelle": "Retour de l'avion", "jours": 0, "de": {"icao": "GMMN", "ville": "Casablanca"}, "vers": {"icao": "GMME", "ville": "Rabat"}, "national": true, "passagers": false, "distance": 58, "minutes": 25, "montant": 29167}, {"type": "immo", "libelle": "Immobilisation de l'appareil", "jours": 1, "de": {"icao": "", "ville": ""}, "vers": {"icao": "", "ville": ""}, "national": false, "passagers": false, "distance": 0, "minutes": 120, "montant": 140000}]}];
+  const apts=T.comAptListe(JSON.parse(fs.readFileSync(require('path').join(__dirname,'..','aeroports.json'),'utf8')));
+  test("438 aéroports chargés", ()=>attendu(apts.length===438&&T.comAptBy(apts,'GMAZ').ville==='Zagora',"liste"));
+  REELS.forEach(d=>{
+    const V={tarifVol:d.tarif,tarifImmo:d.tarif,immoMin:2,fuelRef:10,conso:1100};
+    const p=d.lignes.filter(l=>l.passagers), by=i=>T.comAptBy(apts,i);
+    const e={dep:by(p[0].de.icao),arr:by(p[0].vers.icao),ar:p.length>1,immo:d.immobilisation,bas:by(d.base.icao),ret:by(d.retour.icao),ovr:{},fuelForce:{}};
+    const L=T.comDvLegs(e,V,null), Tt=T.comTotaux(L,V);
+    test(d.numero+" : vols reconstruits à l'identique (distances et minutes)", ()=>attendu(JSON.stringify(L.map(l=>[l.type,l.distance,l.minutes]))===JSON.stringify(d.lignes.map(l=>[l.type,l.distance,l.minutes])),JSON.stringify(L.map(l=>[l.type,l.distance,l.minutes]))));
+    test(d.numero+" : total HT, TVA et TTC identiques ("+d.totalHT+" MAD)", ()=>attendu(Tt.ht===d.totalHT&&Tt.tva===d.tva&&Tt.ttc===d.ttc,JSON.stringify(Tt)));
+    test(d.numero+" : contrôle du devis enregistré, écart 0", ()=>attendu(T.comRecalcul(d).ecart===0,String(T.comRecalcul(d).ecart)));
+  });
+  const by=i=>T.comAptBy(apts,i), V={tarifVol:75000,tarifImmo:75000,immoMin:2,fuelRef:10,conso:1100};
+  test("Casablanca → Dakhla : 727 NM, 136 min (distance non arrondie, comme Airshow)", ()=>{ const L=T.comBuildLegs(by('GMMN'),by('GMMH'),false,by('GMMN'),by('GMMH')); attendu(L.length===1&&L[0].distance===727&&L[0].minutes===136,JSON.stringify(L)); });
+  test("départ depuis la base : pas de mise en place", ()=>attendu(!T.comBuildLegs(by('GMME'),by('GMMX'),true,by('GMME'),by('GMME')).some(l=>l.type==='mep'),"mise en place en trop"));
+  test("aller-retour hors base : mise en place et retour de l'avion", ()=>attendu(T.comBuildLegs(by('GMMN'),by('GQNO'),true,by('GMME'),by('GMME')).map(l=>l.libelle).join('|')==="Mise en place|Vol aller|Vol retour|Retour de l'avion","ordre"));
+  test("même aéroport au départ et à l'arrivée : aucun vol", ()=>attendu(T.comBuildLegs(by('GMMN'),by('GMMN'),true,by('GMME'),by('GMME')).length===0,"vol créé"));
+  test("vol national : TVA 20 %", ()=>{ const L=T.comDvLegs({dep:by('GMMN'),arr:by('GMMH'),ar:false,immo:1,bas:by('GMMN'),ret:by('GMMH'),ovr:{},fuelForce:{}},V,null); attendu(T.comTotaux(L,V).tva===Math.round(T.comTotaux(L,V).ht*0.2),"TVA"); });
+  test("vol international : TVA 0", ()=>{ const L=T.comDvLegs({dep:by('GMMN'),arr:by('GQNO'),ar:true,immo:2,bas:by('GMME'),ret:by('GMME'),ovr:{},fuelForce:{}},V,null); attendu(T.comTotaux(L,V).tva===0,"TVA"); });
+  test("2 jours sur place : 1 jour inclus, 1 jour facturé 2 h", ()=>{ const L=T.comDvLegs({dep:by('GMMN'),arr:by('GQNO'),ar:true,immo:2,bas:by('GMME'),ret:by('GMME'),ovr:{},fuelForce:{}},V,null), im=L.find(l=>l.type==='immo'); attendu(im&&im.jours===1&&T.comLineAmt(im,V)===150000,JSON.stringify(im)); });
+  test("aller simple : jamais d'immobilisation", ()=>attendu(!T.comDvLegs({dep:by('GMMN'),arr:by('GQNO'),ar:false,immo:5,bas:by('GMME'),ret:by('GMME'),ovr:{},fuelForce:{}},V,null).some(l=>l.type==='immo'),"immobilisation"));
+  test("rayon d'action : Casablanca → Brazzaville refusé", ()=>attendu(T.comBuildLegs(by('GMMN'),by('FCBB'),false,by('GMMN'),by('FCBB')).some(T.comHorsRange),"accepté"));
+  test("rayon d'action : Casablanca → Nouakchott accepté", ()=>attendu(!T.comBuildLegs(by('GMMN'),by('GQNO'),false,by('GMMN'),by('GQNO')).some(T.comHorsRange),"refusé"));
+  test("durée modifiée à la main : prise en compte", ()=>{ const L=T.comDvLegs({dep:by('GMMN'),arr:by('GMMH'),ar:false,immo:1,bas:by('GMMN'),ret:by('GMMH'),ovr:{0:150},fuelForce:{}},V,null); attendu(L[0].minutes===150&&T.comLineAmt(L[0],V)===187500,"durée"); });
+  const E={dep:by('GMMN'),arr:by('GQNO'),ar:true,immo:2,bas:by('GMME'),ret:by('GMME'),ovr:{}};
+  test("carburant : exemple de la maquette (11,20 MAD/L → 9 108 MAD)", ()=>{ const L=T.comDvLegs({...E,fuelForce:{}},V,{madL:11.2}), f=L.find(l=>l.type==='fuel'); attendu(f&&f.montant===9108&&T.comTotaux(L,V).ht===676608,JSON.stringify(f&&f.montant)); });
+  test("carburant sous la référence : remise", ()=>{ const f=T.comDvLegs({...E,fuelForce:{}},V,{madL:9}).find(l=>l.type==='fuel'); attendu(f&&f.montant<0,"pas de remise"); });
+  test("carburant : prix forcé sur un seul aéroport", ()=>{ const A=T.comFuelAirports(T.comDvLegs({...E,fuelForce:{GQNO:12}},V,{madL:11.2}),{madL:11.2},{GQNO:12},V); attendu(A.find(a=>a.icao==='GQNO').force&&A.find(a=>a.icao==='GMMN').prix===11.2,"forçage"); });
+  test("sans indice ni prix forcé : pas de surcharge", ()=>attendu(!T.comDvLegs({...E,fuelForce:{}},V,null).some(l=>l.type==='fuel'),"surcharge"));
+  test("recherche : code IATA exact en premier", ()=>attendu(T.comAptSearch(apts,'cmn')[0].icao==='GMMN',"ordre"));
+  test("recherche : ville du salon reconnue", ()=>attendu(T.comAptGuess(apts,'Dakhla').icao==='GMMH'&&T.comAptGuess(apts,'Casablanca').icao==='GMMN',"ville"));
+  const f={id:'x',etape:0,relances:{brochure:null,devis:null,j2:{date:'a'},j7:null},historique:[]};
+  test("devis envoyé : relances J+2 et J+7 repartent, étape « Devis envoyé »", ()=>{ const g=T.comDevisEnvoye(f,'DEV-2026-0004 v1','2026-10-11T09:00:00.000Z','Anas'); attendu(g.relances.devis.auteur==='Anas'&&g.relances.j2===null&&g.etape===2,JSON.stringify(g.relances)); });
+  test("introduction de secours sans IA", ()=>attendu(/^Suite à notre échange/.test(T.comIntroSecours({organisation:'OCP'},by('GMMN'),by('GMMH'))),"texte"));
+  test("contexte de l'IA : libellés en clair", ()=>attendu(T.comContexteIA({nom:'A',groupe:'10a18',types:['delegation'],notes:[{texte:'n'}]},by('GMMN'),by('GMMH'),true).groupe==='10 à 18',"libellé"));
 }
 
 
