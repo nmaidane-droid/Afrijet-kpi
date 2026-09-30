@@ -32,7 +32,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
   'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
-  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','sgsReceptionAuto','sgsMoisFr','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
+  'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','sgsHorodate','sgsReceptionAuto','sgsMoisFr','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
 const T=ctx;
@@ -490,7 +490,10 @@ console.log('\nFiche d\'analyse — date de réception automatique');
 {
   test("réception : jour d'enregistrement du compte rendu", ()=>attendu(T.sgsReceptionAuto({date:'2026-10-10',timestamp:'2026-10-12T11:20:00.000Z'})==='2026-10-12',T.sgsReceptionAuto({timestamp:'2026-10-12T11:20:00.000Z'})));
   test("réception : compte rendu anonyme, mois seulement", ()=>attendu(T.sgsReceptionAuto({anonyme:true,date:'2026-10-01',timestamp:'2026-10-12T11:20:00.000Z'})==='2026-10',"jour exposé"));
-  test("réception : ancien compte rendu sans horodatage, à saisir", ()=>attendu(T.sgsReceptionAuto({date:'2026-10-10'})===''&&T.sgsReceptionAuto({timestamp:3})===''&&T.sgsReceptionAuto({timestamp:'n\'importe quoi'})==='',"rempli à tort"));
+  test("réception : sans horodatage (démonstration), date de l'événement", ()=>attendu(T.sgsReceptionAuto({date:'2026-09-17',timestamp:'demo-d01'})==='2026-09-17'&&T.sgsReceptionAuto({date:'2026-09-09',timestamp:3})==='2026-09-09',T.sgsReceptionAuto({date:'2026-09-17',timestamp:'demo-d01'})));
+  test("réception : sans horodatage et anonyme, mois de l'événement", ()=>attendu(T.sgsReceptionAuto({date:'2026-09-01',anonyme:true,timestamp:4})==='2026-09',"jour exposé"));
+  test("réception : ni horodatage ni date, à saisir", ()=>attendu(T.sgsReceptionAuto({timestamp:'demo'})==='',"rempli à tort"));
+  test("horodatage reconnu seulement s'il est une vraie date", ()=>attendu(T.sgsHorodate({timestamp:'2026-10-12T11:20:00.000Z'})&&!T.sgsHorodate({timestamp:'demo-d01'})&&!T.sgsHorodate({timestamp:3}),"horodatage"));
   test("mois en clair", ()=>attendu(T.sgsMoisFr('2026-10')==='octobre 2026'&&T.sgsMoisFr('')==='',T.sgsMoisFr('2026-10')));
 }
 
