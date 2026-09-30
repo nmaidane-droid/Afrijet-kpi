@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.2";
+const APP_VERSION = "2.3";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -109,7 +109,7 @@ const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813
 const PROFILES = [
   {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
    pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
-   forms:["avion","crew","vol","frat","regl","sat","clients"],
+   forms:["avion","crew","vol","frat","regl","sat"],
    tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes"] },
   {id:"eqp",   label:"Équipage",   icon:"👨‍✈️", color:"#0369A1",
    pwdHash:"a52e38e3b5f9ef8b577b932c0377e1fe367325f900586baad157cfe688975d11",
@@ -123,14 +123,14 @@ const PROFILES = [
    tabs:["forms"],       readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"comm",  label:"Commercial",     icon:"💼",  color:"#0891B2",
    pwdHash:"d01acdec3a3b87b33882a0fb8959ffda858a0642f7f54190f67aa230e04d1547",
-   forms:["clients"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"], blocked:[] },
+   forms:["commercial","params"], tabs:["forms"], readOnly:["live","ops"], blocked:[] },   // prospects, devis, clients : module Commercial
   {id:"fin",   label:"Finances",    icon:"💰",  color:"#7C3AED",
    pwdHash:"2bb078f176007917292c786bdc9fd0a51a88eebf9bfbae142455c0c652f9475c",
    forms:["fin"],
    tabs:["forms"],       readOnly:["live","secu","maint","ops","fin","alertes","perf"] },
   {id:"dir",   label:"Direction",   icon:"🏢",  color:"#A0720A",
    pwdHash:"ed494928275b93b897810bd7b090babaee8d4d92268cd96119eef7948b251184",
-   forms:["rapport","frat","sgs","regl"],   // FRAT : décision sur un rouge · SGS et Réglementation : consultation
+   forms:["rapport","frat","sgs","regl","params"],   // FRAT : décision sur un rouge · SGS, Réglementation, Paramètres : consultation
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
@@ -7349,7 +7349,7 @@ function FormSatisfactionSaisie({ flights, items, setItems, onClose, onNoteVol }
     </div></Card>);
 }
 
-function ScreenForms({ onManuel, sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
+function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
   const isAdmin = profileId === "rdoa";
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="eqp"?"secu":null;   // Équipage : arrive sur le compte rendu · SGS : sur la grille
   const [active,setActive]=useState(defaultForm);
@@ -7380,6 +7380,7 @@ function ScreenForms({ onManuel, sgs, satis, setSatis, onNoteVol, onSubmitVol, o
       safetyData,
       clients,
       ndsArchive,
+      ...(com?{prospects:com.prospects,devis:com.devis,comParams:com.params,comImports:com.imports}:{}),
       ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,satisfaction:satis,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv}:{}),
     };
     setProgress(p=>({...p,currentStep:1,pct:40}));
@@ -7428,7 +7429,8 @@ function ScreenForms({ onManuel, sgs, satis, setSatis, onNoteVol, onSubmitVol, o
     {id:"secu",     icon:"🛡",  label:"Comptes rendus", color:"#DC2626"},
     {id:"regl",     icon:"📋",  label:"Réglementation", color:"#B45309"},
     {id:"sat",      icon:"⭐",  label:"Satisfaction",   color:"#D97706"},
-    {id:"clients",  icon:"🏢",  label:"Clients",         color:"#0891B2"},
+    {id:"commercial",icon:"💼", label:"Commercial",      color:"#0891B2"},
+    {id:"params",   icon:"⚙️",  label:"Paramètres",      color:"#475569"},
     {id:"nds",      icon:"📋",  label:"Générateur IA",   color:"#0F1F3D"},
     {id:"rapport",  icon:"📊",  label:"Rapport",         color:"#00936A"},
     {id:"fin",      icon:"💰",  label:"Finances",       color:"#7C3AED"},
@@ -7438,6 +7440,7 @@ function ScreenForms({ onManuel, sgs, satis, setSatis, onNoteVol, onSubmitVol, o
   // Pastilles des tuiles : FRAT rouges non décidés, et comptes rendus reçus au SGS
   const pastille = (id)=>{
     if(id==="frat") return ((sgs&&sgs.reg&&sgs.reg.frat)||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&!f.decision2).length;
+    if(id==="commercial") return ((com&&com.prospects)||[]).filter(p=>comADesRelances(p,new Date())).length;   // relances du jour
     if(id==="sgs"){ const ES=(sgs&&sgs.evStatus)||{};
       return (safetyData||[]).filter(e=>!((ES[sgsEventKey(e)]||{}).statut)||((ES[sgsEventKey(e)]||{}).statut)==='recu').length; }
     return 0;
@@ -7688,10 +7691,457 @@ function ScreenForms({ onManuel, sgs, satis, setSatis, onNoteVol, onSubmitVol, o
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"||profileId==="dir"}/>}
       {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}
         modesOK={profileId==="sgs"?["re","dgac","as"]:null} respSgs={sgs?sgs.responsable:null}/>}
-      {effectiveActive==="clients"  && <FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={profileId==="rdoa"||profileId==="ops"}/>}
+      {effectiveActive==="commercial" && com && <CommercialModule com={com} clients={clients} setClients={setClients} flights={flights} satis={satis} profileId={profileId} onBack={()=>setActive(null)}/>}
+      {effectiveActive==="params" && com && <FormParams params={com.params} setParams={com.setParams} canEdit={profileId==="rdoa"}/>}
       {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
     </div>
   );
+}
+
+// ══ Module Commercial — règles (lot A) ═══════════════════════════════════════
+// Reprises de Fiches Airshow 2.4 (api/fiches.js, api/variables.js, index.html) pour que
+// l'import et le suivi donnent exactement le même résultat que dans Airshow.
+const COM_ETAPES=["Visite","Brochure","Devis envoyé","Rendez-vous"];   // « Contrat » d'Airshow : le prospect devient client
+const COM_RELANCES={brochure:"Brochure envoyée",devis:"Devis envoyé",j2:"Relance J+2",j7:"Relance J+7"};
+const COM_CHOIX={
+  secteur:{admin:"Administration",entreprise:"Entreprise",mines:"Mines / énergie",tourisme:"Tourisme",diplo:"Diplomatie / ONG",autre:"Autre"},
+  frequence:{rare:"Rare",mensuel:"Mensuel",hebdo:"Hebdomadaire"},
+  groupe:{lt10:"Moins de 10","10a18":"10 à 18",gt18:"Plus de 18"},
+  types:{affaires:"Affaires",vip:"VIP",delegation:"Délégation",sport:"Sport",humanitaire:"Humanitaire"},
+  role:{decideur:"Décideur",prescripteur:"Prescripteur",info:"Information"},
+  suites:{devis:"Devis sous 48 h",rdv:"Rendez-vous",doc:"Documentation"},
+  potentiel:{chaud:"chaud",tiede:"tiède",froid:"froid"}};
+// Variables de calcul des devis (écran Variables d'Airshow) + signataire des devis
+const COM_DEFAUTS={tarifVol:75000,tarifImmo:75000,immoMin:2,fuelRef:10,conso:1100,signataire:"Hicham QADRI"};
+// Règles fixes d'Airshow (constante DV et api/devis.js), affichées en lecture dans Paramètres
+const COM_REGLES={base:"Rabat (RBA / GMME)",vitesse:400,routes:1.10,roulage:15,validite:15,rayon:1750,tva:20};
+// Contrôle des valeurs, identique à api/variables.js d'Airshow
+function comParamsValides(b){
+  if(!b||typeof b!=="object") return null;
+  const dec=(v,min,max)=>{ const n=Math.round(Number(String(v).replace(',','.'))*100)/100; return Number.isFinite(n)&&n>=min&&n<=max?n:null; };
+  const ent=(v,min,max)=>{ const s=String(v).replace(/\s/g,''); if(s==="") return null; const n=Math.round(Number(s)); return Number.isFinite(n)&&n>=min&&n<=max?n:null; };
+  const r={tarifVol:ent(b.tarifVol,1000,1000000),tarifImmo:ent(b.tarifImmo,0,1000000),immoMin:ent(b.immoMin,0,24),
+    fuelRef:dec(b.fuelRef,0.1,100),conso:ent(b.conso,100,10000),signataire:String(b.signataire||"").trim().slice(0,80)};
+  if(Object.values(r).some(v=>v===null)||r.signataire.length<2) return null;
+  return r;
+}
+// Anciennes fiches Airshow : conversion des étapes, identique à migr() d'api/fiches.js
+function comMigrFiche(src){
+  const f=JSON.parse(JSON.stringify(src||{}));
+  if(f.etapesV!==2&&f.etapesV!==3){ if(f.etape===3) f.etape=2; else if(f.etape>=4) f.etape=3; f.etapesV=2; }
+  if(f.etapesV===2){ if(f.etape>=1) f.etape+=1; f.etapesV=3; }
+  if(f.relances&&!("brochure" in f.relances)) f.relances.brochure=null;
+  if(!f.relances) f.relances={brochure:null,devis:null,j2:null,j7:null};
+  if(!Array.isArray(f.notes)) f.notes=[];
+  if(!Array.isArray(f.historique)) f.historique=[];
+  return f;
+}
+const comNorm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+const comTel9=s=>{ const d=String(s||"").replace(/\D/g,""); return d.length>=9?d.slice(-9):""; };
+// Client existant qui pourrait être la même organisation ou la même personne
+function comDoublon(p, clients){
+  const org=comNorm(p&&p.organisation), tel=comTel9(p&&p.tel), mail=String((p&&p.email)||"").trim().toLowerCase();
+  return (clients||[]).find(c=>(org&&org===comNorm(c.nom))||(tel&&tel===comTel9(c.tel))||(mail&&mail===String(c.email||"").trim().toLowerCase()))||null;
+}
+const COM_SECTEUR_TYPE={admin:"Gouvernemental",entreprise:"Corporate",mines:"Corporate",tourisme:"Corporate",diplo:"ONG",autre:"Privé"};
+// Un prospect devient client (devis accepté, ou « Contrat » dans Airshow). Un client existant
+// reconnu comme doublon est réutilisé : jamais deux fiches client pour la même organisation.
+function comDevenirClient(p, clients, now, auteur, motif){
+  const L=clients||[], ex=comDoublon(p,L);
+  let client, liste;
+  if(ex){ client={...ex,prospectId:ex.prospectId||p.id,clientDepuis:ex.clientDepuis||now}; liste=L.map(c=>c.id===ex.id?client:c); }
+  else {
+    client={id:"C"+Date.parse(now).toString(36)+String(p.id||"").slice(-4),nom:p.organisation||p.nom||"",type:COM_SECTEUR_TYPE[p.secteur]||"Corporate",
+      pays:"",ville:"",contact:[p.nom,p.fonction].filter(Boolean).join(" — "),tel:p.tel||"",email:p.email||"",contrat:"",notes:"",
+      origine:"prospect",prospectId:p.id,clientDepuis:now};
+    liste=[...L,client];
+  }
+  const prospect={...p,statut:"client",clientRef:client.id,updatedAt:now,
+    historique:[...(p.historique||[]),{date:now,auteur,texte:"Devenu client"+(motif?" : "+motif:"")}]};
+  return {clients:liste,prospect,client,existant:!!ex};
+}
+// Fusion d'historiques ou de notes (import répété) : union, sans doublon, dans l'ordre chronologique
+function comUnion(a,b){ const m=new Map(); [...(a||[]),...(b||[])].forEach(x=>m.set((x.date||"")+"|"+(x.texte||""),x));
+  return [...m.values()].sort((x,y)=>String(x.date||"").localeCompare(String(y.date||""))); }
+// Import d'une sauvegarde Airshow. Pur : renvoie les nouvelles listes et un rapport, ne modifie rien.
+// Règles de restauration d'Airshow : on ajoute ce qui manque, on garde la version la plus récente, on ne supprime rien.
+function comFusionImport(ex, fichier, now, auteur){
+  const F=fichier||{};
+  if(F.app!=="fiches-airshow"||F.format!==1||!Array.isArray(F.fiches)||!Array.isArray(F.devis))
+    return {erreur:"Ce fichier n'est pas une sauvegarde de Fiches Airshow (format 1)."};
+  let prospects=[...(ex.prospects||[])], devis=[...(ex.devis||[])], clients=[...(ex.clients||[])];
+  const R={fichesNouvelles:0,fichesMaj:0,fichesIdentiques:0,devisNouveaux:0,devisMaj:0,devisIdentiques:0,notes:0,doublons:[],contrats:0,
+    dateSauvegarde:F.date||"",dernierNumero:"",dernierTarif:null};
+  const contrats=[];
+  F.fiches.forEach(src=>{
+    if(!src||!src.id) return;
+    const m=comMigrFiche(src), air={...m,airshowCid:m.clientId||""}; delete air.clientId;
+    const i=prospects.findIndex(p=>p.id===src.id);
+    if(i<0){
+      const p={...air,statut:"prospect",source:"airshow",importeLe:now,
+        historique:[...air.historique,{date:now,auteur,texte:"Fiche importée de Fiches Airshow"}]};
+      prospects.push(p); R.fichesNouvelles++; R.notes+=air.notes.length;
+      if(air.etape>=4) contrats.push(p.id);
+      else { const d=comDoublon(p,clients); if(d) R.doublons.push({nom:p.nom,organisation:p.organisation,client:d.nom}); }
+    } else if(String(air.updatedAt||"")>String(prospects[i].updatedAt||"")){
+      const o=prospects[i];
+      prospects[i]={...o,...air,statut:o.statut,clientRef:o.clientRef,source:o.source,importeLe:o.importeLe,
+        etape:o.statut==="client"?o.etape:Math.min(air.etape,3),
+        notes:comUnion(o.notes,air.notes).reverse(),historique:comUnion(o.historique,air.historique)};
+      if(air.etape>=4&&o.statut!=="client") contrats.push(o.id);
+      R.fichesMaj++;
+    } else R.fichesIdentiques++;
+  });
+  F.devis.forEach(d=>{
+    if(!d||!d.id) return;
+    const i=devis.findIndex(x=>x.id===d.id);
+    if(i<0){ devis.push({...d,source:"airshow"}); R.devisNouveaux++; }
+    else if(d.envoye&&!devis[i].envoye){ devis[i]={...devis[i],envoye:d.envoye}; R.devisMaj++; }
+    else R.devisIdentiques++;
+  });
+  // « Contrat » dans Airshow : le prospect devient client
+  contrats.forEach(id=>{ const i=prospects.findIndex(p=>p.id===id);
+    const r=comDevenirClient(prospects[i],clients,now,auteur,"étape « Contrat » dans Fiches Airshow");
+    clients=r.clients; prospects[i]={...r.prospect,etape:3}; R.contrats++; });
+  const tri=[...devis].sort((a,b)=>String(b.numero).localeCompare(String(a.numero))||(b.version-a.version));
+  if(tri[0]) R.dernierNumero=tri[0].numero;
+  const parDate=[...devis].filter(d=>d.tarif).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+  if(parDate[0]) R.dernierTarif={numero:parDate[0].numero,tarif:parDate[0].tarif,date:parDate[0].date};
+  return {prospects,devis,clients,rapport:R};
+}
+// Relance attendue — identique à dueInfo() d'Airshow. diff : jours avant l'échéance (négatif = en retard).
+function comDueInfo(f, now){
+  if(!f||f.statut==="client"||f.etape>=4) return null;
+  const sod=d=>{ const x=new Date(d); x.setHours(0,0,0,0); return x; };
+  const jours=d=>Math.round((d-sod(now||Date.now()))/864e5);
+  const R=f.relances||{};
+  if(!R.devis&&!R.brochure){
+    const s=f.suites||[], k=s.includes("devis")?"devis":s.includes("doc")?"brochure":s.includes("rdv")?"rdv":"contact";
+    const d=sod(f.createdAt); d.setDate(d.getDate()+2); return {k,pre:true,d,diff:jours(d)};
+  }
+  let k=null; if(!R.j2) k="J+2"; else if(!R.j7) k="J+7";
+  if(!k) return null;
+  const a=R.devis?R.devis.date:"", b=R.brochure?R.brochure.date:"", base=(a>b?a:b)||f.createdAt;
+  const d=sod(base); d.setDate(d.getDate()+(k==="J+2"?2:7));
+  return {k,d,diff:jours(d)};
+}
+const comADesRelances=(f,now)=>{ const i=comDueInfo(f,now); return !!i&&i.diff<=0; };
+// Cocher / décocher une relance — identique à l'opération « relance » d'Airshow
+function comRelance(f, k, now, auteur){
+  if(!(k in COM_RELANCES)) return f;
+  const g=JSON.parse(JSON.stringify(f)); g.relances=g.relances||{}; g.historique=g.historique||[];
+  if(g.relances[k]){ g.relances[k]=null; g.historique.push({date:now,auteur,texte:COM_RELANCES[k]+" : annulé"}); }
+  else {
+    g.relances[k]={date:now,auteur}; g.historique.push({date:now,auteur,texte:COM_RELANCES[k]+" : fait"});
+    const cible=k==="brochure"?1:k==="devis"?2:0;
+    if(cible&&(g.etape||0)<cible){ g.etape=cible; g.historique.push({date:now,auteur,texte:"Étape « "+COM_ETAPES[cible]+" »"}); }
+  }
+  g.updatedAt=now; return g;
+}
+function comEtape(f, e, now, auteur){
+  if(!(e>=0&&e<COM_ETAPES.length)||e===f.etape) return f;
+  return {...f,etape:e,updatedAt:now,historique:[...(f.historique||[]),{date:now,auteur,texte:"Étape « "+COM_ETAPES[e]+" »"}]};
+}
+function comNote(f, texte, now, auteur){
+  const t=String(texte||"").trim().slice(0,2000); if(!t) return f;
+  return {...f,updatedAt:now,notes:[{date:now,auteur,texte:t},...(f.notes||[])]};
+}
+// Numéro du prochain devis : suite de la numérotation d'Airshow (DEV-AAAA-NNNN)
+function comProchainNumero(devis, annee){
+  const n=(devis||[]).map(d=>/^DEV-\d{4}-(\d+)$/.exec(String(d.numero||""))).filter(Boolean).map(m=>Number(m[1]));
+  return "DEV-"+annee+"-"+String((n.length?Math.max(...n):0)+1).padStart(4,"0");
+}
+
+// ══ Module Commercial — écrans (lot A) ═══════════════════════════════════════
+const COM_BLEU="#0891B2";
+const comQui=()=>userLabel(sgsCurrentUser())||"Commercial";
+const comDate=s=>{ if(!s) return ""; const d=new Date(s); return isNaN(d)?"":d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"}); };
+const comDateH=s=>{ if(!s) return ""; const d=new Date(s); return isNaN(d)?"":comDate(s)+" "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}); };
+const comMad=n=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g," ")+" MAD";
+const COM_POT={chaud:["#E24B4A","#A32D2D"],tiede:["#BA7517","#854F0B"],froid:["#888780","#5F5E5A"]};
+const COM_PRE={devis:"Devis à envoyer",brochure:"Brochure à envoyer",rdv:"Rendez-vous à fixer",contact:"Premier contact"};
+function comDueTexte(i){
+  if(!i) return {t:"Suivi terminé",c:C.slate};
+  const quand=i.diff<0?"en retard":i.diff===0?"aujourd'hui":"le "+comDate(i.d);
+  if(i.pre) return {t:COM_PRE[i.k]+" "+(i.diff<0?"— en retard":i.diff===0?"aujourd'hui":"avant le "+comDate(i.d)),c:i.diff<=0?"#A32D2D":C.slate};
+  return {t:"Relance "+i.k+" "+quand,c:i.diff<=0?"#A32D2D":C.slate};
+}
+const comBtn=(bg,fg,bd)=>({height:42,borderRadius:10,border:bd?"1.5px solid "+bd:"none",background:bg,color:fg,fontSize:13.5,fontWeight:700,
+  display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",...TAP});
+const comInp={width:"100%",height:42,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 12px",fontSize:14,outline:"none",background:"white"};
+const ComLbl=({children})=><div style={{fontSize:10.5,fontWeight:800,color:C.slate,textTransform:"uppercase",letterSpacing:".04em",margin:"0 0 6px"}}>{children}</div>;
+const ComCarte=({children,style})=><div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:12,...(style||{})}}>{children}</div>;
+const ComLigne=({l,v,c})=><div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",fontSize:12.5}}><span style={{color:C.slate}}>{l}</span><span style={{textAlign:"right",color:c||C.text}}>{v}</span></div>;
+const comChoix=(k,v)=>Array.isArray(v)?v.map(x=>COM_CHOIX[k][x]).filter(Boolean).join(", "):(COM_CHOIX[k][v]||"");
+
+function CommercialModule({ com, clients, setClients, flights, satis, profileId, onBack }){
+  const canEdit=["comm","rdoa"].includes(profileId);
+  const [tab,setTab]=useState("pros");
+  const [vue,setVue]=useState(null);           // {k:"fiche"|"devis"|"nouvelle", id}
+  const now=new Date();
+  const prospects=com.prospects||[], devis=com.devis||[];
+  const actifs=prospects.filter(p=>p.statut!=="client");
+  const dues=actifs.filter(p=>comADesRelances(p,now)).length;
+  const majProspect=(id,fn)=>com.setProspects(L=>(L||[]).map(p=>p.id===id?fn(p):p));
+  const NAV=[["pros","Prospects",dues],["cli","Clients",0],["dev","Devis",0],["imp","Importer",0]];
+  const go=k=>{ setTab(k); setVue(null); };
+  let corps;
+  if(vue&&vue.k==="fiche") corps=<ComFiche p={prospects.find(x=>x.id===vue.id)} devis={devis} clients={clients} canEdit={canEdit}
+      maj={fn=>majProspect(vue.id,fn)} com={com} setClients={setClients} ouvrirDevis={id=>setVue({k:"devis",id,retour:vue})}/>;
+  else if(vue&&vue.k==="devis") corps=<ComDevisDetail d={devis.find(x=>x.id===vue.id)}/>;
+  else if(vue&&vue.k==="nouvelle") corps=<ComNouvelleFiche onSave={p=>{ com.setProspects(L=>[...(L||[]),p]); setVue({k:"fiche",id:p.id}); }}/>;
+  else if(tab==="pros") corps=<ComProspects liste={actifs} now={now} canEdit={canEdit} ouvrir={id=>setVue({k:"fiche",id})} nouvelle={()=>setVue({k:"nouvelle"})}/>;
+  else if(tab==="cli") corps=<FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={canEdit}/>;
+  else if(tab==="dev") corps=<ComDevisListe devis={devis} ouvrir={id=>setVue({k:"devis",id})}/>;
+  else corps=<ComImport com={com} clients={clients} setClients={setClients} canEdit={canEdit}/>;
+  const titre=vue?(vue.k==="fiche"?((prospects.find(x=>x.id===vue.id)||{}).nom||"Fiche"):vue.k==="devis"?((devis.find(x=>x.id===vue.id)||{}).numero||"Devis"):"Nouvelle fiche"):"Commercial";
+  const retour=()=>{ if(vue&&vue.retour) setVue(vue.retour); else if(vue) setVue(null); else onBack(); };
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:400,background:C.bg,display:"flex",flexDirection:"column"}}>
+      <div style={{background:COM_BLEU,color:"white",padding:"10px 12px",paddingTop:"calc(10px + env(safe-area-inset-top,0px))",display:"flex",alignItems:"center",gap:10}}>
+        <button onClick={retour} aria-label="Retour" style={{border:"none",background:"rgba(255,255,255,.15)",borderRadius:8,width:34,height:34,color:"white",fontSize:18,...TAP}}>‹</button>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:14.5,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{titre}</div>
+          <div style={{fontSize:11,opacity:.85}}>{comQui()}{canEdit?"":" · consultation"}</div></div>
+      </div>
+      {!vue&&<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",background:"white",borderBottom:"1px solid "+C.border}}>
+        {NAV.map(([k,l,n])=>{ const on=tab===k; return <div key={k} role="button" onClick={()=>go(k)} style={{position:"relative",textAlign:"center",padding:"11px 0 9px",fontSize:12,...TAP,
+          color:on?COM_BLEU:C.slate,fontWeight:on?800:600,borderBottom:"2.5px solid "+(on?COM_BLEU:"transparent")}}>{l}
+          {n>0&&<span style={{position:"absolute",top:3,right:"calc(50% - 38px)",minWidth:16,height:16,borderRadius:8,background:"#DC2626",color:"white",fontSize:9.5,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{n}</span>}</div>; })}
+      </div>}
+      <SgsToastHost/>
+      <div style={{flex:1,overflowY:"auto",padding:"12px 12px 40px"}}><div style={{maxWidth:640,margin:"0 auto",display:"flex",flexDirection:"column",gap:10}}>{corps}</div></div>
+    </div>);
+}
+
+function ComProspects({ liste, now, canEdit, ouvrir, nouvelle }){
+  const [q,setQ]=useState(""), [et,setEt]=useState(-1);
+  const nq=comNorm(q);
+  const L=liste.filter(p=>(et<0||p.etape===et)&&(!nq||comNorm([p.nom,p.organisation,p.fonction,p.devisDe,p.devisVers].join(" ")).includes(nq)));
+  const tri=(a,b)=>{ const x=comDueInfo(a,now), y=comDueInfo(b,now); return (x?x.diff:999)-(y?y.diff:999)||String(a.nom).localeCompare(String(b.nom)); };
+  const dues=L.filter(p=>comADesRelances(p,now)).sort(tri), autres=L.filter(p=>!comADesRelances(p,now)).sort(tri);
+  const puce=(i,l,n)=><span key={i} role="button" onClick={()=>setEt(i)} style={{borderRadius:12,padding:"4px 10px",fontSize:11.5,fontWeight:700,...TAP,
+    background:et===i?COM_BLEU:"white",color:et===i?"white":C.navy,border:"1px solid "+(et===i?COM_BLEU:"#CBD5E1")}}>{l} {n}</span>;
+  const carte=p=>{ const pc=COM_POT[p.potentiel]||[C.border,C.slate], d=comDueTexte(comDueInfo(p,now));
+    return <div key={p.id} role="button" onClick={()=>ouvrir(p.id)} style={{background:"white",borderRadius:"0 12px 12px 0",border:"1px solid "+C.border,borderLeft:"4px solid "+pc[0],padding:"9px 11px",...TAP}}>
+      <div style={{display:"flex",justifyContent:"space-between",gap:8}}><span style={{fontSize:13.5,fontWeight:700,color:C.navy}}>{p.nom||"(sans nom)"}</span>
+        {p.potentiel&&<span style={{fontSize:10.5,fontWeight:700,borderRadius:10,padding:"2px 8px",background:pc[0]+"22",color:pc[1]}}>{COM_CHOIX.potentiel[p.potentiel]}</span>}</div>
+      <div style={{fontSize:12,color:C.text}}>{[p.fonction,p.organisation].filter(Boolean).join(" · ")}</div>
+      <div style={{fontSize:11,color:C.slate,marginTop:2}}>{COM_ETAPES[p.etape]||""} · suivi par {p.guide||"—"}</div>
+      <div style={{fontSize:11,fontWeight:700,color:d.c,marginTop:2}}>{d.t}</div></div>; };
+  return (<>
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Nom, organisation, ville…" style={comInp}/>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{puce(-1,"Tous",liste.length)}{COM_ETAPES.map((l,i)=>puce(i,l,liste.filter(p=>p.etape===i).length))}</div>
+    {canEdit&&<button onClick={nouvelle} style={comBtn("white",COM_BLEU,COM_BLEU)}>+ Nouvelle fiche prospect</button>}
+    {liste.length===0&&<ComCarte><div style={{fontSize:12.5,color:C.slate,lineHeight:1.5}}>Aucun prospect. Importez la sauvegarde de Fiches Airshow (onglet <b>Importer</b>) ou créez une fiche.</div></ComCarte>}
+    {dues.length>0&&<ComLbl>Relances du jour · {dues.length}</ComLbl>}{dues.map(carte)}
+    {autres.length>0&&<ComLbl>{dues.length?"Autres prospects":"Prospects"} · {autres.length}</ComLbl>}{autres.map(carte)}
+  </>);
+}
+
+function ComNouvelleFiche({ onSave }){
+  const [f,setF]=useState({nom:"",fonction:"",organisation:"",tel:"",email:"",potentiel:"tiede",devisDe:"",devisVers:""});
+  const ch=k=>e=>setF(o=>({...o,[k]:e.target.value}));
+  const save=()=>{
+    if(!f.nom.trim()){ uiAlert("Le nom est requis."); return; }
+    const em=f.email.trim(); if(em&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)){ uiAlert("⚠️ Adresse courriel invalide : « "+em+" »."); return; }
+    const now=new Date().toISOString(), qui=comQui();
+    onSave({id:"k"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),...Object.fromEntries(Object.entries(f).map(([k,v])=>[k,String(v).trim()])),
+      secteur:"",frequence:"",groupe:"",types:[],role:"",suites:[],guide:qui,createdAt:now,updatedAt:now,version:1,etape:0,etapesV:3,
+      relances:{brochure:null,devis:null,j2:null,j7:null},notes:[],historique:[{date:now,auteur:qui,texte:"Fiche créée"}],statut:"prospect",source:"kpi"});
+  };
+  const champ=(k,l,t)=><div><ComLbl>{l}</ComLbl><input value={f[k]} onChange={ch(k)} type={t||"text"} style={comInp}/></div>;
+  return (<ComCarte><div style={{display:"flex",flexDirection:"column",gap:10}}>
+    {champ("nom","Nom *")}{champ("fonction","Fonction")}{champ("organisation","Organisation")}{champ("tel","Téléphone","tel")}{champ("email","E-mail","email")}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{champ("devisDe","Trajet : de")}{champ("devisVers","vers")}</div>
+    <div><ComLbl>Potentiel</ComLbl><CustomSelect value={f.potentiel} onChange={v=>setF(o=>({...o,potentiel:v}))} options={Object.entries(COM_CHOIX.potentiel).map(([value,label])=>({value,label}))}/></div>
+    <button onClick={save} style={comBtn(COM_BLEU,"white")}>Enregistrer la fiche</button></div></ComCarte>);
+}
+
+function ComFiche({ p, devis, clients, canEdit, maj, com, setClients, ouvrirDevis }){
+  const [note,setNote]=useState("");
+  if(!p) return <ComCarte>Fiche introuvable.</ComCarte>;
+  const now=new Date(), iso=now.toISOString(), qui=comQui();
+  const pc=COM_POT[p.potentiel]||[C.border,C.slate];
+  const D=devis.filter(d=>d.ficheId===p.id).sort((a,b)=>String(b.numero).localeCompare(String(a.numero))||b.version-a.version);
+  const client=p.clientRef?(clients||[]).find(c=>c.id===p.clientRef):null;
+  const est=p.statut==="client";
+  const accepter=async d=>{
+    const ex=comDoublon(p,clients);
+    if(!(await uiConfirm("Le client accepte le devis "+d.numero+" v"+d.version+" ("+comMad(d.totalHT)+" HT) ?\n\n"+
+      (ex?"« "+(p.organisation||p.nom)+" » rejoindra le client existant « "+ex.nom+" ».":"« "+(p.organisation||p.nom)+" » deviendra client.")))) return;
+    const r=comDevenirClient(p,clients,iso,qui,"devis "+d.numero+" v"+d.version+" accepté");
+    setClients(r.clients); maj(()=>r.prospect);
+    com.setDevis(L=>(L||[]).map(x=>x.id===d.id?{...x,accepte:{date:iso,auteur:qui}}:x));
+    sgsToast((p.organisation||p.nom)+" est maintenant client");
+  };
+  const reg=k=>{ const v=p.relances&&p.relances[k]; return <div key={k} role="button" onClick={()=>canEdit&&!est&&maj(f=>comRelance(f,k,new Date().toISOString(),qui))}
+    style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid "+C.border,fontSize:12.5,...(canEdit&&!est?TAP:{})}}>
+    <span>{COM_RELANCES[k]}</span><span style={{fontWeight:700,color:v?"#00936A":C.slateL}}>{v?"✓ "+comDate(v.date)+" · "+v.auteur:"—"}</span></div>; };
+  const di=comDueTexte(comDueInfo(p,now));
+  return (<>
+    <ComCarte><div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+      <div><div style={{fontSize:16,fontWeight:800,color:C.navy}}>{p.nom}</div><div style={{fontSize:12.5}}>{[p.fonction,p.organisation].filter(Boolean).join(" · ")}</div></div>
+      {est?<span style={{alignSelf:"flex-start",fontSize:10.5,fontWeight:800,borderRadius:10,padding:"2px 8px",background:"#D1FAE5",color:"#065F46"}}>CLIENT</span>
+        :p.potentiel&&<span style={{alignSelf:"flex-start",fontSize:10.5,fontWeight:700,borderRadius:10,padding:"2px 8px",background:pc[0]+"22",color:pc[1]}}>{COM_CHOIX.potentiel[p.potentiel]}</span>}</div>
+      <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:8,fontSize:12.5}}>
+        {p.tel&&<a href={"tel:"+p.tel.replace(/\s/g,"")} style={{color:COM_BLEU,textDecoration:"none"}}>📞 {p.tel}</a>}
+        {p.email&&<a href={"mailto:"+p.email} style={{color:COM_BLEU,textDecoration:"none"}}>✉️ {p.email}</a>}</div>
+      {est&&client&&<div style={{fontSize:11.5,color:"#065F46",marginTop:8}}>Fiche client : {client.nom} · depuis le {comDate(client.clientDepuis)}</div>}</ComCarte>
+    {!est&&<ComCarte><ComLbl>Étape</ComLbl><div style={{display:"flex",gap:4}}>{COM_ETAPES.map((l,i)=><div key={i} role="button"
+        onClick={async()=>{ if(!canEdit) return; if(await uiConfirm("Passer la fiche à l'étape « "+l+" » ?")) maj(f=>comEtape(f,i,new Date().toISOString(),qui)); }}
+        style={{flex:1,textAlign:"center",...(canEdit?TAP:{})}}><div style={{height:6,borderRadius:3,background:i<=p.etape?COM_BLEU:"#E2E8F0"}}/>
+        <div style={{fontSize:10,marginTop:4,color:i===p.etape?COM_BLEU:C.slate,fontWeight:i===p.etape?800:600}}>{l}</div></div>)}</div>
+      <div style={{fontSize:11.5,fontWeight:700,color:di.c,marginTop:8}}>{di.t}</div></ComCarte>}
+    <ComCarte><ComLbl>Besoin exprimé</ComLbl>
+      <ComLigne l="Trajet" v={[p.devisDe,p.devisVers].filter(Boolean).join(" → ")||"—"}/>
+      <ComLigne l="Destinations" v={p.destinations||"—"}/>
+      <ComLigne l="Groupe · fréquence" v={[comChoix("groupe",p.groupe),comChoix("frequence",p.frequence)].filter(Boolean).join(" · ")||"—"}/>
+      <ComLigne l="Type de vol" v={comChoix("types",p.types)||"—"}/>
+      <ComLigne l="Secteur · rôle" v={[comChoix("secteur",p.secteur),comChoix("role",p.role)].filter(Boolean).join(" · ")||"—"}/>
+      <ComLigne l="Suite souhaitée" v={comChoix("suites",p.suites)||"—"}/>
+      <ComLigne l="Suivi par" v={p.guide||"—"}/>
+      {p.source==="airshow"&&<ComLigne l="Origine" v={"Fiches Airshow n° "+(p.numero||"—")+" · importée le "+comDate(p.importeLe)}/>}</ComCarte>
+    {!est&&<ComCarte><ComLbl>Relances</ComLbl>{Object.keys(COM_RELANCES).map(reg)}
+      {canEdit&&<div style={{fontSize:11,color:C.slate,marginTop:6}}>Touchez une ligne pour la cocher ou l'annuler.</div>}</ComCarte>}
+    <ComCarte><ComLbl>Devis · {D.length}</ComLbl>
+      {D.length===0&&<div style={{fontSize:12,color:C.slate}}>Aucun devis. La création des devis arrive avec le lot B.</div>}
+      {D.map(d=><div key={d.id} style={{padding:"8px 0",borderBottom:"1px solid "+C.border}}>
+        <div role="button" onClick={()=>ouvrirDevis(d.id)} style={{display:"flex",justifyContent:"space-between",gap:8,...TAP}}>
+          <span style={{fontSize:12.5}}><b style={{color:C.navy}}>{d.numero} · v{d.version}</b><br/><span style={{color:C.slate,fontSize:11.5}}>
+            {d.accepte?"accepté le "+comDate(d.accepte.date):d.envoye?"envoyé le "+comDate(d.envoye.date):"non envoyé"}</span></span>
+          <b style={{fontSize:12.5,color:C.navy}}>{comMad(d.totalHT)}</b></div>
+        {canEdit&&!est&&!d.accepte&&<button onClick={()=>accepter(d)} style={{...comBtn("#00936A","white"),height:36,marginTop:6,fontSize:12.5}}>Le client accepte ce devis</button>}
+      </div>)}</ComCarte>
+    <ComCarte><ComLbl>Notes · {(p.notes||[]).length}</ComLbl>
+      {canEdit&&<div style={{display:"flex",gap:6,marginBottom:8}}><input value={note} onChange={e=>setNote(e.target.value)} placeholder="Ajouter une note" style={{...comInp,height:38}}/>
+        <button onClick={()=>{ if(!note.trim()) return; maj(f=>comNote(f,note,new Date().toISOString(),qui)); setNote(""); }} style={{...comBtn(COM_BLEU,"white"),width:80,height:38}}>Ajouter</button></div>}
+      {(p.notes||[]).map((n,i)=><div key={i} style={{fontSize:12.5,lineHeight:1.45,padding:"6px 0",borderTop:i?"1px solid "+C.border:"none"}}>
+        <b>{n.auteur} · {comDateH(n.date)}</b><br/>{n.texte}</div>)}</ComCarte>
+    <ComCarte><ComLbl>Historique</ComLbl>
+      {[...(p.historique||[])].reverse().map((h,i)=><div key={i} style={{fontSize:12,lineHeight:1.55}}><span style={{color:C.slate}}>{comDateH(h.date)}</span> {h.texte} <span style={{color:C.slateL}}>· {h.auteur}</span></div>)}</ComCarte>
+  </>);
+}
+
+function ComDevisListe({ devis, ouvrir }){
+  const L=[...devis].sort((a,b)=>String(b.numero).localeCompare(String(a.numero))||b.version-a.version);
+  return (<>
+    <ComCarte style={{background:"#E0F4F8",borderColor:"#A5DCE8"}}><div style={{fontSize:12,color:"#0E5A6B",lineHeight:1.5}}>
+      Devis importés de Fiches Airshow, en consultation. La création de nouveaux devis (calcul et introduction par l'IA) arrive avec le lot B.</div></ComCarte>
+    {L.length===0&&<ComCarte><div style={{fontSize:12.5,color:C.slate}}>Aucun devis.</div></ComCarte>}
+    {L.map(d=><div key={d.id} role="button" onClick={()=>ouvrir(d.id)} style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:"9px 11px",...TAP}}>
+      <div style={{display:"flex",justifyContent:"space-between"}}><b style={{fontSize:13,color:C.navy}}>{d.numero} · v{d.version}</b><b style={{fontSize:13,color:C.navy}}>{comMad(d.totalHT)}</b></div>
+      <div style={{fontSize:12}}>{[d.client&&d.client.nom,d.client&&d.client.organisation].filter(Boolean).join(" · ")}</div>
+      <div style={{fontSize:11,color:d.accepte?"#00936A":C.slate,fontWeight:d.accepte?700:400,marginTop:2}}>
+        {d.accepte?"Accepté le "+comDate(d.accepte.date):d.envoye?"Envoyé le "+comDate(d.envoye.date):"Non envoyé"} · créé le {comDate(d.date)} par {d.creePar||"—"}</div></div>)}
+  </>);
+}
+
+function ComDevisDetail({ d }){
+  if(!d) return <ComCarte>Devis introuvable.</ComCarte>;
+  const hm=m=>Math.floor((m||0)/60)+" h "+String((m||0)%60).padStart(2,"0");
+  return (<>
+    <ComCarte><div style={{display:"flex",justifyContent:"space-between"}}><b style={{fontSize:15,color:C.navy}}>{d.numero} · v{d.version}</b><b style={{fontSize:15,color:C.navy}}>{comMad(d.totalHT)}</b></div>
+      <div style={{fontSize:12}}>{[d.client&&d.client.nom,d.client&&d.client.fonction,d.client&&d.client.organisation].filter(Boolean).join(" · ")}</div>
+      <div style={{fontSize:11.5,color:C.slate,marginTop:4}}>Créé le {comDate(d.date)} par {d.creePar||"—"} · valable jusqu'au {comDate(d.validite)}</div>
+      <div style={{fontSize:11.5,marginTop:4,color:d.accepte?"#00936A":C.slate,fontWeight:700}}>{d.accepte?"Accepté le "+comDate(d.accepte.date)+" · "+d.accepte.auteur:d.envoye?"Envoyé le "+comDate(d.envoye.date)+" · "+d.envoye.auteur:"Non envoyé"}</div></ComCarte>
+    <ComCarte>{(d.lignes||[]).map((l,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:"1px solid "+C.border}}>
+        <div><div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{l.libelle}</div>
+          <div style={{fontSize:11,color:C.slate}}>{l.type==="immo"?l.jours+" jour(s)":l.type==="fuel"?"":(l.de&&l.de.ville)+" → "+(l.vers&&l.vers.ville)+" · "+l.distance+" NM"}</div></div>
+        <div style={{textAlign:"right"}}><div style={{fontSize:12.5}}>{comMad(l.montant)}</div>{l.type!=="fuel"&&<div style={{fontSize:11,color:C.slate}}>{hm(l.minutes)}</div>}</div></div>)}
+      <ComLigne l="Total HT" v={<b>{comMad(d.totalHT)}</b>}/>
+      <ComLigne l={d.national?"TVA 20 % (vols au Maroc)":"TVA (international)"} v={comMad(d.tva)}/>
+      <ComLigne l="Total TTC" v={<b>{comMad(d.ttc)}</b>}/>
+      <ComLigne l="Tarif appliqué" v={comMad(d.tarif)+" / heure"}/></ComCarte>
+    {d.intro&&<ComCarte><ComLbl>Introduction</ComLbl><div style={{fontSize:12.5,lineHeight:1.5}}>{d.intro}</div></ComCarte>}
+  </>);
+}
+
+function ComImport({ com, clients, setClients, canEdit }){
+  const [fic,setFic]=useState(null);           // {nom, json, rapport} ou {erreur}
+  const [fait,setFait]=useState(null);
+  const inRef=useRef(null);
+  const qui=comQui();
+  const lire=async e=>{
+    const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
+    setFait(null);
+    try{ const json=JSON.parse(await f.text());
+      const r=comFusionImport({prospects:com.prospects,devis:com.devis,clients},json,new Date().toISOString(),qui);
+      setFic(r.erreur?{erreur:r.erreur}:{nom:f.name,json,rapport:r.rapport});
+    }catch(_e){ setFic({erreur:"Fichier illisible : ce n'est pas un fichier JSON valide."}); }
+  };
+  const importer=()=>{
+    const iso=new Date().toISOString();
+    // Recalcul sur les données du moment : rien n'est perdu si un autre appareil a écrit entre-temps
+    const r=comFusionImport({prospects:com.prospects,devis:com.devis,clients},fic.json,iso,qui);
+    if(r.erreur){ uiAlert(r.erreur); return; }
+    com.setProspects(r.prospects); com.setDevis(r.devis); if(r.rapport.contrats) setClients(r.clients);
+    const R=r.rapport, entree={date:iso,auteur:qui,fichier:fic.nom,fiches:R.fichesNouvelles,fichesMaj:R.fichesMaj,devis:R.devisNouveaux,doublons:R.doublons.length,contrats:R.contrats};
+    com.setImports(L=>[entree,...(L||[])]);
+    auditLog("comImports",fic.nom,"import Fiches Airshow",{fiches:[null,String(R.fichesNouvelles)],devis:[null,String(R.devisNouveaux)],misesAJour:[null,String(R.fichesMaj+R.devisMaj)]});
+    setFait(R); setFic(null);
+  };
+  const R=fic&&fic.rapport;
+  const ligne=(l,v,c)=><div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid "+C.border,fontSize:12.5}}><span>{l}</span><b style={{color:c||C.text}}>{v}</b></div>;
+  return (<>
+    {!canEdit&&<ComCarte><div style={{fontSize:12.5,color:C.slate}}>L'import est réservé au Commercial et à l'Administrateur.</div></ComCarte>}
+    {canEdit&&!R&&!fait&&<><ComCarte><div style={{fontSize:13,fontWeight:800,color:C.navy,marginBottom:8}}>Importer depuis Fiches Airshow</div>
+      <div style={{fontSize:12.5,lineHeight:1.6}}><b>1.</b> Dans Fiches Airshow, ouvrez <b>Réglages</b>, puis touchez <b>Sauvegarder</b>.<br/>
+        <b>2.</b> Le téléphone enregistre un fichier <code>fiches-airshow-….json</code>.<br/><b>3.</b> Revenez ici et touchez le bouton ci-dessous.</div></ComCarte>
+      <input ref={inRef} type="file" accept=".json,application/json" onChange={lire} style={{display:"none"}}/>
+      <button onClick={()=>inRef.current&&inRef.current.click()} style={comBtn(COM_BLEU,"white")}>⬆️ Choisir le fichier de sauvegarde</button>
+      <ComCarte style={{background:"#E0F4F8",borderColor:"#A5DCE8"}}><div style={{fontSize:12,color:"#0E5A6B",lineHeight:1.5}}>L'import ne supprime rien. Une fiche déjà importée n'est mise à jour que si la version du fichier est plus récente : vous pouvez réimporter sans risque.</div></ComCarte></>}
+    {fic&&fic.erreur&&<ComCarte style={{borderLeft:"4px solid #DC2626",borderRadius:"0 12px 12px 0"}}><div style={{fontSize:12.5,color:"#991B1B"}}>{fic.erreur}</div>
+      <button onClick={()=>setFic(null)} style={{...comBtn("white",C.navy,"#CBD5E1"),marginTop:8}}>Choisir un autre fichier</button></ComCarte>}
+    {R&&<><ComCarte><div style={{fontSize:13,fontWeight:800,color:C.navy}}>{fic.nom}</div><div style={{fontSize:11.5,color:C.slate}}>Sauvegarde du {comDateH(R.dateSauvegarde)} · format 1</div></ComCarte>
+      <ComCarte><ComLbl>Ce qui va être importé</ComLbl>
+        {ligne("Fiches prospects nouvelles",R.fichesNouvelles)}{ligne("Fiches mises à jour (plus récentes)",R.fichesMaj)}{ligne("Fiches déjà à jour",R.fichesIdentiques,C.slate)}
+        {ligne("Devis nouveaux",R.devisNouveaux)}{ligne("Devis mis à jour (envoi)",R.devisMaj)}{ligne("Notes des commerciaux",R.notes)}
+        {R.contrats>0&&ligne("Fiches à l'étape « Contrat » → clients",R.contrats,"#00936A")}
+        {ligne("Dernier numéro de devis",R.dernierNumero||"—")}</ComCarte>
+      {R.doublons.length>0&&<ComCarte style={{borderLeft:"4px solid #BA7517",borderRadius:"0 12px 12px 0"}}><div style={{fontSize:12.5,fontWeight:700,color:"#854F0B",marginBottom:4}}>{R.doublons.length} doublon(s) possible(s) avec un client existant</div>
+        {R.doublons.map((d,i)=><div key={i} style={{fontSize:12,color:C.slate}}>{d.nom} · {d.organisation||"—"} → client « {d.client} »</div>)}
+        <div style={{fontSize:11.5,color:C.slate,marginTop:4}}>Importés comme prospects. S'ils acceptent un devis, ils rejoindront ce client au lieu d'en créer un second.</div></ComCarte>}
+      {R.dernierTarif&&<ComCarte><div style={{fontSize:12,color:C.slate,lineHeight:1.5}}>Le devis le plus récent ({R.dernierTarif.numero}) a été calculé à <b>{comMad(R.dernierTarif.tarif)} / heure</b>. Vérifiez que la tuile Paramètres porte les mêmes tarifs que l'écran Variables d'Airshow.</div></ComCarte>}
+      <button onClick={importer} style={comBtn(COM_BLEU,"white")}>Importer {R.fichesNouvelles+R.fichesMaj} fiche(s) et {R.devisNouveaux+R.devisMaj} devis</button>
+      <button onClick={()=>setFic(null)} style={comBtn("white",C.navy,"#CBD5E1")}>Annuler</button></>}
+    {fait&&<ComCarte><div style={{textAlign:"center",padding:"8px 0"}}><div style={{fontSize:30}}>✅</div><div style={{fontSize:15,fontWeight:800,color:C.navy}}>Import terminé</div>
+      <div style={{fontSize:12,color:C.slate,marginTop:4}}>{fait.fichesNouvelles} fiche(s) · {fait.devisNouveaux} devis · {fait.doublons.length} doublon(s) à vérifier</div>
+      <div style={{fontSize:12,color:C.slate,marginTop:6}}>Prochain numéro de devis : <b>{comProchainNumero(com.devis,new Date().getFullYear())}</b></div></div>
+      <button onClick={()=>setFait(null)} style={{...comBtn("white",C.navy,"#CBD5E1"),marginTop:8}}>Importer un autre fichier</button></ComCarte>}
+    {(com.imports||[]).length>0&&<><ComLbl>Imports précédents</ComLbl><ComCarte>{(com.imports||[]).slice(0,10).map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:12,padding:"4px 0"}}>
+      <span>{comDateH(x.date)} · {x.auteur}</span><span style={{color:C.slate}}>{x.fiches} fiche(s) · {x.devis} devis</span></div>)}</ComCarte></>}
+  </>);
+}
+
+// Tuile Paramètres : variables de calcul des devis (écran Variables d'Airshow). L'Administrateur modifie ; Direction et Commercial consultent.
+function FormParams({ params, setParams, canEdit }){
+  const P={...COM_DEFAUTS,...(params||{})};
+  const [e,setE]=useState(P);
+  const ch=k=>ev=>setE(o=>({...o,[k]:ev.target.value}));
+  const ex=2*(Number(String(e.immoMin).replace(/\s/g,""))||0)*(Number(String(e.tarifImmo).replace(/\s/g,""))||0);
+  const save=()=>{ const v=comParamsValides(e); if(!v){ uiAlert("Valeurs incorrectes : vérifiez les champs."); return; }
+    setParams({...v,modifie:{date:new Date().toISOString(),auteur:comQui()}}); uiAlert("✅ Paramètres enregistrés. Ils s'appliqueront aux nouveaux devis."); };
+  const champ=(k,l,u)=><div><ComLbl>{l}</ComLbl><div style={{display:"flex",alignItems:"center",gap:8}}>
+    {canEdit?<input value={e[k]} onChange={ch(k)} inputMode={k==="fuelRef"?"decimal":"numeric"} style={{...comInp,fontSize:18,fontWeight:700,flex:1}}/>
+      :<div style={{flex:1,fontSize:18,fontWeight:700,color:C.navy,padding:"8px 0"}}>{k==="fuelRef"?Number(P[k]).toFixed(2).replace(".",","):String(P[k]).replace(/\B(?=(\d{3})+(?!\d))/g," ")}</div>}
+    <span style={{fontSize:12.5,color:C.slate,whiteSpace:"nowrap"}}>{u}</span></div></div>;
+  const R=COM_REGLES;
+  return (<Card accent="#475569"><FHeader icon="⚙️" title="Paramètres" subtitle={canEdit?"Variables de calcul des devis":"Consultation — modifiables par l'Administrateur"} color="#475569"/>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <ComLbl>Tarifs</ComLbl>{champ("tarifVol","Prix de l'heure de vol","MAD / heure")}{champ("tarifImmo","Prix de l'immobilisation","MAD / heure")}{champ("immoMin","Immobilisation minimum","heures par jour")}
+      <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45}}>1 jour d'immobilisation est inclus. Chaque jour supplémentaire est facturé : immobilisation minimum × prix de l'immobilisation.</div>
+      <div style={{background:C.bg,borderRadius:10,padding:"9px 12px",fontSize:12.5}}>Exemple : 2 jours supplémentaires = {comMad(ex)}</div>
+      <ComLbl>Carburant</ComLbl>{champ("fuelRef","Valeur de référence du Jet A-1","MAD / litre")}{champ("conso","Consommation de l'avion","litres / heure")}
+      <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45}}>Surcharge = litres de vol × (prix du jour selon l'indice mondial − valeur de référence), à la hausse comme à la baisse.</div>
+      <ComLbl>Devis</ComLbl>
+      <div><ComLbl>Signataire des devis</ComLbl>{canEdit?<input value={e.signataire} onChange={ch("signataire")} style={comInp}/>:<div style={{fontSize:15,fontWeight:700,color:C.navy}}>{P.signataire}</div>}</div>
+      <ComLbl>Règles fixes (comme Fiches Airshow)</ComLbl>
+      <div style={{background:C.bg,borderRadius:10,padding:"6px 12px"}}>
+        <ComLigne l="Base de l'avion" v={R.base}/><ComLigne l="Temps de vol" v={"distance × "+R.routes.toFixed(2).replace(".",",")+" ÷ "+R.vitesse+" kt + "+R.roulage+" min"}/>
+        <ComLigne l="Rayon d'action" v={R.rayon+" NM par vol"}/><ComLigne l="Validité d'un devis" v={R.validite+" jours"}/><ComLigne l="TVA" v={R.tva+" % si tous les vols sont au Maroc"}/></div>
+      {canEdit&&<button onClick={save} style={comBtn("#475569","white")}>Enregistrer</button>}
+      {P.modifie&&<div style={{fontSize:11.5,color:C.slate,textAlign:"center"}}>Modifié le {comDateH(P.modifie.date)} par {P.modifie.auteur}</div>}
+    </div></Card>);
 }
 
 // ── Screens ──────────────────────────────────────────────────────────────────
@@ -9221,7 +9671,7 @@ function auditFields(a,b){ const ch={}; const ks=new Set([...Object.keys(a||{}),
 
 // ══ Consultation du journal d'audit (lot 3) ═════════════════════════
 const AUDIT_MODULES={sgsHazards:"Dangers",sgsActions:"Actions",sgsEvStatus:"Statut et analyse des comptes rendus",safety:"Comptes rendus",flights:"Vols",crew:"Équipage",aircraft:"Avions",
-  clients:"Clients",sgsManual:"Indicateurs saisis",sgsMeetings:"Safety Meetings",sgsRevues:"Revues de sécurité",sgsChanges:"Changements",sgsAudits:"Audits",sgsFormations:"Formations",
+  clients:"Clients",prospects:"Prospects",devis:"Devis",comParams:"Paramètres des devis",comImports:"Imports Fiches Airshow",sgsManual:"Indicateurs saisis",sgsMeetings:"Safety Meetings",sgsRevues:"Revues de sécurité",sgsChanges:"Changements",sgsAudits:"Audits",sgsFormations:"Formations",
   sgsFrat:"FRAT",sgsSt:"Sous-traitants",sgsItw:"Interviews",sgsReco:"Recommandations",sgsPlan:"Planning SGS",sgsOsv:"Contrôles OSV",sgsResponsable:"Signataire SGS",
   connexion:"Connexions",comptes:"Comptes",["export PDF"]:"Exports PDF",essai:"Installation",
   melHist:"Historique des MEL",fin:"Finances",maint:"Maintenance",satisfaction:"Enquêtes de satisfaction",
@@ -10975,8 +11425,6 @@ function ProfileSelectScreen({ onSelect }) {
       <div style={{display:"flex",flexWrap:"wrap",gap:12,width:"100%",maxWidth:340,justifyContent:"center"}}>
         {PROFILES.map(p=>(
           <button key={p.id} onClick={()=>{
-              // Commercial : module encore à construire, on n'ouvre pas la connexion
-              if(p.id==="comm"){ uiAlert("🚧 Commercial — en cours de développement."); return; }
               onSelect(p.id);
             }}
             style={{background:p.color,border:"none",borderRadius:14,padding:"18px 12px",cursor:"pointer",
@@ -11007,7 +11455,7 @@ function LoginGate({ onAuth }) {
   const [attenteTotp,setAttenteTotp]=useState("");
   useEffect(()=>{ (async()=>{ const r=await authApi("profils",{});
     if(r&&r.status===200&&Array.isArray(r.users)) setUsers(r.users); else setUsers(await usersLoad()); })(); },[]);
-  const TOTP_REQUIRED = ["dir","rdoa","sgs"]; // double authentification : Direction, Administrateur, SGS
+  const TOTP_REQUIRED = ["dir","rdoa","sgs","comm"]; // double authentification : Direction, Administrateur, SGS, Commercial
   const actifs=pid=>(users||[]).filter(u=>(u.actif!==false)&&u.profil===pid).sort((a,b)=>userLabel(a).localeCompare(userLabel(b)));
   const selectProfile=async(id)=>{ setProfileId(id); setErr(""); setPwd(""); setUser(null); setAttenteTotp(""); setJeton("");
     const s=await authApi("profils",{});
@@ -11526,7 +11974,8 @@ function AppMain({ onLogout, profileId }) {
   useEffect(()=>{ const f=()=>setShowAccounts(true); window.addEventListener("open-accounts",f); return ()=>window.removeEventListener("open-accounts",f); },[]);
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
   // Tuile Finances : profil Finances seul. Tuile SGS : profil SGS et Administrateur.
-  const canForm = (id) => id==="clients" ? ["ops","rdoa"].includes(profile.id)   // Clients : Opérations et Administrateur
+  const canForm = (id) => id==="commercial" ? ["comm","rdoa"].includes(profile.id)   // prospects, devis, clients : Commercial et Administrateur
+                        : id==="params" ? ["comm","dir","rdoa"].includes(profile.id)       // l'Administrateur modifie, Direction et Commercial consultent
                         : id==="fin" ? profile.id==="fin"
                         : id==="sgs" ? ["sgs","rdoa","dir"].includes(profile.id)   // la Direction consulte, sans modifier
                         : id==="journal" ? ["dir","sgs","rdoa"].includes(profile.id)
@@ -11536,7 +11985,8 @@ function AppMain({ onLogout, profileId }) {
                         : id==="regl" && profile.id==="eqp" && (sgsCurrentUser()||{}).role==="CC" ? false
                         : (profile.forms===null || profile.forms.includes(id));
   // Onglet Finances : Administrateur, Finances et Direction uniquement
-  const canTab = (id) => id!=="fin" || ["rdoa","fin","dir"].includes(profile.id);
+  // Commercial : Formulaires, Live et Ops. seulement (ni Sécurité, ni Maintenance, ni Alertes, ni Performances)
+  const canTab = (id) => profile.id==="comm" ? ["forms","live","ops"].includes(id) : (id!=="fin" || ["rdoa","fin","dir"].includes(profile.id));
   const readOnly = (id) => (profile.readOnly||[]).includes(id);
   const [now,setNow]         = useState(new Date());
   const [tab,setTab]         = useState(() => {
@@ -11570,6 +12020,11 @@ function AppMain({ onLogout, profileId }) {
   },[demoSafetyV1]);
   const [crew,setCrew]       = usePersist("crew",INIT_CREW);
   const [clients,setClients] = usePersist("clients",INIT_CLIENTS);
+  // Module Commercial : prospects, devis, paramètres de calcul, historique des imports d'Airshow
+  const [prospects,setProspects] = usePersist("prospects",[]);
+  const [devis,setDevis]         = usePersist("devis",[]);
+  const [comParams,setComParams] = usePersist("comParams",COM_DEFAUTS);
+  const [comImports,setComImports] = usePersist("comImports",[]);
   const [aircraft,setAircraft] = usePersist("aircraft",INIT_AIRCRAFT);
   const [dismissed,setDism]  = usePersist("dismissed",[]);
   const [alertHist,setAlertHist] = usePersist("alertHist",[]);
@@ -11650,7 +12105,7 @@ function AppMain({ onLogout, profileId }) {
   // téléchargé, qui resterait intrusif — l'Export manuel s'en charge.
   const AUTO_BACKUP_MS = 30*60*1000;
   const stateRef = useRef({});
-  stateRef.current = { flights, maintData, crew, finData, kpis, dismissed, safetyData, clients, ndsArchive,
+  stateRef.current = { flights, maintData, crew, finData, kpis, dismissed, safetyData, clients, ndsArchive, prospects, devis, comParams, comImports,
     sgsHazards, sgsActions, sgsEvStatus, sgsManual, sgsMeetings, sgsResponsable, sgsRevues, sgsChanges, sgsAudits, sgsFormations, sgsFrat, sgsSt,  sgsItw, sgsReco, sgsPlan, sgsOsv, satisfaction:satis };
   const buildBackup = () => ({ version:"1.0", exportDate:new Date().toISOString(), auto:true, ...stateRef.current });
   const lastAutoRef = useRef(0);
@@ -11686,6 +12141,10 @@ function AppMain({ onLogout, profileId }) {
     if(data.dismissed) setDism(data.dismissed);
     if(data.safetyData)setSafety(data.safetyData);
     if(data.clients)   setClients(data.clients);
+    if(data.prospects) setProspects(data.prospects);
+    if(data.devis)     setDevis(data.devis);
+    if(data.comParams) setComParams(data.comParams);
+    if(data.comImports)setComImports(data.comImports);
     if(data.alertHist) setAlertHist(data.alertHist);
     if(data.melHist)   setMelHist(data.melHist);
     if(data.aircraft)  setAircraft(data.aircraft);
@@ -11741,6 +12200,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);
     setClients(INIT_CLIENTS);setNdsArchive([]);   // sinon ces deux-là reviennent depuis le cloud
+    setProspects([]);setDevis([]);setComImports([]);   // les Paramètres (tarifs) sont conservés
     setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);setSgsRevues([]);setSgsChanges([]);setSgsAudits([]);setSgsFormations([]);setSgsFrat([]);setSgsItw([]);setSgsReco([]);setSgsPlan([]);setSgsOsv([]);setSatis([]);
     setReport(null);setReset(false);setTab("forms");
   };
@@ -11824,7 +12284,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
-        {tab==="forms"   && <ScreenForms onManuel={()=>setManuelOuvert(true)} satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
+        {tab==="forms"   && <ScreenForms onManuel={()=>setManuelOuvert(true)} com={{prospects,setProspects,devis,setDevis,params:comParams,setParams:setComParams,imports:comImports,setImports:setComImports}} satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
           sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,reg:{revues:sgsRevues,setRevues:setSgsRevues,changes:sgsChanges,setChanges:setSgsChanges,audits:sgsAudits,setAudits:setSgsAudits,formations:sgsFormations,setFormations:setSgsFormations,frat:sgsFrat,setFrat:setSgsFrat,st:sgsSt,setSt:setSgsSt,itw:sgsItw,setItw:setSgsItw,reco:sgsReco,setReco:setSgsReco,plan:sgsPlan,setPlan:setSgsPlan,osv:sgsOsv,setOsv:setSgsOsv},ndsArchive}}
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
           onSubmitMaint={d=>{
