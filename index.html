@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.11";
+const APP_VERSION = "2.12";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -12648,8 +12648,12 @@ function restoreNormaliser(data){
 function restoreResume(d){
   const n=(k)=>Array.isArray(d[k])?d[k].length:0;
   const pl=(v,s,p)=>v+" "+(v>1?(p||s+"s"):s);
-  return [pl(n("flights"),"vol"), pl(n("sgsHazards"),"danger"), pl(n("sgsActions"),"action"),
+  const exploitation=[pl(n("flights"),"vol"), pl(n("sgsHazards"),"danger"), pl(n("sgsActions"),"action"),
           pl(n("satisfaction"),"enquête"), pl(n("crew"),"membre d'équipage","membres d'équipage")].join(" · ");
+  // Module Commercial : un devis compte une fois, quelles que soient ses versions
+  const nDevis=Array.isArray(d.devis)?new Set(d.devis.map(x=>x&&x.numero)).size:0;
+  const commercial=[pl(n("prospects"),"prospect"), pl(nDevis,"devis","devis"), pl(n("clients"),"client"), pl(n("demandes"),"demande de vols","demandes de vols")].join(" · ");
+  return exploitation+"\nCommercial : "+commercial;
 }
 const restoreDate=v=>v?new Date(v).toLocaleString("fr-FR",{day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"}):"date inconnue";
 
@@ -12695,7 +12699,7 @@ function RestoreModal({ onClose, setRestoreProgress, onImport }){
                 }} style={{textAlign:"left",padding:"11px 12px",background:k===0?"#EFF6FF":"white",border:"1.5px solid "+(k===0?"#0369A1":C.border),borderRadius:12,cursor:"pointer",...TAP}}>
                   <div style={{fontSize:13.5,fontWeight:800,color:C.navy}}>☁️ {k===0?"Copie la plus récente":"Copie du "+restoreDate(d.exportDate).split(" à ")[0]}</div>
                   <div style={{fontSize:11.5,color:"#0369A1",fontWeight:700,marginTop:3}}>{restoreDate(d.exportDate)}{d.source?" · "+d.source:""}</div>
-                  <div style={{fontSize:11,color:C.slate,marginTop:2}}>{d.compteurs?((d.compteurs.flights||0)+" vols · "+(d.compteurs.sgsHazards||0)+" dangers · "+(d.compteurs.sgsActions||0)+" actions"):(k===0?"Touchez pour voir son contenu":"")}</div>
+                  <div style={{fontSize:11,color:C.slate,marginTop:2}}>{d.compteurs?((d.compteurs.flights||0)+" vols · "+(d.compteurs.sgsHazards||0)+" dangers · "+(d.compteurs.sgsActions||0)+" actions · "+(d.compteurs.prospects||0)+" prospects · "+(d.compteurs.clients||0)+" clients"):(k===0?"Touchez pour voir son contenu":"")}</div>
                 </button>))}
               <button onClick={()=>{
                 onClose();
