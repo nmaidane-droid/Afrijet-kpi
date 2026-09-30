@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.8";
+const APP_VERSION = "2.10";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -1780,8 +1780,11 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
   const [lien,setLien]=useState(null);
   const choisirDemande=(dem,leg)=>{ const v=comPrefillVol(dem,leg);
     setFlightType(v.flightType); setFrom(v.from); setTo(v.to); setDate(v.date); setDep(v.dep); setArr(v.arr); setPax(v.pax?String(v.pax):""); setClientId(v.clientId);
-    if(!num.trim()&&ac&&ac.immat) setNum(ac.immat);   // n° de vol vidé après l'enregistrement précédent : immatriculation de l'avion
-    setLien({demandeId:v.demandeId,demandeVol:v.demandeVol,minutes:leg.minutes,clientId:v.clientId,clientNom:v.clientNom,flightType:v.flightType,libelle:dem.devisNumero+" · "+(leg.de.iata||leg.de.icao)+" → "+(leg.vers.iata||leg.vers.icao)}); };
+    if(!num.trim()&&ac&&ac.immat) setNum(ac.immat);
+    // Vols suivants du même devis : équipage repris selon la règle CDB/OPL ou alternance des commandants
+    const eq=comEquipageSuivant(dem,leg,flights,crew);
+    setCm1(eq?eq.cm1:""); setCm2(eq?eq.cm2:""); setCc(eq?eq.cc:"");   // n° de vol vidé après l'enregistrement précédent : immatriculation de l'avion
+    setLien({demandeId:v.demandeId,demandeVol:v.demandeVol,minutes:leg.minutes,clientId:v.clientId,clientNom:v.clientNom,flightType:v.flightType,finDossier:comFinDossier(dem),devisNumero:dem.devisNumero,libelle:dem.devisNumero+" · "+(leg.de.iata||leg.de.icao)+" → "+(leg.vers.iata||leg.vers.icao)}); };
   // Vol transmis : l'arrivée suit le départ saisi, avec la durée du devis
   useEffect(()=>{ if(lien&&lien.minutes){ const a=comHeurePlus(dep,lien.minutes); if(a) setArr(a); } },[dep,lien]);
 
@@ -1810,6 +1813,13 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
     // jour : un titre qui expire entre aujourd'hui et le vol bloque dès maintenant.
     const projet={date,acId,dep,arr:arrV,cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim()};
     const pb=[...volCompromis(projet, crew, aircraft), ...chevauchements(projet, flights)];
+    // Vol d'un dossier du Commercial : l'équipage et l'avion doivent rester valables jusqu'au retour
+    if(!pb.length&&lien&&lien.finDossier){
+      const pd=comControleDossier(projet,lien.finDossier,crew,aircraft);
+      if(pd.length){ const fr=d=>String(d).split("-").reverse().join("/");
+        uiAlert("⛔ Dossier "+(lien.devisNumero||"")+" : le retour du "+fr(lien.finDossier)+" ne serait plus possible.\n\n"+pd.map(p=>"• "+p.label).join("\n")+
+          "\n\nChoisissez un autre membre d'équipage, ou traitez la MEL, avant de planifier ce vol."); return; }
+    }
     if(pb.length){
       const mel=pb.filter(p=>p.type==='mel'), eq=pb.filter(p=>p.type==='crew'), ov=pb.filter(p=>p.type==='overlap');
       let msg="⛔ Planification impossible pour le "+date.split('-').reverse().join('/')+" :\n";
@@ -8022,6 +8032,29 @@ function comControleType(flightType,lien){
   if(flightType==="Commercial"&&!lien) return "Un vol commercial se planifie uniquement à partir d'une demande du Commercial (Vols à planifier).";
   if(!["Commercial","Ferry","Positioning"].includes(flightType)) return "Type de vol inconnu.";
   return null;
+}
+// Équipage proposé pour un vol du même devis, repris du vol déjà planifié le plus proche dans le devis.
+// 1 commandant (CDB ou TRI) + 1 OPL : on garde, commandant en CM1, OPL en CM2.
+// 2 commandants (CDB + CDB, TRI + CDB, TRI + TRI) : on alterne à chaque vol ; l'écart de rang entre les
+// vols décide (un vol sur deux inversé), même si les vols sont planifiés dans le désordre. Le CC est repris.
+function comEquipageSuivant(dem,leg,flights,crew){
+  const faits=(flights||[]).filter(f=>f.demandeId===dem.id&&f.demandeVol!==leg.i&&(f.cm1||f.cm2||f.cc));
+  if(!faits.length) return null;
+  const ref=faits.slice().sort((a,b)=>Math.abs(a.demandeVol-leg.i)-Math.abs(b.demandeVol-leg.i)||b.demandeVol-a.demandeVol)[0];
+  const role=nom=>{ const m=(crew||[]).find(x=>(x.nom+" "+x.prenom)===nom); return m?m.role:""; };
+  const cdt=r=>r==="CM1"||r==="TRI", r1=role(ref.cm1), r2=role(ref.cm2);
+  let cm1=ref.cm1||"", cm2=ref.cm2||"";
+  if(cdt(r1)&&cdt(r2)){ if(Math.abs(leg.i-ref.demandeVol)%2===1){ cm1=ref.cm2; cm2=ref.cm1; } }
+  else if(cdt(r2)&&r1==="CM2"){ cm1=ref.cm2; cm2=ref.cm1; }        // commandant toujours en CM1, OPL en CM2
+  return {cm1,cm2,cc:ref.cc||""};
+}
+// Contrôle du dossier : un vol d'une demande du Commercial n'est planifié que si l'équipage choisi et
+// l'appareil restent valables jusqu'au dernier vol du dossier (retour de l'avion). Mêmes règles que
+// volCompromis (titres bloquants, MEL), appliquées à la date du retour.
+const comFinDossier=dem=>(dem&&dem.vols||[]).map(v=>String(v.date||"")).filter(Boolean).sort().pop()||"";
+function comControleDossier(projet,fin,crew,aircraft){
+  if(!fin||!projet||!projet.date||fin<=String(projet.date).slice(0,10)) return [];
+  return volCompromis({...projet,date:fin},crew,aircraft);
 }
 // Vols à planifier regroupés par demande (un client, un devis), triés par date du premier vol restant
 function comGroupesAPlanifier(liste){
