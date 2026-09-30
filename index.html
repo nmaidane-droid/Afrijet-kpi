@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.6";
+const APP_VERSION = "2.7";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -8011,6 +8011,13 @@ function comVolsAPlanifier(demandes,flights){
   // Par date, puis demande par demande, dans le même ordre que les vols du devis (un vol sans heure ne passe pas devant)
   return out.sort((a,b)=>String(a.leg.date).localeCompare(String(b.leg.date))||String(a.dem.transmisLe).localeCompare(String(b.dem.transmisLe))||a.leg.i-b.leg.i);
 }
+// Vols à planifier regroupés par demande (un client, un devis), triés par date du premier vol restant
+function comGroupesAPlanifier(liste){
+  const G=[];
+  (liste||[]).forEach(x=>{ let g=G.find(y=>y.dem.id===x.dem.id); if(!g){ g={dem:x.dem,legs:[],premier:x.leg.date}; G.push(g); } g.legs.push(x.leg); if(String(x.leg.date)<String(g.premier)) g.premier=x.leg.date; });
+  G.forEach(g=>g.legs.sort((a,b)=>a.i-b.i));
+  return G.sort((a,b)=>String(a.premier).localeCompare(String(b.premier))||String(a.dem.transmisLe).localeCompare(String(b.dem.transmisLe)));
+}
 // Pré-remplissage du formulaire Vol (les contrôles du formulaire restent inchangés)
 function comPrefillVol(dem,leg){
   const com=leg.type==="vol";
@@ -8716,19 +8723,29 @@ function ComClientCommercial({ c, prospects, devis, demandes, flights, canEdit, 
 
 // Vols à planifier, vus des Opérations, en tête du formulaire Vol
 function ComVolsAPlanifierListe({ liste, lien, onChoisir }){
-  if(!liste||!liste.length) return null;
-  const groupes=[]; liste.forEach(x=>{ let g=groupes.find(y=>y.dem.id===x.dem.id); if(!g){ g={dem:x.dem,legs:[]}; groupes.push(g); } g.legs.push(x.leg); });
+  const [ouverts,setOuverts]=useState({});    // clients dépliés (▼)
+  const groupes=comGroupesAPlanifier(liste);
+  if(!groupes.length) return null;
+  const fmt=d=>String(d||"").split("-").reverse().join("/");
+  const basculer=id=>setOuverts(o=>({...o,[id]:!o[id]}));
   return (<div style={{background:"#FFF7E6",border:"1px solid #FAC775",borderRadius:12,padding:12,marginBottom:14}}>
-    <div style={{fontSize:12.5,fontWeight:800,color:"#854F0B",marginBottom:6}}>🛫 Vols à planifier · {liste.length}</div>
-    {groupes.map(g=><div key={g.dem.id} style={{background:"white",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
-      <div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{g.dem.clientNom}</div>
-      <div style={{fontSize:11,color:C.slate}}>{g.dem.devisNumero} · {g.dem.pax} passager(s) · transmis par {g.dem.transmisPar}</div>
-      {g.dem.note&&<div style={{fontSize:11.5,marginTop:3}}>Note : {g.dem.note}</div>}
-      {g.legs.map(l=>{ const on=lien&&lien.demandeId===g.dem.id&&lien.demandeVol===l.i;
-        return <div key={l.i} role="button" onClick={()=>onChoisir(g.dem,l)} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 0",borderTop:"1px solid "+C.border,fontSize:12,...TAP,background:on?"#E6F1FB":"transparent"}}>
-          <span><b>{l.type==="vol"?"COM":"POS"}</b> {l.de.iata||l.de.icao} → {l.vers.iata||l.vers.icao} · {String(l.date).split("-").reverse().join("/")}{l.heure?" "+l.heure:""}</span>
-          <b style={{color:on?"#0C447C":"#0369A1"}}>{on?"en cours ✓":"Planifier ›"}</b></div>; })}
-    </div>)}
+    <div style={{fontSize:12.5,fontWeight:800,color:"#854F0B",marginBottom:8}}>🛫 Vols à planifier · {groupes.length} client{groupes.length>1?"s":""} · {liste.length} vol{liste.length>1?"s":""}</div>
+    {groupes.map(g=>{ const enCours=!!(lien&&lien.demandeId===g.dem.id), ouvert=!!ouverts[g.dem.id]||enCours;
+      return <div key={g.dem.id} style={{background:"white",borderRadius:10,marginBottom:8,overflow:"hidden"}}>
+        <div role="button" aria-expanded={ouvert} onClick={()=>!enCours&&basculer(g.dem.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",...TAP}}>
+          <span style={{fontSize:13,color:"#854F0B",width:14}}>{ouvert?"▼":"▶"}</span>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:700,color:C.navy}}>{g.dem.clientNom}</div>
+            <div style={{fontSize:11.5,color:C.slate}}>{g.dem.devisNumero} · 1er vol {fmt(g.premier)}</div></div>
+          <span style={{background:"#DC2626",color:"white",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{g.legs.length} vol{g.legs.length>1?"s":""}</span></div>
+        {ouvert&&<div style={{padding:"0 12px 8px 36px"}}>
+          <div style={{fontSize:11.5,color:"#475569",marginBottom:4}}>{g.dem.pax} passager(s) · transmis par {g.dem.transmisPar}</div>
+          {g.dem.note&&<div style={{fontSize:11.5,marginBottom:4}}>Note : {g.dem.note}</div>}
+          {g.legs.map(l=>{ const on=enCours&&lien.demandeVol===l.i;
+            return <div key={l.i} role="button" onClick={()=>onChoisir(g.dem,l)} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 0",borderTop:"1px solid "+C.border,fontSize:12,...TAP,background:on?"#E6F1FB":"transparent"}}>
+              <span><b>{l.type==="vol"?"COM":"POS"}</b> {l.de.iata||l.de.icao} → {l.vers.iata||l.vers.icao} · {fmt(l.date)}{l.heure?" "+l.heure:""}</span>
+              <b style={{color:on?"#0C447C":"#0369A1",whiteSpace:"nowrap"}}>{on?"en cours ✓":"Planifier ›"}</b></div>; })}
+        </div>}
+      </div>; })}
   </div>);
 }
 
