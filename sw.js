@@ -11,7 +11,7 @@
 //
 // VERSION à incrémenter à chaque livraison : elle déclenche le ménage des anciennes copies.
 
-const VERSION = 'afrijet-v1';
+const VERSION = 'afrijet-2.4';
 const CACHE   = VERSION;
 
 // Ce qui doit rester lisible sans réseau
@@ -44,7 +44,8 @@ self.addEventListener('activate', e => {
 const estPage = url =>
   url.pathname === '/' ||
   url.pathname.endsWith('.html') ||
-  url.pathname === '/version.json';
+  url.pathname === '/version.json' ||
+  url.pathname === '/aeroports.json';   // liste des aéroports : toujours la dernière version publiée
 
 self.addEventListener('fetch', e => {
   const req = e.request;

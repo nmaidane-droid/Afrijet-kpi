@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.3";
+const APP_VERSION = "2.4";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -7852,6 +7852,88 @@ function comProchainNumero(devis, annee){
   return "DEV-"+annee+"-"+String((n.length?Math.max(...n):0)+1).padStart(4,"0");
 }
 
+// ── Lot B : calcul des devis, identique à Fiches Airshow 2.4 (buildLegs, dvLegs, fuelAirports, lineAmt)
+const COM_DV={BASE:"GMME",SPEED:400,AIRWAYS:1.10,TAXI:15,VALID:15,RANGE:1750};
+const comNrm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+const comAptListe=j=>((j&&j.aeroports)||[]).map(a=>({icao:a[0],iata:a[1]||"",nom:a[2],ville:a[3],pays:a[4],lat:a[5],lon:a[6],alias:a[7]||""}));
+const comAptBy=(apts,icao)=>(apts||[]).find(a=>a.icao===icao)||null;
+function comAptGuess(apts,txt){
+  const q=comNrm(txt); if(!q||!apts) return null;
+  return apts.find(a=>comNrm(a.icao)===q||comNrm(a.iata)===q)||apts.find(a=>comNrm(a.ville)===q)||apts.find(a=>comNrm(a.ville).startsWith(q)||q.startsWith(comNrm(a.ville)))||apts.find(a=>comNrm(a.nom).includes(q))||null;
+}
+function comAptSearch(apts,txt){
+  const q=comNrm(txt); if(q.length<2) return [];
+  const rank=a=>(comNrm(a.iata)===q||comNrm(a.icao)===q)?0:(comNrm(a.ville).startsWith(q)||comNrm(a.icao).startsWith(q)||comNrm(a.iata).startsWith(q))?1:2;
+  return (apts||[]).filter(a=>[a.iata,a.icao,a.ville,a.nom,a.pays,a.alias].some(x=>comNrm(x).includes(q))).sort((a,b)=>rank(a)-rank(b)||(b.pays==="Maroc")-(a.pays==="Maroc")).slice(0,8);
+}
+function comRhumbNM(a,b){
+  const R=3440.065, r=Math.PI/180, p1=a.lat*r, p2=b.lat*r, dp=p2-p1;
+  let dl=(b.lon-a.lon)*r; if(Math.abs(dl)>Math.PI) dl=dl>0?-(2*Math.PI-dl):(2*Math.PI+dl);
+  const dpsi=Math.log(Math.tan(Math.PI/4+p2/2)/Math.tan(Math.PI/4+p1/2));
+  const q=Math.abs(dpsi)>1e-12?dp/dpsi:Math.cos(p1);
+  return Math.sqrt(dp*dp+q*q*dl*dl)*R;
+}
+const comLegMin=nm=>Math.ceil(nm*COM_DV.AIRWAYS/COM_DV.SPEED*60+COM_DV.TAXI);
+const comRouteNM=l=>Math.round(l.distance*COM_DV.AIRWAYS);
+const comHorsRange=l=>l.distance>0&&comRouteNM(l)>COM_DV.RANGE;
+// Base de l'avion → départ, mission, puis dernier aéroport → retour de l'avion
+function comBuildLegs(dep,arr,ar,base,ret){
+  const L=[];
+  const leg=(type,libelle,a,b,pax)=>{ const d=comRhumbNM(a,b); L.push({type,libelle,de:{icao:a.icao,ville:a.ville},vers:{icao:b.icao,ville:b.ville},national:a.pays==="Maroc"&&b.pays==="Maroc",passagers:pax,distance:Math.round(d),minutes:comLegMin(d)}); };
+  if(!dep||!arr||dep.icao===arr.icao||!base||!ret) return L;
+  if(dep.icao!==base.icao) leg("mep","Mise en place",base,dep,false);
+  leg("vol",ar?"Vol aller":"Vol",dep,arr,true);
+  if(ar) leg("vol","Vol retour",arr,dep,true);
+  const last=ar?dep:arr;
+  if(last.icao!==ret.icao) leg("mep","Retour de l'avion",last,ret,false);
+  return L;
+}
+// Carburant par aéroport de départ : chaque vol fait le plein à son aéroport de départ
+function comFuelAirports(L,F,force,V){
+  const map=new Map();
+  L.filter(l=>l.type!=="immo"&&l.type!=="fuel").forEach(l=>{ const k=l.de.icao; if(!map.has(k)) map.set(k,{icao:k,ville:l.de.ville,vols:[],min:0}); const a=map.get(k); a.vols.push(l.libelle); a.min+=l.minutes; });
+  return [...map.values()].map(a=>{ const forced=(force||{})[a.icao]!=null, prix=forced?force[a.icao]:(F&&F.madL>0?F.madL:null), litres=Math.round(a.min/60*V.conso);
+    return {icao:a.icao,ville:a.ville,vols:a.vols,litres,prix,force:forced,montant:prix==null?0:Math.round(litres*(prix-V.fuelRef))}; });
+}
+// Lignes du devis en cours : vols, immobilisation (1 jour inclus en aller-retour), surcharge carburant
+function comDvLegs(e,V,F){
+  const L=comBuildLegs(e.dep,e.arr,e.ar,e.bas,e.ret).map((l,i)=>Object.assign(l,e.ovr&&e.ovr[i]?{minutes:e.ovr[i]}:{}));
+  const j=e.ar&&L.length?Math.max(0,(Number(e.immo)||1)-1):0;
+  if(j) L.push({type:"immo",libelle:"Immobilisation de l'appareil",jours:j,de:{icao:"",ville:""},vers:{icao:"",ville:""},national:L.every(l=>l.national),passagers:false,distance:0,minutes:j*V.immoMin*60});
+  const A=comFuelAirports(L,F,e.fuelForce,V);
+  if(A.length){ const montant=A.reduce((s,a)=>s+a.montant,0);
+    if(montant!==0) L.push({type:"fuel",libelle:"Surcharge carburant",de:{icao:"",ville:""},vers:{icao:"",ville:""},national:L.every(l=>l.national),passagers:false,distance:0,minutes:0,aeroports:A,montant}); }
+  return L;
+}
+const comLineAmt=(l,V)=>l.type==="fuel"?l.montant:Math.round(l.minutes/60*(l.type==="immo"?V.tarifImmo:V.tarifVol));
+function comTotaux(L,V){
+  const ht=L.reduce((s,l)=>s+comLineAmt(l,V),0), national=L.length>0&&L.every(l=>l.national), tva=national?Math.round(ht*0.2):0;
+  return {ht,national,tva,ttc:ht+tva};
+}
+// Contrôle d'un devis enregistré (importé d'Airshow ou créé ici) : montants recalculés avec ses propres tarifs
+function comRecalcul(d){
+  const V={tarifVol:d.tarif,tarifImmo:d.tarifImmo!=null?d.tarifImmo:d.tarif,immoMin:d.immoMin!=null?d.immoMin:2};
+  const fuel=d.carburant&&Array.isArray(d.carburant.aeroports)?d.carburant.aeroports.reduce((s,a)=>s+(a.prix==null?0:Math.round(a.litres*(a.prix-d.carburant.ref))),0):null;
+  const ht=(d.lignes||[]).reduce((s,l)=>s+(l.type==="fuel"?(fuel!=null?fuel:l.montant):l.type==="immo"?Math.round(l.jours*V.immoMin*V.tarifImmo):Math.round(l.minutes/60*V.tarifVol)),0);
+  const national=(d.lignes||[]).every(l=>l.national), tva=national?Math.round(ht*0.2):0;
+  return {ht,tva,ttc:ht+tva,ecart:ht-(Number(d.totalHT)||0)};
+}
+// Devis envoyé : identique à l'opération « devisEnvoye » d'Airshow (J+2 et J+7 repartent de cette date)
+function comDevisEnvoye(f,ref,now,auteur){
+  const g=JSON.parse(JSON.stringify(f)); g.relances=g.relances||{}; g.historique=g.historique||[];
+  g.relances.devis={date:now,auteur}; g.relances.j2=null; g.relances.j7=null;
+  g.historique.push({date:now,auteur,texte:"Devis "+(ref||"")+" envoyé ; relances J+2 et J+7 recalculées"});
+  if((g.etape||0)<2){ g.etape=2; g.historique.push({date:now,auteur,texte:"Étape « "+COM_ETAPES[2]+" »"}); }
+  g.updatedAt=now; return g;
+}
+// Contexte envoyé à l'IA pour l'introduction (mêmes champs qu'Airshow)
+function comContexteIA(f,dep,arr,ar){
+  const lib=(k,v)=>Array.isArray(v)?v.map(x=>COM_CHOIX[k][x]).filter(Boolean).join(", "):(COM_CHOIX[k][v]||"");
+  return {nom:f.nom||"",fonction:f.fonction||"",organisation:f.organisation||"",trajet:dep&&arr?dep.ville+" – "+arr.ville+(ar?" (aller-retour)":" (aller simple)"):"",
+    groupe:lib("groupe",f.groupe),frequence:lib("frequence",f.frequence),types:lib("types",f.types||[]),notes:(f.notes||[]).map(n=>n.texte).join(" | ")};
+}
+const comIntroSecours=(f,dep,arr)=>"Suite à notre échange, nous avons le plaisir de vous adresser notre proposition d'affrètement"+(dep&&arr?" entre "+dep.ville+" et "+arr.ville:"")+(f&&f.organisation?" pour "+f.organisation:"")+".";
+
 // ══ Module Commercial — écrans (lot A) ═══════════════════════════════════════
 const COM_BLEU="#0891B2";
 const comQui=()=>userLabel(sgsCurrentUser())||"Commercial";
@@ -7887,14 +7969,18 @@ function CommercialModule({ com, clients, setClients, flights, satis, profileId,
   const go=k=>{ setTab(k); setVue(null); };
   let corps;
   if(vue&&vue.k==="fiche") corps=<ComFiche p={prospects.find(x=>x.id===vue.id)} devis={devis} clients={clients} canEdit={canEdit}
-      maj={fn=>majProspect(vue.id,fn)} com={com} setClients={setClients} ouvrirDevis={id=>setVue({k:"devis",id,retour:vue})}/>;
-  else if(vue&&vue.k==="devis") corps=<ComDevisDetail d={devis.find(x=>x.id===vue.id)}/>;
+      maj={fn=>majProspect(vue.id,fn)} com={com} setClients={setClients} ouvrirDevis={id=>setVue({k:"devis",id,retour:vue})}
+      nouveauDevis={()=>setVue({k:"edit",ficheId:vue.id,retour:vue})}/>;
+  else if(vue&&vue.k==="devis") corps=<ComDevisDetail d={devis.find(x=>x.id===vue.id)} canEdit={canEdit} com={com} fiche={prospects.find(x=>x.id===(devis.find(y=>y.id===vue.id)||{}).ficheId)}
+      nouvelleVersion={d=>setVue({k:"edit",ficheId:d.ficheId,parentId:d.id,retour:vue})}/>;
+  else if(vue&&vue.k==="edit") corps=<ComDevisEdit key={vue.ficheId+(vue.parentId||"")} fiche={prospects.find(x=>x.id===vue.ficheId)} parent={vue.parentId?devis.find(x=>x.id===vue.parentId):null} com={com}
+      onDone={id=>setVue({k:"devis",id,retour:{k:"fiche",id:vue.ficheId}})}/>;
   else if(vue&&vue.k==="nouvelle") corps=<ComNouvelleFiche onSave={p=>{ com.setProspects(L=>[...(L||[]),p]); setVue({k:"fiche",id:p.id}); }}/>;
-  else if(tab==="pros") corps=<ComProspects liste={actifs} now={now} canEdit={canEdit} ouvrir={id=>setVue({k:"fiche",id})} nouvelle={()=>setVue({k:"nouvelle"})}/>;
+  else if(tab==="pros") corps=<ComProspects liste={actifs} devenus={prospects.filter(p=>p.statut==="client")} now={now} canEdit={canEdit} ouvrir={id=>setVue({k:"fiche",id})} nouvelle={()=>setVue({k:"nouvelle"})}/>;
   else if(tab==="cli") corps=<FormClients satis={satis} clients={clients} setClients={setClients} flights={flights} canEdit={canEdit}/>;
   else if(tab==="dev") corps=<ComDevisListe devis={devis} ouvrir={id=>setVue({k:"devis",id})}/>;
   else corps=<ComImport com={com} clients={clients} setClients={setClients} canEdit={canEdit}/>;
-  const titre=vue?(vue.k==="fiche"?((prospects.find(x=>x.id===vue.id)||{}).nom||"Fiche"):vue.k==="devis"?((devis.find(x=>x.id===vue.id)||{}).numero||"Devis"):"Nouvelle fiche"):"Commercial";
+  const titre=vue?(vue.k==="fiche"?((prospects.find(x=>x.id===vue.id)||{}).nom||"Fiche"):vue.k==="devis"?((devis.find(x=>x.id===vue.id)||{}).numero||"Devis"):vue.k==="edit"?(vue.parentId?"Nouvelle version":"Nouveau devis"):"Nouvelle fiche"):"Commercial";
   const retour=()=>{ if(vue&&vue.retour) setVue(vue.retour); else if(vue) setVue(null); else onBack(); };
   return (
     <div style={{position:"fixed",inset:0,zIndex:400,background:C.bg,display:"flex",flexDirection:"column"}}>
@@ -7913,10 +7999,10 @@ function CommercialModule({ com, clients, setClients, flights, satis, profileId,
     </div>);
 }
 
-function ComProspects({ liste, now, canEdit, ouvrir, nouvelle }){
+function ComProspects({ liste, devenus, now, canEdit, ouvrir, nouvelle }){
   const [q,setQ]=useState(""), [et,setEt]=useState(-1);
   const nq=comNorm(q);
-  const L=liste.filter(p=>(et<0||p.etape===et)&&(!nq||comNorm([p.nom,p.organisation,p.fonction,p.devisDe,p.devisVers].join(" ")).includes(nq)));
+  const L=(et===-2?(devenus||[]):liste).filter(p=>(et<0||p.etape===et)&&(!nq||comNorm([p.nom,p.organisation,p.fonction,p.devisDe,p.devisVers].join(" ")).includes(nq)));
   const tri=(a,b)=>{ const x=comDueInfo(a,now), y=comDueInfo(b,now); return (x?x.diff:999)-(y?y.diff:999)||String(a.nom).localeCompare(String(b.nom)); };
   const dues=L.filter(p=>comADesRelances(p,now)).sort(tri), autres=L.filter(p=>!comADesRelances(p,now)).sort(tri);
   const puce=(i,l,n)=><span key={i} role="button" onClick={()=>setEt(i)} style={{borderRadius:12,padding:"4px 10px",fontSize:11.5,fontWeight:700,...TAP,
@@ -7930,7 +8016,7 @@ function ComProspects({ liste, now, canEdit, ouvrir, nouvelle }){
       <div style={{fontSize:11,fontWeight:700,color:d.c,marginTop:2}}>{d.t}</div></div>; };
   return (<>
     <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Nom, organisation, ville…" style={comInp}/>
-    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{puce(-1,"Tous",liste.length)}{COM_ETAPES.map((l,i)=>puce(i,l,liste.filter(p=>p.etape===i).length))}</div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{puce(-1,"Tous",liste.length)}{COM_ETAPES.map((l,i)=>puce(i,l,liste.filter(p=>p.etape===i).length))}{(devenus||[]).length>0&&puce(-2,"Devenus clients",(devenus||[]).length)}</div>
     {canEdit&&<button onClick={nouvelle} style={comBtn("white",COM_BLEU,COM_BLEU)}>+ Nouvelle fiche prospect</button>}
     {liste.length===0&&<ComCarte><div style={{fontSize:12.5,color:C.slate,lineHeight:1.5}}>Aucun prospect. Importez la sauvegarde de Fiches Airshow (onglet <b>Importer</b>) ou créez une fiche.</div></ComCarte>}
     {dues.length>0&&<ComLbl>Relances du jour · {dues.length}</ComLbl>}{dues.map(carte)}
@@ -7957,7 +8043,7 @@ function ComNouvelleFiche({ onSave }){
     <button onClick={save} style={comBtn(COM_BLEU,"white")}>Enregistrer la fiche</button></div></ComCarte>);
 }
 
-function ComFiche({ p, devis, clients, canEdit, maj, com, setClients, ouvrirDevis }){
+function ComFiche({ p, devis, clients, canEdit, maj, com, setClients, ouvrirDevis, nouveauDevis }){
   const [note,setNote]=useState("");
   if(!p) return <ComCarte>Fiche introuvable.</ComCarte>;
   const now=new Date(), iso=now.toISOString(), qui=comQui();
@@ -8004,7 +8090,8 @@ function ComFiche({ p, devis, clients, canEdit, maj, com, setClients, ouvrirDevi
     {!est&&<ComCarte><ComLbl>Relances</ComLbl>{Object.keys(COM_RELANCES).map(reg)}
       {canEdit&&<div style={{fontSize:11,color:C.slate,marginTop:6}}>Touchez une ligne pour la cocher ou l'annuler.</div>}</ComCarte>}
     <ComCarte><ComLbl>Devis · {D.length}</ComLbl>
-      {D.length===0&&<div style={{fontSize:12,color:C.slate}}>Aucun devis. La création des devis arrive avec le lot B.</div>}
+      {D.length===0&&<div style={{fontSize:12,color:C.slate}}>Aucun devis pour l'instant.</div>}
+      {canEdit&&<button onClick={nouveauDevis} style={{...comBtn(COM_BLEU,"white"),marginBottom:6}}>📄 Nouveau devis</button>}
       {D.map(d=><div key={d.id} style={{padding:"8px 0",borderBottom:"1px solid "+C.border}}>
         <div role="button" onClick={()=>ouvrirDevis(d.id)} style={{display:"flex",justifyContent:"space-between",gap:8,...TAP}}>
           <span style={{fontSize:12.5}}><b style={{color:C.navy}}>{d.numero} · v{d.version}</b><br/><span style={{color:C.slate,fontSize:11.5}}>
@@ -8026,7 +8113,7 @@ function ComDevisListe({ devis, ouvrir }){
   const L=[...devis].sort((a,b)=>String(b.numero).localeCompare(String(a.numero))||b.version-a.version);
   return (<>
     <ComCarte style={{background:"#E0F4F8",borderColor:"#A5DCE8"}}><div style={{fontSize:12,color:"#0E5A6B",lineHeight:1.5}}>
-      Devis importés de Fiches Airshow, en consultation. La création de nouveaux devis (calcul et introduction par l'IA) arrive avec le lot B.</div></ComCarte>
+      Tous les devis : importés de Fiches Airshow et créés ici. Pour un nouveau devis, ouvrez la fiche du prospect ou du client.</div></ComCarte>
     {L.length===0&&<ComCarte><div style={{fontSize:12.5,color:C.slate}}>Aucun devis.</div></ComCarte>}
     {L.map(d=><div key={d.id} role="button" onClick={()=>ouvrir(d.id)} style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:"9px 11px",...TAP}}>
       <div style={{display:"flex",justifyContent:"space-between"}}><b style={{fontSize:13,color:C.navy}}>{d.numero} · v{d.version}</b><b style={{fontSize:13,color:C.navy}}>{comMad(d.totalHT)}</b></div>
@@ -8036,22 +8123,37 @@ function ComDevisListe({ devis, ouvrir }){
   </>);
 }
 
-function ComDevisDetail({ d }){
+function ComDevisDetail({ d, canEdit, com, fiche, nouvelleVersion }){
   if(!d) return <ComCarte>Devis introuvable.</ComCarte>;
-  const hm=m=>Math.floor((m||0)/60)+" h "+String((m||0)%60).padStart(2,"0");
+  const qui=comQui(), rc=comRecalcul(d);
+  const envoye=async()=>{
+    if(!(await uiConfirm("Marquer le devis "+d.numero+" v"+d.version+" comme envoyé au client ?\n\nLes relances J+2 et J+7 repartiront d'aujourd'hui."))) return;
+    const iso=new Date().toISOString();
+    com.setDevis(L=>(L||[]).map(x=>x.id===d.id?{...x,envoye:{date:iso,auteur:qui}}:x));
+    if(fiche) com.setProspects(L=>(L||[]).map(p=>p.id===fiche.id?comDevisEnvoye(p,d.numero+" v"+d.version,iso,qui):p));
+  };
+  const envoyer=async()=>{ const ok=await comEnvoyerPdf(d); if(ok&&!d.envoye&&canEdit) envoye(); };
   return (<>
     <ComCarte><div style={{display:"flex",justifyContent:"space-between"}}><b style={{fontSize:15,color:C.navy}}>{d.numero} · v{d.version}</b><b style={{fontSize:15,color:C.navy}}>{comMad(d.totalHT)}</b></div>
       <div style={{fontSize:12}}>{[d.client&&d.client.nom,d.client&&d.client.fonction,d.client&&d.client.organisation].filter(Boolean).join(" · ")}</div>
-      <div style={{fontSize:11.5,color:C.slate,marginTop:4}}>Créé le {comDate(d.date)} par {d.creePar||"—"} · valable jusqu'au {comDate(d.validite)}</div>
-      <div style={{fontSize:11.5,marginTop:4,color:d.accepte?"#00936A":C.slate,fontWeight:700}}>{d.accepte?"Accepté le "+comDate(d.accepte.date)+" · "+d.accepte.auteur:d.envoye?"Envoyé le "+comDate(d.envoye.date)+" · "+d.envoye.auteur:"Non envoyé"}</div></ComCarte>
+      <div style={{fontSize:11.5,color:C.slate,marginTop:4}}>Créé le {comDate(d.date)} par {d.creePar||"—"} · valable jusqu'au {comDate(d.validite)}{d.source==="airshow"?" · importé de Fiches Airshow":""}</div>
+      <div style={{fontSize:11.5,marginTop:4,color:d.accepte?"#00936A":d.envoye?"#00936A":"#BA7517",fontWeight:700}}>{d.accepte?"Accepté le "+comDate(d.accepte.date)+" · "+d.accepte.auteur:d.envoye?"Envoyé le "+comDate(d.envoye.date)+" · "+d.envoye.auteur:"Non envoyé"}</div></ComCarte>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+      <button onClick={()=>comOuvrirPdf(d)} style={comBtn("white",C.navy,"#CBD5E1")}>📄 Ouvrir le PDF</button>
+      <button onClick={envoyer} style={comBtn("#25D366","white")}>📤 Envoyer</button></div>
+    {canEdit&&!d.envoye&&<button onClick={envoye} style={comBtn(COM_BLEU,"white")}>✓ Marquer comme envoyé</button>}
+    {canEdit&&fiche&&!d.accepte&&<button onClick={()=>nouvelleVersion(d)} style={comBtn("white",COM_BLEU,COM_BLEU)}>Modifier · créera la v{d.version+1}</button>}
     <ComCarte>{(d.lignes||[]).map((l,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:"1px solid "+C.border}}>
         <div><div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{l.libelle}</div>
-          <div style={{fontSize:11,color:C.slate}}>{l.type==="immo"?l.jours+" jour(s)":l.type==="fuel"?"":(l.de&&l.de.ville)+" → "+(l.vers&&l.vers.ville)+" · "+l.distance+" NM"}</div></div>
-        <div style={{textAlign:"right"}}><div style={{fontSize:12.5}}>{comMad(l.montant)}</div>{l.type!=="fuel"&&<div style={{fontSize:11,color:C.slate}}>{hm(l.minutes)}</div>}</div></div>)}
+          <div style={{fontSize:11,color:C.slate}}>{l.type==="immo"?l.jours+" jour(s) supplémentaire(s)":l.type==="fuel"?"":(l.de&&l.de.ville)+" → "+(l.vers&&l.vers.ville)+" · "+l.distance+" NM"}</div></div>
+        <div style={{textAlign:"right"}}><div style={{fontSize:12.5}}>{comMad(l.montant)}</div>{l.type!=="fuel"&&<div style={{fontSize:11,color:C.slate}}>{comHm(l.minutes||0)}</div>}</div></div>)}
       <ComLigne l="Total HT" v={<b>{comMad(d.totalHT)}</b>}/>
-      <ComLigne l={d.national?"TVA 20 % (vols au Maroc)":"TVA (international)"} v={comMad(d.tva)}/>
+      <ComLigne l={d.national?"TVA 20 % (vols au Maroc)":"TVA (international)"} v={d.national?comMad(d.tva):"Exonérée"}/>
       <ComLigne l="Total TTC" v={<b>{comMad(d.ttc)}</b>}/>
-      <ComLigne l="Tarif appliqué" v={comMad(d.tarif)+" / heure"}/></ComCarte>
+      <ComLigne l="Tarif appliqué" v={comMad(d.tarif)+" / heure"}/>
+      <ComLigne l="Contrôle du calcul" v={rc.ecart===0?"✓ écart 0 MAD":"⚠️ écart "+comMad(rc.ecart)} c={rc.ecart===0?"#00936A":"#991B1B"}/></ComCarte>
+    {d.carburant&&d.carburant.aeroports&&<ComCarte><ComLbl>Carburant (détail interne)</ComLbl>{d.carburant.aeroports.map(a=><ComLigne key={a.icao} l={a.ville+" · "+comGrp3(a.litres)+" L"}
+      v={(a.prix==null?"—":comDec2(a.prix)+" MAD/L")+(a.force?" · forcé":"")+" · "+comMad(a.montant)}/>)}<ComLigne l="Référence" v={comDec2(d.carburant.ref)+" MAD/L"}/></ComCarte>}
     {d.intro&&<ComCarte><ComLbl>Introduction</ComLbl><div style={{fontSize:12.5,lineHeight:1.5}}>{d.intro}</div></ComCarte>}
   </>);
 }
@@ -8101,6 +8203,9 @@ function ComImport({ com, clients, setClients, canEdit }){
       {R.doublons.length>0&&<ComCarte style={{borderLeft:"4px solid #BA7517",borderRadius:"0 12px 12px 0"}}><div style={{fontSize:12.5,fontWeight:700,color:"#854F0B",marginBottom:4}}>{R.doublons.length} doublon(s) possible(s) avec un client existant</div>
         {R.doublons.map((d,i)=><div key={i} style={{fontSize:12,color:C.slate}}>{d.nom} · {d.organisation||"—"} → client « {d.client} »</div>)}
         <div style={{fontSize:11.5,color:C.slate,marginTop:4}}>Importés comme prospects. S'ils acceptent un devis, ils rejoindront ce client au lieu d'en créer un second.</div></ComCarte>}
+      {(()=>{ const E=(fic.json.devis||[]).filter(d=>d&&d.lignes).map(d=>({n:d.numero+" v"+d.version,e:comRecalcul(d).ecart}));
+        return <ComCarte><div style={{fontSize:12.5,fontWeight:700,color:C.navy,marginBottom:3}}>Contrôle des devis</div>
+          <div style={{fontSize:12,color:E.some(x=>x.e!==0)?"#991B1B":"#00936A"}}>{E.length} devis recalculé(s) avec les règles d'Airshow : {E.some(x=>x.e!==0)?E.filter(x=>x.e!==0).map(x=>x.n+" (écart "+comMad(x.e)+")").join(", "):"écart 0 MAD"}.</div></ComCarte>; })()}
       {R.dernierTarif&&<ComCarte><div style={{fontSize:12,color:C.slate,lineHeight:1.5}}>Le devis le plus récent ({R.dernierTarif.numero}) a été calculé à <b>{comMad(R.dernierTarif.tarif)} / heure</b>. Vérifiez que la tuile Paramètres porte les mêmes tarifs que l'écran Variables d'Airshow.</div></ComCarte>}
       <button onClick={importer} style={comBtn(COM_BLEU,"white")}>Importer {R.fichesNouvelles+R.fichesMaj} fiche(s) et {R.devisNouveaux+R.devisMaj} devis</button>
       <button onClick={()=>setFic(null)} style={comBtn("white",C.navy,"#CBD5E1")}>Annuler</button></>}
@@ -8119,8 +8224,13 @@ function FormParams({ params, setParams, canEdit }){
   const [e,setE]=useState(P);
   const ch=k=>ev=>setE(o=>({...o,[k]:ev.target.value}));
   const ex=2*(Number(String(e.immoMin).replace(/\s/g,""))||0)*(Number(String(e.tarifImmo).replace(/\s/g,""))||0);
-  const save=()=>{ const v=comParamsValides(e); if(!v){ uiAlert("Valeurs incorrectes : vérifiez les champs."); return; }
-    setParams({...v,modifie:{date:new Date().toISOString(),auteur:comQui()}}); uiAlert("✅ Paramètres enregistrés. Ils s'appliqueront aux nouveaux devis."); };
+  const [busy,setBusy]=useState(false);
+  useEffect(()=>{ setE({...COM_DEFAUTS,...(params||{})}); },[params]);
+  // Enregistrement par le serveur, qui vérifie que la personne est Administrateur : la page ne peut pas écrire les tarifs
+  const save=async()=>{ const v=comParamsValides(e); if(!v){ uiAlert("Valeurs incorrectes : vérifiez les champs."); return; }
+    setBusy(true); const r=await comApi("params",{params:v}); setBusy(false);
+    if(r.status!==200||!r.data.params){ uiAlert("⚠️ "+comErreur(r)); return; }
+    setParams(r.data.params); uiAlert("✅ Paramètres enregistrés. Ils s'appliqueront aux nouveaux devis."); };
   const champ=(k,l,u)=><div><ComLbl>{l}</ComLbl><div style={{display:"flex",alignItems:"center",gap:8}}>
     {canEdit?<input value={e[k]} onChange={ch(k)} inputMode={k==="fuelRef"?"decimal":"numeric"} style={{...comInp,fontSize:18,fontWeight:700,flex:1}}/>
       :<div style={{flex:1,fontSize:18,fontWeight:700,color:C.navy,padding:"8px 0"}}>{k==="fuelRef"?Number(P[k]).toFixed(2).replace(".",","):String(P[k]).replace(/\B(?=(\d{3})+(?!\d))/g," ")}</div>}
@@ -8139,9 +8249,259 @@ function FormParams({ params, setParams, canEdit }){
       <div style={{background:C.bg,borderRadius:10,padding:"6px 12px"}}>
         <ComLigne l="Base de l'avion" v={R.base}/><ComLigne l="Temps de vol" v={"distance × "+R.routes.toFixed(2).replace(".",",")+" ÷ "+R.vitesse+" kt + "+R.roulage+" min"}/>
         <ComLigne l="Rayon d'action" v={R.rayon+" NM par vol"}/><ComLigne l="Validité d'un devis" v={R.validite+" jours"}/><ComLigne l="TVA" v={R.tva+" % si tous les vols sont au Maroc"}/></div>
-      {canEdit&&<button onClick={save} style={comBtn("#475569","white")}>Enregistrer</button>}
+      {canEdit&&<button onClick={save} disabled={busy} style={{...comBtn("#475569","white"),opacity:busy?.5:1}}>{busy?"Enregistrement…":"Enregistrer"}</button>}
       {P.modifie&&<div style={{fontSize:11.5,color:C.slate,textAlign:"center"}}>Modifié le {comDateH(P.modifie.date)} par {P.modifie.auteur}</div>}
     </div></Card>);
+}
+
+
+// ── Lot B : écrans des devis ─────────────────────────────────────────────────
+const COM_LOGO_PDF='data:image/png;base64,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';
+const comP2=n=>String(n).padStart(2,"0");
+const comFD=d=>{ d=new Date(d); return comP2(d.getDate())+"/"+comP2(d.getMonth()+1)+"/"+d.getFullYear(); };
+const comGrp3=n=>String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g," ");
+const comMadP=n=>comGrp3(n)+" MAD";
+const comHm=m=>Math.floor(m/60)+" h "+comP2(m%60);
+const comDec2=n=>(Math.round(Number(n)*100)/100).toFixed(2).replace(".",",");
+function comLoadScript(src){ return new Promise((ok,ko)=>{ const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=ko; document.head.appendChild(s); }); }
+let COM_APTS=null;
+async function comAeroports(){
+  if(COM_APTS) return COM_APTS;
+  try{ const r=await fetch("/aeroports.json",{cache:"no-store"}); COM_APTS=comAptListe(await r.json()); }catch(e){ logSilent(e); COM_APTS=[]; }
+  return COM_APTS;
+}
+// Appel de la fonction serveur, avec le jeton de session (la page ne calcule jamais le montant final)
+async function comApi(op, extra){
+  try{
+    const r=await fetch("/api/commercial",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:sessionToken(),op,...(extra||{})})});
+    let data={}; try{ data=await r.json(); }catch(_e){ /* réponse vide */ }
+    return {status:r.status,data};
+  }catch(e){ return {status:0,data:{error:"reseau"}}; }
+}
+const comErreur=r=>r.status===401?"Session expirée : déconnectez-vous puis reconnectez-vous."
+  :r.status===403?"Action réservée à votre profil : "+((r.data&&r.data.error)||"refusée")+"."
+  :r.status===0?"Pas de réseau : réessayez dès le retour de la connexion."
+  :r.data&&r.data.error==="hors_range"?"Devis impossible : un vol dépasse le rayon d'action de 1 750 NM."
+  :r.data&&r.data.error==="cle_absente"?"Clé de l'IA absente sur le serveur (ANTHROPIC_API_KEY)."
+  :r.data&&r.data.error==="delai"?"L'IA a mis trop de temps à répondre."
+  :"Erreur du serveur ("+r.status+(r.data&&r.data.error?" · "+r.data.error:"")+").";
+async function comPdf(d){
+  if (!window.PDFLib) await comLoadScript('/pdf-lib.min.js');
+  const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+  const pdf=await PDFDocument.create(); pdf.setTitle('Devis '+d.numero+(d.version?' v'+d.version:'')); pdf.setAuthor('AFRIJET Sahara');
+  const PH=841.89, page=pdf.addPage([595.28,PH]);
+  const F=await pdf.embedFont(StandardFonts.Helvetica), FB=await pdf.embedFont(StandardFonts.HelveticaBold);
+  const C=(r,g,b)=>rgb(r/255,g/255,b/255), RED=C(232,0,28), BDX=C(139,0,0), NAVY=C(26,26,46), MUTE=C(107,107,123), OFF=C(245,243,239), LINE=C(228,224,216), WHITE=C(255,255,255);
+  const mm=v=>v*72/25.4, W=210, M=14, R=W-M;
+  const WIN='€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
+  const clean=s=>String(s==null?'':s).replace(/[\u202F\u2009\u00A0]/g,' ').replace(/→/g,'-').replace(/[^\x20-\x7E\xA1-\xFF]/g,ch=>WIN.includes(ch)?ch:'');
+  const tw=(s,sz,b)=>(b?FB:F).widthOfTextAtSize(clean(s),sz)*25.4/72;
+  const tx=(s,x,y,sz,o)=>{ o=o||{}; const t=clean(s), w=tw(t,sz,o.b); const xx=o.align==='right'?x-w:o.align==='center'?x-w/2:x; page.drawText(t,{x:mm(xx),y:PH-mm(y),size:sz,font:o.b?FB:F,color:o.c||NAVY}); return w; };
+  const rect=(x,y,w,h,o)=>page.drawRectangle({x:mm(x),y:PH-mm(y+h),width:mm(w),height:mm(h),color:o.fill,borderColor:o.stroke,borderWidth:o.stroke?(o.bw||0.8):0});
+  const rrect=(x,y,w,h,r,o)=>{ const p=`M ${r} 0 L ${w-r} 0 Q ${w} 0 ${w} ${r} L ${w} ${h-r} Q ${w} ${h} ${w-r} ${h} L ${r} ${h} Q 0 ${h} 0 ${h-r} L 0 ${r} Q 0 0 ${r} 0 Z`;
+    page.drawSvgPath(p,{x:mm(x),y:PH-mm(y),scale:72/25.4,color:o.fill,borderColor:o.stroke,borderWidth:o.stroke?(o.bw||1)/(72/25.4):undefined}); };
+  const line=(x1,y1,x2,y2,c,wd)=>page.drawLine({start:{x:mm(x1),y:PH-mm(y1)},end:{x:mm(x2),y:PH-mm(y2)},thickness:mm(wd),color:c});
+  const wrap=(s,sz,maxW)=>{ const out=[]; let cur=''; clean(s).split(/\s+/).forEach(w=>{ const tst=cur?cur+' '+w:w; if (tw(tst,sz)>maxW && cur){ out.push(cur); cur=w; } else cur=tst; }); if (cur) out.push(cur); return out; };
+  // En-tête
+  const logo=await pdf.embedPng(COM_LOGO_PDF); page.drawImage(logo,{x:mm(M),y:PH-mm(12+64*207/1400),width:mm(64),height:mm(64*207/1400)});
+  tx('DEVIS',R,19,22,{b:1,c:BDX,align:'right'});
+  tx('N° '+d.numero+(d.version?' · version '+d.version:''),R,25,8.5,{align:'right'}); tx('Date : '+comFD(d.date),R,29.5,8.5,{align:'right'}); tx("Valable jusqu'au : "+comFD(d.validite),R,34,8.5,{align:'right'});
+  line(M,38,R,38,RED,0.8);
+  // Émetteur / client
+  let y=46;
+  tx('ÉMETTEUR',M,y,8,{b:1,c:BDX});
+  const w1=tx('Sahara Aviation SAS',M,y+5,8.5,{b:1}); tx(' — AFRIJET Sahara',M+w1,y+5,8.5);
+  ['Lotissement Khalij Dakhla, Villa n°86','BP 3201, 73000 Dakhla — Maroc','+212 6 89 59 59 00 · info@afrijet.ma'].forEach((s,i)=>tx(s,M,y+9.5+i*4.5,8.5));
+  const w2=tx('Suivi par : ',M,y+23,8.5); tx(d.suiviPar,M+w2,y+23,8.5,{b:1});
+  // Bloc client aligné ligne à ligne sur le bloc émetteur (mêmes lignes de base)
+  const cx=110, cw=R-cx; rrect(cx,y-5.5,cw,32,2,{fill:OFF});
+  tx('CLIENT',cx+4,y,8,{b:1,c:BDX}); tx(d.client.nom,cx+4,y+5,8.5,{b:1});
+  [d.client.fonction,d.client.organisation,[d.client.tel,d.client.email].filter(Boolean).join(' · ')].filter(Boolean).forEach((s,i)=>tx(wrap(s,8.5,cw-8)[0]||'',cx+4,y+9.5+i*4.5,8.5));
+  // Objet et introduction
+  y=86; tx('Objet : affrètement Embraer EMB-140 LR (CN-KTA), 18 sièges en configuration affaires',M,y,10,{b:1});
+  // Introduction raccourcie à 5 lignes si le tableau est long
+  const intro=wrap(d.intro,8.8,R-M).slice(0,d.lignes.length>5?5:7); intro.forEach((s,i)=>tx(s,M,y+6+i*4.1,8.8)); y+=6+intro.length*4.1+3;
+  // Tableau
+  const cols=[M+2,118,140,165,R-2];
+  rect(M,y,R-M,8,{fill:BDX});
+  tx('Prestation',cols[0],y+5.3,8,{b:1,c:WHITE}); tx('Distance',cols[1],y+5.3,8,{b:1,c:WHITE,align:'right'}); tx('Temps de vol',cols[2],y+5.3,8,{b:1,c:WHITE,align:'right'}); tx('Tarif horaire HT',cols[3],y+5.3,8,{b:1,c:WHITE,align:'right'}); tx('Montant HT',cols[4],y+5.3,8,{b:1,c:WHITE,align:'right'});
+  y+=8;
+  const RH=d.lignes.length>5?10:d.lignes.length>4?11:12; // hauteur de ligne réduite pour 5 lignes et plus
+  d.lignes.forEach(l=>{
+    if (l.type==='fuel'){
+      tx('Surcharge carburant',cols[0],y+5,8.2);
+      tx('—',cols[1],y+5,8.5,{align:'right'}); tx('—',cols[2],y+5,8.5,{align:'right'}); tx('—',cols[3],y+5,8.5,{align:'right'}); tx(comMadP(l.montant),cols[4],y+5,8.5,{align:'right'});
+      y+=RH; line(M,y,R,y,LINE,0.3); return;
+    }
+    if (l.type==='immo'){
+      tx(l.libelle+' - '+l.jours+' jour'+(l.jours>1?'s':'')+' supplémentaire'+(l.jours>1?'s':'')+' ('+(d.immoMin||2)+' h / jour)',cols[0],y+5,8.2);
+      tx("1 jour d'immobilisation inclus dans le prix des vols",cols[0],y+9,7.2,{c:MUTE});
+      tx('—',cols[1],y+5,8.5,{align:'right'}); tx(comHm(l.minutes),cols[2],y+5,8.5,{align:'right'}); tx(comMadP(d.tarifImmo!=null?d.tarifImmo:d.tarif),cols[3],y+5,8.5,{align:'right'}); tx(comMadP(l.montant),cols[4],y+5,8.5,{align:'right'});
+      y+=RH; line(M,y,R,y,LINE,0.3); return;
+    }
+    tx(l.libelle+' '+l.de.ville+' ('+l.de.icao+') - '+l.vers.ville+' ('+l.vers.icao+')',cols[0],y+5,8.2);
+    tx((l.national?'Vol national':'Vol international')+' · '+(l.passagers?'18 passagers max.':'sans passagers'),cols[0],y+9,7.2,{c:MUTE});
+    tx(l.distance+' NM',cols[1],y+5,8.5,{align:'right'}); tx(comHm(l.minutes),cols[2],y+5,8.5,{align:'right'}); tx(comMadP(d.tarif),cols[3],y+5,8.5,{align:'right'}); tx(comMadP(l.montant),cols[4],y+5,8.5,{align:'right'});
+    y+=RH; line(M,y,R,y,LINE,0.3);
+  });
+  // Totaux
+  y+=4; const t0=120;
+  tx('Total HT',t0+3,y+4,8.8); tx(comMadP(d.totalHT),R-3,y+4,8.8,{b:1,align:'right'});
+  if (d.national){ tx('TVA 20 %',t0+3,y+10,8.8); tx(comMadP(d.tva),R-3,y+10,8.8,{align:'right'}); } else { tx('TVA (vol international)',t0+3,y+10,8.8); tx('Exonérée',R-3,y+10,8.8,{align:'right'}); }
+  rrect(t0,y+13,R-t0,10,1.5,{fill:RED}); tx('Total TTC',t0+3,y+19.5,10.5,{b:1,c:WHITE}); tx(comMadP(d.ttc),R-3,y+19.5,10.5,{b:1,c:WHITE,align:'right'});
+  // Conditions
+  y+=31; tx('CONDITIONS',M,y,8,{b:1,c:BDX}); y+=5;
+  const conds=[['Inclus : ',"toutes les prestations, à l'exception du dégivrage et du handling."],['Non inclus : ','dégivrage (de-icing) et handling, refacturés au réel.'],["Validité de l'offre : ",COM_DV.VALID+' jours.'],['Paiement : ','100 % à la confirmation.'],['Temps de vol : ','estimés ; la facturation se fait sur les temps de vol réels.']]
+  if (d.carburant) conds.splice(2,0,['Carburant : ','tarif établi sur une base de '+comDec2(d.carburant.ref)+' MAD/litre de Jet A-1 ; surcharge selon l\'indice mondial Jet A-1 au jour du devis, à la hausse comme à la baisse.']);
+  if (d.lignes.filter(l=>l.passagers).length>1) conds.splice(2,0,['Immobilisation : ',"1 jour inclus ; chaque jour supplémentaire est facturé "+(d.immoMin||2)+" h d'immobilisation."]);
+  conds.forEach(([k,v])=>{ const w=tx(k,M,y,8.5,{b:1}); wrap(v,8.5,R-M-w).forEach((s,i)=>{ tx(s,M+w,y,8.5); y+=4.4; }); });
+  y=Math.min(y, 282-3-22-2); // garde-fou : les signatures ne touchent jamais le pied de page
+  // Signatures
+  y+=3; rrect(M,y,88,22,2,{stroke:LINE,bw:0.4}); rrect(R-88,y,88,22,2,{stroke:LINE,bw:0.4});
+  tx('Pour AFRIJET Sahara',M+3,y+5,7.8,{c:MUTE}); tx(d.signataire,M+3,y+9.5,8.2,{b:1}); tx('Date et signature',M+3,y+13.5,7.8,{c:MUTE});
+  tx('Bon pour accord — le client',R-85,y+5,7.8,{c:MUTE}); tx('Nom, date, cachet et signature',R-85,y+9.5,7.8,{c:MUTE});
+  // Pied de page
+  line(M,282,R,282,LINE,0.3);
+  tx('Sahara Aviation SAS — Société par Actions Simplifiée au capital de 2 000 000 MAD · RC 29461 Dakhla · ICE 003722554000017 · IF 66974679',W/2,286,6.8,{c:MUTE,align:'center'});
+  tx('Siège social : Lotissement Khalij Dakhla, Villa n°86, BP 3201, 73000 Dakhla — Maroc · +212 6 89 59 59 00 · info@afrijet.ma',W/2,289.5,6.8,{c:MUTE,align:'center'});
+  const bytes=await pdf.save();
+  return new Blob([bytes],{type:'application/pdf'});
+}
+
+const comNomPdf=d=>d.numero+(d.version?"-v"+d.version:"")+".pdf";
+async function comOuvrirPdf(d){
+  try{ const blob=await comPdf(d), url=URL.createObjectURL(blob), w=window.open(url,"_blank");
+    if(!w){ const a=document.createElement("a"); a.href=url; a.download=comNomPdf(d); document.body.appendChild(a); a.click(); a.remove(); } }
+  catch(e){ logSilent(e); uiAlert("⚠️ Le PDF n'a pas pu être produit. Vérifiez la connexion (première utilisation), puis réessayez."); }
+}
+// Partage (WhatsApp, e-mail…) par le menu du téléphone ; à défaut, téléchargement
+async function comEnvoyerPdf(d){
+  let blob; try{ blob=await comPdf(d); }catch(e){ logSilent(e); uiAlert("⚠️ Le PDF n'a pas pu être produit."); return false; }
+  const file=new File([blob],comNomPdf(d),{type:"application/pdf"});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:"Devis "+d.numero,text:"Devis AFRIJET Sahara "+d.numero+" — "+((d.client&&d.client.nom)||"")}); return true; }
+    catch(e){ if(e&&e.name==="AbortError") return false; }
+  }
+  const url=URL.createObjectURL(file), a=document.createElement("a"); a.href=url; a.download=file.name; document.body.appendChild(a); a.click(); a.remove();
+  return true;
+}
+
+function ComAptPick({ label, value, apts, onChange }){
+  const [q,setQ]=useState(null);           // null : champ fermé, texte : recherche en cours
+  const R=q===null?[]:(q.trim()?comAptSearch(apts,q):(apts||[]).filter(a=>a.pays==="Maroc").sort((a,b)=>a.ville.localeCompare(b.ville)));
+  const lib=a=>a?(a.ville+" ("+(a.iata?a.iata+" / ":"")+a.icao+")").toUpperCase():"";
+  return (<div style={{position:"relative"}}><ComLbl>{label}</ComLbl>
+    <input value={q===null?lib(value):q} onFocus={()=>setQ("")} onChange={e=>setQ(e.target.value)} onBlur={()=>setTimeout(()=>setQ(null),200)}
+      placeholder="Ville, code IATA ou OACI" autoCapitalize="characters" style={{...comInp,textTransform:"uppercase",fontWeight:700,color:C.navy}}/>
+    {q!==null&&R.length>0&&<div style={{position:"absolute",left:0,right:0,top:"100%",zIndex:20,background:"white",border:"1px solid "+C.border,borderRadius:10,maxHeight:260,overflowY:"auto",boxShadow:"0 8px 20px rgba(0,0,0,.12)"}}>
+      {R.map(a=><div key={a.icao} role="button" onMouseDown={e=>{ e.preventDefault(); onChange(a); setQ(null); }} style={{padding:"9px 12px",borderBottom:"1px solid "+C.border,fontSize:12.5,...TAP,background:value&&value.icao===a.icao?"#E0F4F8":"white"}}>
+        <b>{(a.ville+" — "+a.nom).toUpperCase()}</b> <span style={{color:C.slate,fontSize:11}}>{(a.iata?a.iata+" / ":"")+a.icao} · {a.pays}</span></div>)}</div>}
+  </div>);
+}
+
+// Éditeur de devis : nouveau devis d'une fiche, ou nouvelle version d'un devis (même numéro)
+function ComDevisEdit({ fiche, parent, com, onDone }){
+  const [apts,setApts]=useState(null), [etat,setEtat]=useState(null), [e,setE]=useState(null), [busy,setBusy]=useState(false);
+  const qui=comQui();
+  useEffect(()=>{ let vivant=true; (async()=>{
+    const [A,r]=await Promise.all([comAeroports(),comApi("etat")]);
+    if(!vivant) return;
+    setApts(A); setEtat(r.status===200?{V:{...COM_DEFAUTS,...r.data.params},F:r.data.carburant||null,ok:true}:{V:{...COM_DEFAUTS,...(com.params||{})},F:null,ok:false,err:comErreur(r)});
+    const by=i=>comAptBy(A,i), base=by(COM_DV.BASE);
+    let st={dep:null,arr:null,ar:true,immo:1,bas:base,ret:base,ovr:{},fuelForce:{},intro:"",introManual:false,ia:"",iaErr:""};
+    if(parent){ const l=(parent.lignes||[]).filter(x=>x.passagers); st={...st,dep:by(l[0]&&l[0].de.icao),arr:by(l[0]&&l[0].vers.icao),ar:l.length>1,intro:parent.intro||"",introManual:true,
+        immo:Math.max(1,Number(parent.immobilisation)||1),bas:(parent.base&&by(parent.base.icao))||base,ret:(parent.retour&&by(parent.retour.icao))||base};
+      if(parent.carburant&&parent.carburant.aeroports) parent.carburant.aeroports.forEach(a=>{ if(a.force) st.fuelForce[a.icao]=a.prix; }); }
+    // Premier devis de la fiche : trajet noté au salon. Devis suivants : aéroports à choisir.
+    else if(!(com.devis||[]).some(d=>d.ficheId===fiche.id)){ st.dep=(fiche.devisDeIcao&&by(fiche.devisDeIcao))||comAptGuess(A,fiche.devisDe); st.arr=(fiche.devisVersIcao&&by(fiche.devisVersIcao))||comAptGuess(A,fiche.devisVers); }
+    setE(st);
+    if(!st.intro&&st.dep&&st.arr) ecrireIA(st);
+  })(); return ()=>{ vivant=false; }; },[]);
+  const ecrireIA=async st=>{
+    setE(o=>({...(o||st),ia:"busy",iaErr:""}));
+    const r=await comApi("texte",{contexte:comContexteIA(fiche,st.dep,st.arr,st.ar)});
+    setE(o=>{ const n={...o,ia:""}; if(r.status===200&&r.data.texte){ if(!o.introManual) n.intro=r.data.texte; } else { if(!o.intro) n.intro=comIntroSecours(fiche,o.dep,o.arr); n.iaErr=comErreur(r); } return n; });
+  };
+  if(!e||!etat) return <ComCarte><div style={{fontSize:12.5,color:C.slate}}>Chargement des aéroports et des tarifs…</div></ComCarte>;
+  const V=etat.V, F=etat.F, L=comDvLegs(e,V,F), T=comTotaux(L,V), hr=L.some(comHorsRange);
+  const maj=o=>setE(x=>({...x,...o}));
+  const changeTrajet=o=>setE(x=>{ const n={...x,...o,ovr:{}}; return n; });
+  const forcer=async a=>{
+    const v=await uiPrompt("Prix du Jet A-1 à "+a.ville+" ("+a.icao+"), en MAD/litre.\nIndice du jour : "+(F&&F.madL>0?comDec2(F.madL):"—")+" · "+comGrp3(a.litres)+" L",comDec2(a.prix!=null?a.prix:(F&&F.madL>0?F.madL:V.fuelRef)));
+    if(v===null||v===undefined) return;
+    const n=Math.round(Number(String(v).replace(",","."))*100)/100;
+    if(!(n>=0.1&&n<=100)){ uiAlert("Prix incorrect : entre 0,10 et 100 MAD/litre."); return; }
+    maj({fuelForce:{...e.fuelForce,[a.icao]:n}});
+  };
+  const valider=async()=>{
+    if(hr){ uiAlert("Devis impossible : un vol est hors rayon d'action (plus de 1 750 NM)."); return; }
+    if(!L.length){ uiAlert("Choisissez l'aéroport de départ et d'arrivée."); return; }
+    setBusy(true);
+    const r=await comApi("creer",{devis:{ficheId:fiche.id,client:{nom:fiche.nom,fonction:fiche.fonction,organisation:fiche.organisation,tel:fiche.tel,email:fiche.email},
+      intro:e.intro||comIntroSecours(fiche,e.dep,e.arr),lignes:L,immobilisation:e.ar?e.immo:1,base:{icao:e.bas.icao,ville:e.bas.ville},retour:{icao:e.ret.icao,ville:e.ret.ville},
+      fuelForce:e.fuelForce,numeroParent:parent?parent.numero:null}});
+    setBusy(false);
+    if(r.status!==201||!r.data.devis){ uiAlert("⚠️ "+comErreur(r)); return; }
+    const d=r.data.devis, iso=new Date().toISOString();
+    com.setDevis(X=>[...(X||[]),d]);
+    com.setProspects(X=>(X||[]).map(p=>p.id===fiche.id?{...p,updatedAt:iso,historique:[...(p.historique||[]),{date:iso,auteur:qui,texte:"Devis "+d.numero+" v"+d.version+" créé"}]}:p));
+    onDone(d.id);
+  };
+  const ligne=(l,i)=>{
+    if(l.type==="fuel") return <div key={i} style={{background:"#FFF7E6",borderRadius:10,padding:"8px 10px",fontSize:12.5}}><div style={{display:"flex",justifyContent:"space-between"}}><b>Surcharge carburant</b><b>{comMadP(l.montant)}</b></div></div>;
+    if(l.type==="immo") return <div key={i} style={{border:"1px solid "+C.border,borderRadius:10,padding:"8px 10px",fontSize:12.5}}>
+      <div style={{display:"flex",justifyContent:"space-between"}}><b>{l.libelle}</b><b>{comMadP(comLineAmt(l,V))}</b></div>
+      <div style={{fontSize:11,color:C.slate}}>{l.jours} jour(s) supplémentaire(s) × {V.immoMin} h · 1 jour inclus dans le prix des vols</div></div>;
+    return <div key={i} style={{border:"1.5px solid "+(comHorsRange(l)?"#DC2626":C.border),borderRadius:10,padding:"8px 10px",fontSize:12.5}}>
+      <div style={{display:"flex",justifyContent:"space-between",gap:8}}><b>{l.libelle}</b><span style={{color:C.slate}}>{l.de.ville} → {l.vers.ville}</span></div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}><span style={{flex:1,color:C.slate}}>{l.distance} NM</span>
+        <input type="number" inputMode="numeric" min="1" max="1440" value={l.minutes} onChange={ev=>{ const m=Math.max(1,Math.min(1440,Math.round(Number(ev.target.value)||0))); maj({ovr:{...e.ovr,[i]:m}}); }}
+          style={{...comInp,width:74,height:34,padding:"0 8px",textAlign:"right"}}/><span style={{fontSize:11.5}}>min</span><b style={{minWidth:92,textAlign:"right"}}>{comMadP(comLineAmt(l,V))}</b></div>
+      <div style={{fontSize:11,color:C.slate,marginTop:3}}>{l.national?"Vol national":"Vol international"}{l.passagers?"":" · sans passagers"}{e.ovr[i]?" · durée modifiée":""}</div>
+      {comHorsRange(l)&&<div style={{fontSize:11.5,color:"#991B1B",marginTop:4}}>⚠️ Hors rayon : environ {comGrp3(comRouteNM(l))} NM de route (maximum 1 750 NM). Escale carburant nécessaire.</div>}</div>;
+  };
+  const A=comFuelAirports(L,F,e.fuelForce,V);
+  return (<>
+    {!etat.ok&&<ComCarte style={{borderLeft:"4px solid #BA7517",borderRadius:"0 12px 12px 0"}}><div style={{fontSize:12,color:"#854F0B"}}>{etat.err} Les montants affichés sont indicatifs : la validation passera par le serveur.</div></ComCarte>}
+    <ComCarte><div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{fontSize:12.5,color:C.slate}}>{parent?"Nouvelle version de "+parent.numero:"Nouveau devis"} · {fiche.nom}{fiche.organisation?" · "+fiche.organisation:""}</div>
+      <ComAptPick label="Départ" value={e.dep} apts={apts} onChange={a=>changeTrajet({dep:a})}/>
+      <ComAptPick label="Arrivée" value={e.arr} apts={apts} onChange={a=>changeTrajet({arr:a})}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{[[false,"Aller simple"],[true,"Aller-retour"]].map(([v,l])=><button key={l} onClick={()=>changeTrajet({ar:v})}
+        style={{...comBtn(e.ar===v?COM_BLEU:"white",e.ar===v?"white":C.navy,e.ar===v?COM_BLEU:"#CBD5E1"),height:38}}>{l}</button>)}</div>
+      {e.ar&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style={{fontSize:13,fontWeight:700,color:C.navy}}>Jours sur place</div>
+        <div style={{fontSize:11,color:C.slate}}>1 jour inclus ; chaque jour en plus : {V.immoMin} h au tarif d'immobilisation</div></div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}><button onClick={()=>maj({immo:Math.max(1,e.immo-1)})} style={{...comBtn("white",C.navy,"#CBD5E1"),width:34,height:34}}>−</button>
+          <b style={{fontSize:16}}>{e.immo}</b><button onClick={()=>maj({immo:Math.min(30,e.immo+1)})} style={{...comBtn("white",C.navy,"#CBD5E1"),width:34,height:34}}>+</button></div></div>}
+      <ComAptPick label="L'avion part de" value={e.bas} apts={apts} onChange={a=>changeTrajet({bas:a})}/>
+      <ComAptPick label="L'avion rentre à" value={e.ret} apts={apts} onChange={a=>changeTrajet({ret:a})}/>
+    </div></ComCarte>
+    <ComLbl>Vols</ComLbl>
+    {!L.length&&<ComCarte><div style={{fontSize:12.5,color:C.slate}}>Choisissez l'aéroport de départ et d'arrivée.</div></ComCarte>}
+    {L.map(ligne)}
+    {A.length>0&&<ComCarte><ComLbl>Carburant par aéroport de départ (MAD/L)</ComLbl>
+      <div style={{fontSize:11.5,color:C.slate,marginBottom:6}}>{F&&!F.erreur?"Indice Jet A-1 du "+comFD(F.indiceDate)+" : "+comDec2(F.madL)+" MAD/L (1 USD = "+String(F.usdMad).replace(".",",")+" MAD) · référence "+comDec2(V.fuelRef)+(F.ancien?" · valeur ancienne":"")
+        :F&&F.erreur==="cle_eia"?"Indice indisponible : clé EIA_API_KEY absente sur le serveur. Forcez un prix si besoin.":"Indice du jour indisponible. Forcez un prix si besoin."}</div>
+      {A.map(a=><div key={a.icao} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"6px 0",borderTop:"1px solid "+C.border,fontSize:12.5}}>
+        <div><b>{a.ville} ({a.icao})</b><div style={{fontSize:11,color:C.slate}}>{a.vols.join(" + ")} · {comGrp3(a.litres)} L</div></div>
+        <div style={{textAlign:"right"}}><b>{a.prix==null?"—":comDec2(a.prix)}</b>{a.force&&<span style={{fontSize:10.5,color:"#854F0B"}}> forcé</span>}<br/>
+          {a.force?<span role="button" onClick={()=>{ const f={...e.fuelForce}; delete f[a.icao]; maj({fuelForce:f}); }} style={{fontSize:11.5,color:COM_BLEU,fontWeight:700,...TAP}}>↩ Indice</span>
+            :<span role="button" onClick={()=>forcer(a)} style={{fontSize:11.5,color:COM_BLEU,fontWeight:700,...TAP}}>✏️ Forcer</span>}</div></div>)}
+      <div style={{fontSize:11,color:C.slate,marginTop:4}}>Détail interne : n'apparaît pas sur le PDF.</div></ComCarte>}
+    {L.length>0&&<ComCarte><ComLigne l="Total HT" v={<b>{comMadP(T.ht)}</b>}/><ComLigne l={T.national?"TVA 20 %":"TVA (vol international)"} v={T.national?comMadP(T.tva):"Exonérée"}/>
+      <ComLigne l="Total TTC" v={<b>{comMadP(T.ttc)}</b>}/></ComCarte>}
+    <ComCarte><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><ComLbl>Introduction</ComLbl>
+        <span role="button" onClick={()=>e.ia!=="busy"&&e.dep&&e.arr&&(maj({introManual:false}),ecrireIA({...e,introManual:false}))} style={{fontSize:11.5,color:COM_BLEU,fontWeight:700,...TAP}}>✨ {e.intro?"Réécrire":"Rédiger"} par l'IA</span></div>
+      <textarea value={e.intro} onChange={ev=>maj({intro:ev.target.value,introManual:true})} rows={5} style={{...comInp,height:"auto",padding:10,lineHeight:1.45,fontSize:13}}/>
+      <div style={{fontSize:11,color:e.iaErr?"#991B1B":C.slate,marginTop:4}}>{e.ia==="busy"?"✨ L'IA rédige l'introduction…":e.iaErr?"IA indisponible : "+e.iaErr+" Un texte de base a été mis à la place.":"Texte modifiable. Aucun prix ni date : ils figurent dans le tableau."}</div></ComCarte>
+    {hr&&<ComCarte style={{borderLeft:"4px solid #DC2626",borderRadius:"0 12px 12px 0"}}><div style={{fontSize:12.5,color:"#991B1B"}}><b>Hors rayon d'action : escale carburant nécessaire.</b><br/>Choisissez un autre aéroport, ou faites un devis pour chaque étape via une escale.</div></ComCarte>}
+    <button onClick={()=>L.length&&!hr&&comOuvrirPdf({numero:(parent?parent.numero:"DEV-"+new Date().getFullYear()+"-…"),version:0,date:new Date().toISOString(),validite:new Date(Date.now()+COM_DV.VALID*864e5).toISOString(),
+      client:{nom:fiche.nom,fonction:fiche.fonction,organisation:fiche.organisation,tel:fiche.tel,email:fiche.email},intro:e.intro||comIntroSecours(fiche,e.dep,e.arr),tarif:V.tarifVol,tarifImmo:V.tarifImmo,immoMin:V.immoMin,
+      carburant:A.some(a=>a.prix!=null)?{ref:V.fuelRef}:null,lignes:L.map(l=>({...l,montant:comLineAmt(l,V)})),totalHT:T.ht,national:T.national,tva:T.tva,ttc:T.ttc,suiviPar:V.signataire,signataire:V.signataire})}
+      style={{...comBtn("white",COM_BLEU,COM_BLEU),opacity:L.length&&!hr?1:.45}}>Aperçu du PDF</button>
+    <button onClick={valider} disabled={busy||!L.length||hr} style={{...comBtn(COM_BLEU,"white"),opacity:busy||!L.length||hr?.45:1}}>{busy?"Validation…":"✓ Valider le devis"}</button>
+    <div style={{fontSize:11,color:C.slate,textAlign:"center"}}>Numéro attribué et montants recalculés par le serveur à la validation</div>
+  </>);
 }
 
 // ── Screens ──────────────────────────────────────────────────────────────────
@@ -12023,7 +12383,10 @@ function AppMain({ onLogout, profileId }) {
   // Module Commercial : prospects, devis, paramètres de calcul, historique des imports d'Airshow
   const [prospects,setProspects] = usePersist("prospects",[]);
   const [devis,setDevis]         = usePersist("devis",[]);
-  const [comParams,setComParams] = usePersist("comParams",COM_DEFAUTS);
+  // Paramètres des devis : lus dans la base, écrits seulement par le serveur (api/commercial.js, script s2)
+  const [comParams,setComParams] = useState(COM_DEFAUTS);
+  useEffect(()=>{ let vivant=true; const lire=()=>sbGet(PFX+"comParams").then(r=>{ if(vivant&&r) setComParams({...COM_DEFAUTS,...unwrapEnv(r).v}); });
+    lire(); const t=setInterval(lire,5*60*1000); return ()=>{ vivant=false; clearInterval(t); }; },[]);
   const [comImports,setComImports] = usePersist("comImports",[]);
   const [aircraft,setAircraft] = usePersist("aircraft",INIT_AIRCRAFT);
   const [dismissed,setDism]  = usePersist("dismissed",[]);
@@ -12143,7 +12506,6 @@ function AppMain({ onLogout, profileId }) {
     if(data.clients)   setClients(data.clients);
     if(data.prospects) setProspects(data.prospects);
     if(data.devis)     setDevis(data.devis);
-    if(data.comParams) setComParams(data.comParams);
     if(data.comImports)setComImports(data.comImports);
     if(data.alertHist) setAlertHist(data.alertHist);
     if(data.melHist)   setMelHist(data.melHist);
