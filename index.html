@@ -92,6 +92,13 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// ── Version ────────────────────────────────────────────────────────────────────
+// Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
+// À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
+const APP_VERSION = "2.2";
+// Mention affichée en bas des écrans de connexion
+const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
+
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://zulwubuzuylmwkittnbg.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1bHd1YnV6dXlsbXdraXR0bmJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3Mjk5MjQsImV4cCI6MjA5ODMwNTkyNH0.Bt2MXASzrqWPaxTxo7ImZu-FtdjahLG9FLOMIgz9SWA";
@@ -10958,7 +10965,8 @@ function ProgressModal({ title, icon, steps, currentStep, pct }) {
 
 function ProfileSelectScreen({ onSelect }) {
   return (
-    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:24}}>
+    <div style={{minHeight:"100vh",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:24}}>
+      <div style={{flex:1}}/>
       <div style={{textAlign:"center",marginBottom:28}}>
         <img src={LOGO_B64} style={{width:90,height:90,objectFit:"contain",borderRadius:12,marginBottom:8,background:"white",padding:6}} alt="Afrijet Sahara"/>
         <div style={{fontWeight:800,fontSize:20,color:"white"}}>Afrijet Sahara</div>
@@ -10980,6 +10988,8 @@ function ProfileSelectScreen({ onSelect }) {
           </button>
         ))}
       </div>
+      <div style={{flex:1}}/>
+      <VersionMention/>
     </div>
   );
 }
@@ -11076,7 +11086,8 @@ function LoginGate({ onAuth }) {
   const inp={width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:14,outline:"none",marginBottom:10};
   const main={width:"100%",height:46,background:ok?"#00936A":profile?.color||"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer"};
   return (
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:20}}>
+    <div style={{minHeight:"100vh",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#0F1F3D",padding:20}}>
+      <div style={{flex:1}}/>
       <div style={{background:"#fff",borderRadius:16,padding:32,width:"100%",maxWidth:340,boxShadow:"0 20px 50px rgba(0,0,0,.3)"}}>
         <button onClick={()=>{ if(step==="upwd"){ setStep("user"); setErr(""); setPwd(""); } else setStep("select"); }} style={{background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:12,marginBottom:12,display:"flex",alignItems:"center",gap:4}}>
           ← {step==="upwd"?"Changer de nom":"Changer de profil"}
@@ -11113,6 +11124,8 @@ function LoginGate({ onAuth }) {
         {step==="totp_setup"&&<TotpSetup secret={totpSecret} profileId={profileId} account={user?userLabel(user):null} onVerified={handleTotpSetupVerified}/>}
         {step==="totp_verify"&&<TotpVerify verifServeur={attenteTotp?verifTotpServeur:null} profileId={profileId} storeKey={user?USER_TOTP_KEY(user):null} account={user?userLabel(user):null} lockId={user?"u:"+user.id:"p:"+profileId} lockLabel={user?userLabel(user):profileId} onVerified={handleTotpVerified}/>}
       </div>
+      <div style={{flex:1}}/>
+      <VersionMention/>
     </div>
   );
 }
