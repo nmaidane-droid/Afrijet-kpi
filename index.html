@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.5";
+const APP_VERSION = "2.6";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -1781,7 +1781,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
   const choisirDemande=(dem,leg)=>{ const v=comPrefillVol(dem,leg);
     setFlightType(v.flightType); setFrom(v.from); setTo(v.to); setDate(v.date); setDep(v.dep); setArr(v.arr); setPax(v.pax?String(v.pax):""); setClientId(v.clientId);
     if(!num.trim()&&ac&&ac.immat) setNum(ac.immat);   // n° de vol vidé après l'enregistrement précédent : immatriculation de l'avion
-    setLien({demandeId:v.demandeId,demandeVol:v.demandeVol,minutes:leg.minutes,libelle:dem.devisNumero+" · "+(leg.de.iata||leg.de.icao)+" → "+(leg.vers.iata||leg.vers.icao)}); };
+    setLien({demandeId:v.demandeId,demandeVol:v.demandeVol,minutes:leg.minutes,clientId:v.clientId,clientNom:v.clientNom,libelle:dem.devisNumero+" · "+(leg.de.iata||leg.de.icao)+" → "+(leg.vers.iata||leg.vers.icao)}); };
   // Vol transmis : l'arrivée suit le départ saisi, avec la durée du devis
   useEffect(()=>{ if(lien&&lien.minutes){ const a=comHeurePlus(dep,lien.minutes); if(a) setArr(a); } },[dep,lien]);
 
@@ -1857,13 +1857,13 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
           </div>
         </div>
         {/* Client selector - custom dropdown */}
-        {clients&&clients.length>0&&(
+        {((clients&&clients.length>0)||(lien&&lien.clientId))&&(
           <div>
             <FLabel>{flightType==="Commercial"?"Client *":"Client (optionnel)"}</FLabel>
             <CustomSelect
               value={clientId} onChange={setClientId} searchable
               icon="🏢" placeholder={flightType==="Commercial"?"-- Sélectionner un client --":"-- Aucun client --"}
-              options={(clients||[]).map(c=>({value:c.id,label:c.nom,sub:c.type+' · '+c.ville}))}
+              options={comOptionsClients(clients,clientId,lien&&lien.clientId===clientId?lien.clientNom:"")}
             />
           </div>
         )}
@@ -8014,8 +8014,16 @@ function comVolsAPlanifier(demandes,flights){
 // Pré-remplissage du formulaire Vol (les contrôles du formulaire restent inchangés)
 function comPrefillVol(dem,leg){
   const com=leg.type==="vol";
+  // Le client est rempli sur tous les vols du dossier, mises en place comprises (suivi, facturation)
   return {flightType:com?"Commercial":"Positioning",from:leg.de.iata||leg.de.icao,to:leg.vers.iata||leg.vers.icao,date:leg.date,
-    dep:leg.heure||"",arr:leg.heure?comHeurePlus(leg.heure,leg.minutes):"",pax:com?dem.pax:0,clientId:com?dem.clientId:"",demandeId:dem.id,demandeVol:leg.i};
+    dep:leg.heure||"",arr:leg.heure?comHeurePlus(leg.heure,leg.minutes):"",pax:com?dem.pax:0,clientId:dem.clientId||"",clientNom:dem.clientNom||"",demandeId:dem.id,demandeVol:leg.i};
+}
+// Liste des clients du formulaire Vol. Un client tout juste créé par le Commercial, pas encore reçu
+// sur ce téléphone, est affiché avec le nom porté par la demande : le champ ne paraît jamais vide.
+function comOptionsClients(clients,clientId,nomSecours){
+  const o=(clients||[]).map(c=>({value:c.id,label:c.nom,sub:c.type+" · "+c.ville}));
+  if(clientId&&nomSecours&&!o.some(x=>x.value===clientId)) o.unshift({value:clientId,label:nomSecours,sub:"Nouveau client · transmis par le Commercial"});
+  return o;
 }
 // Horaires à envoyer au client (vols avec passagers seulement)
 function comTexteHoraires(dem,etat){
@@ -8649,10 +8657,10 @@ function ComAccepter({ d, prospects, clients, setClients, com, onDone }){
     <ComCarte><ComLbl>Dates souhaitées par le client</ComLbl>
       {legs.map(l=><div key={l.i} style={{padding:"8px 0",borderTop:l.i?"1px solid "+C.border:"none"}}>
         <div style={{fontSize:12.5,marginBottom:6}}>{tag(l.type)} <b>{l.libelle}</b> <span style={{color:C.slate}}>· {l.de.ville} → {l.vers.ville} · {comHm(l.minutes)}</span></div>
-        <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:8}}>
-          <input type="date" min={aujourdhui} value={s.vols[l.i].date} onChange={e=>setV(l.i,"date",e.target.value)} style={comInp}/>
-          <input type="time" value={s.vols[l.i].heure} onChange={e=>setV(l.i,"heure",e.target.value)} style={comInp}/></div></div>)}
-      <div style={{fontSize:11,color:C.slate,marginTop:6}}>Heure facultative : les Opérations fixent l'heure définitive.</div></ComCarte>
+        <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:8}}>
+          <div><ComLbl>Date</ComLbl><DateField value={s.vols[l.i].date} min={aujourdhui} onChange={v=>setV(l.i,"date",v)}/></div>
+          <div><ComLbl>Heure (GMT)</ComLbl><TimeField value={s.vols[l.i].heure} onChange={v=>setV(l.i,"heure",v)} placeholder="HH:MM"/></div></div></div>)}
+      <div style={{fontSize:11,color:C.slate,marginTop:6}}>Dates au format JJ/MM/AAAA, heures sur 24 h (GMT), comme dans le formulaire Vol. Heure facultative : les Opérations fixent l'heure définitive.</div></ComCarte>
     <ComCarte><div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:C.navy}}>Passagers</span>
         <input type="number" inputMode="numeric" min="1" max="18" value={s.pax} onChange={e=>setS(o=>({...o,pax:e.target.value}))} style={{...comInp,width:80,textAlign:"center",fontWeight:700}}/></div>
       <div style={{marginTop:10}}><ComLbl>Note pour les Opérations</ComLbl>
