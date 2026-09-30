@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.13";
+const APP_VERSION = "2.14";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -4534,6 +4534,11 @@ function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHaza
   const [edit,setEdit]=useState(null);        // { kind:'hazard'|'action', data }
   const [evFilter,setEvFilter]=useState('todo');
   const [qE,setQE]=useState('');
+  // Éléments dépliés (▼) dans les listes Événements, Dangers et Actions : tout est replié au départ
+  const [ouv,setOuv]=useState({});
+  const basculer=(k,ev)=>{ if(ev) ev.stopPropagation(); setOuv(o=>({...o,[k]:!o[k]})); };
+  const Tri=({k})=><span role="button" aria-label={ouv[k]?"Replier":"Déplier"} onClick={ev=>basculer(k,ev)}
+    style={{width:22,flexShrink:0,textAlign:"center",fontSize:12,color:"#0F766E",padding:"4px 0",...TAP}}>{ouv[k]?"▼":"▶"}</span>;
   const [anaK,setAnaK]=useState(null), [anaD,setAnaD]=useState({});   // fiche d'analyse en cours de saisie                          // recherche événements
   const [expEv,setExpEv]=useState(null);                  // panneau d'export : {periode,svc,conf}
   const [qD,setQD]=useState(''), [fDst,setFDst]=useState('actifs'), [fDniv,setFDniv]=useState('all');   // dangers
@@ -4902,9 +4907,10 @@ function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHaza
           return <div style={{fontSize:12,color:C.slate,marginTop:6}}>{n} résultat{n>1?'s':''} pour « {qE.trim().slice(0,30)}{qE.trim().length>30?'…':''} » · <span role="button" onClick={()=>setQE('')} style={{color:"#0F766E",fontWeight:700,...TAP}}>tout afficher</span></div>; })()}
         <div style={{marginTop:10}}>
         {events.filter(e=>evFilter==='all'||(evFilter==='todo'?statutEv(e)==='recu':statutEv(e)===evFilter)).filter(e=>sgsMatch(qE,e.description,e.titre,e.form,e.num,e.from,e.to,safetyLabels(e).join(' '))).slice(0,80).map((e,i)=>{
-          const st=statutEv(e), late=st==='recu'&&sgsJours(e.date)>20;
+          const st=statutEv(e), late=st==='recu'&&sgsJours(e.date)>20, kEv='ev:'+sgsEventKey(e), ouvert=!!ouv[kEv];
           return (<div key={sgsEventKey(e)+i} style={{padding:"11px 0",borderBottom:"1px solid "+C.border}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:5}}>
+            <div role="button" onClick={()=>basculer(kEv)} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:5,...TAP}}>
+              <Tri k={kEv}/>
               <b style={{fontSize:12,color:C.navy}}>{sgsFr(e.date)}</b><span style={{fontSize:11,color:C.slate}}>({sgsRel(e.date)})</span>
               <span style={{fontSize:11,color:C.slate}}>{e.rattachement==='hors'?'Hors vol':e.rattachement==='appareil'?'Appareil '+e.num:e.num+' · '+(e.from||'?')+'→'+(e.to||'?')}</span>
               {e.confidentiel&&<span style={{fontSize:9,fontWeight:800,color:"white",background:"#475569",borderRadius:5,padding:"1px 5px"}}>CONFIDENTIEL</span>}
@@ -4916,6 +4922,7 @@ function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHaza
               {e.titre&&<b style={{fontSize:12.5,color:C.text}}>{e.titre}</b>}
               {e.enquete&&<span style={{fontSize:9,fontWeight:800,color:"white",background:"#DC2626",borderRadius:5,padding:"1px 5px"}}>ENQUÊTE REQUISE</span>}</div>}
             <SafetyChips e={e}/>
+            {ouvert&&<>
             {sgsCrtsvDac(e)&&(()=>{ const k=sgsEventKey(e), d=(ES[k]||{}).dac, lim=new Date(String(e.date).slice(0,10)+'T12:00:00'); lim.setDate(lim.getDate()+28); const L=lim.toISOString().slice(0,10), late=!d&&L<today;
               return <div style={{marginTop:6,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:d?"#EAF3DE":late?"#FCEBEB":"#FAEEDA",borderRadius:8,padding:"7px 9px",fontSize:12,color:d?"#27500A":late?"#791F1F":"#633806"}}>
                 <span style={{flex:1}}>{d?'Copie transmise à la DAC le '+sgsFr(d):'Copie à la DAC avant le '+sgsFr(L)+(late?' — délai dépassé':' ('+sgsRel(L)+')')}</span>
@@ -4963,6 +4970,7 @@ function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHaza
                     {!e.anonyme&&an.retourDemande==='oui'&&<div style={{color:an.retourDate?"#0F766E":"#B45309",fontWeight:700}}>{an.retourDate?'Retour au déclarant le '+sgsFr(an.retourDate):'Retour au déclarant à faire'}</div>}</div>
                 : <button onClick={()=>setEdit({kind:'analyse',key:k,e})} style={{marginTop:10,border:"1px solid "+C.border,background:"white",borderRadius:8,padding:"6px 11px",fontSize:12,fontWeight:700,color:C.navy,...TAP}}>📝 Fiche d'analyse</button>;
             })()}
+            </>}
           </div>);})}
         </div>
       </div>)}
@@ -4979,9 +4987,10 @@ function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHaza
         </div>
         <div style={{marginTop:8}}>{list.map(h=>{ const r=sgsRisqueCourant(h), na=A.filter(a=>a.hazardId===h.id), sel=wide&&h.id===selId;
           return <div key={h.id} role="button" onClick={()=>setView({kind:'hazard',id:h.id})} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 8px",margin:"0 -8px",borderBottom:"1px solid "+C.border,borderRadius:sel?8:0,background:sel?"#E1F5EE":"transparent",...TAP}}>
+            <Tri k={'dg:'+h.id}/>
             <span style={{width:4,alignSelf:"stretch",borderRadius:2,background:r?r.c:C.border}}/>
             <div style={{flex:1,minWidth:0,opacity:h.statut==='clos'?.55:1}}><div style={{fontSize:13,fontWeight:800,color:C.text}}>{h.ref} · {h.titre}</div>
-              <div style={{fontSize:11,color:C.slate,marginTop:2}}>{(SGS_H_STATUTS.find(s=>s.k===(h.statut||'ouvert'))||{}).l} · {na.length} action{na.length>1?'s':''}{h.P2?' · initial '+sgsRisque(h.P,h.G).cell:''}</div></div>
+              {ouv['dg:'+h.id]&&<div style={{fontSize:11,color:C.slate,marginTop:2}}>{(SGS_H_STATUTS.find(s=>s.k===(h.statut||'ouvert'))||{}).l} · {na.length} action{na.length>1?'s':''}{h.P2?' · initial '+sgsRisque(h.P,h.G).cell:''}</div>}</div>
             <SgsBadge r={r}/></div>; })}</div>
         {!Hf.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>{H.length?"Aucun danger ne correspond à la recherche.":"Aucun danger enregistré. Ouvrez-en un depuis un compte rendu (onglet Événements) ou avec « + Nouveau danger »."}</div>}
         </div>;
@@ -5007,10 +5016,11 @@ function SgsTile({ prof, safety, flights, aircraft, ndsArchive, hazards, setHaza
           return <div key={t} style={{marginTop:12}}><div style={{fontSize:11,fontWeight:800,color:col,textTransform:"uppercase",letterSpacing:".04em",marginBottom:2}}>{t} · {items.length}</div>
             {items.map(a=>{ const h=H.find(x=>x.id===a.hazardId), late=t==='En retard', sel=wide&&a.id===selId;
               return <div key={a.id} role="button" onClick={()=>setView({kind:'action',id:a.id})} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 8px",margin:"0 -8px",borderBottom:"1px solid "+C.border,borderRadius:sel?8:0,background:sel?"#E1F5EE":"transparent",...TAP}}>
+                <Tri k={'ac:'+a.id}/>
                 <span style={{width:4,alignSelf:"stretch",borderRadius:2,background:late?"#DC2626":t==='Closes'?"#1D9E75":"#0F766E"}}/>
                 <div style={{flex:1,minWidth:0,opacity:t==='Closes'?.6:1}}><div style={{fontSize:13,fontWeight:800,color:C.text}}>{a.ref} · {a.titre}</div>
-                  <div style={{fontSize:11,color:late?"#B91C1C":C.slate,marginTop:2}}>{a.responsable}{h?' · '+h.ref:''} · {t==='Closes'?(SGS_A_STATUTS.find(s=>s.k===a.statut)||{}).l:late?'en retard de '+Math.max(1,sgsJours(a.echeance))+' jour(s)':'échéance '+sgsRel(a.echeance)}</div>
-                  {t!=='Closes'&&<div style={{marginTop:6}}><SgsStepper steps={SGS_A_STATUTS} value={a.statut||'afaire'} compact/></div>}</div>
+                  {ouv['ac:'+a.id]&&<><div style={{fontSize:11,color:late?"#B91C1C":C.slate,marginTop:2}}>{a.responsable}{h?' · '+h.ref:''} · {t==='Closes'?(SGS_A_STATUTS.find(s=>s.k===a.statut)||{}).l:late?'en retard de '+Math.max(1,sgsJours(a.echeance))+' jour(s)':'échéance '+sgsRel(a.echeance)}</div>
+                  {t!=='Closes'&&<div style={{marginTop:6}}><SgsStepper steps={SGS_A_STATUTS} value={a.statut||'afaire'} compact/></div>}</>}</div>
                 <SgsIcon n="chev" size={16} color={C.slate}/></div>; })}</div>; })}
         {!Af.length&&<div style={{textAlign:"center",fontSize:12.5,color:C.slateL,padding:16}}>{A.length?"Aucune action ne correspond à la recherche.":"Aucune action enregistrée. Créez-en une depuis la fiche d'un danger."}</div>}
         </div>;
