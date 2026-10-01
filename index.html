@@ -1363,8 +1363,13 @@ function MapMarocSVG({ ac, moroccoTraffic, icao24, selAc }) {
 
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
-function computeAlerts(kpis, flights, maintData, aircraft, crew, sgsRed, frats) {
+function computeAlerts(kpis, flights, maintData, aircraft, crew, sgsRed, frats, notamAl) {
   const a=[];
+  // NOTAM publiés après la planification (vérification quotidienne de 06:00 UTC, vols des 72 h)
+  notamAlertesActives(notamAl,flights).forEach(x=>{ const fr=d=>String(d||"").split("-").reverse().join("/");
+    a.push({id:"notam-"+(x.volId||x.num+x.date)+"-"+(x.notams||[]).map(n=>n.id).join("."), sev:x.statut==="ferme"?"danger":"warn", icon:x.statut==="ferme"?"⛔":"⚠️",
+      msg:(x.statut==="ferme"?"NOTAM — nouvelle fermeture sur le vol ":"NOTAM à confirmer par les Opérations — vol ")+x.num+" du "+fr(x.date)+" ("+x.from+" → "+x.to+") — "+(x.motif||(x.notams||[]).map(n=>n.id).join(", "))});
+  });
   // FRAT rouge : le vol attend des barrières, puis la décision du Dirigeant ou du SGS
   (frats||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&!f.decision2).forEach(f=>{
     const barres=(f.barrieresTxt||'').trim();
@@ -1797,6 +1802,50 @@ const INIT_FIN = [
 ];
 
 // ── Forms ────────────────────────────────────────────────────────────────────
+// Cadre NOTAM du formulaire Vol : vert (rien, significatif), orange (à confirmer), rouge (fermeture)
+function NotamListe({ notams }){
+  return (notams||[]).map((n,i)=>(
+    <div key={n.id+i} style={{background:"white",border:"1px solid "+(n.cat==="ferme"?"#FCA5A5":n.cat==="doute"?"#FCD34D":"#E2E8F0"),borderRadius:8,padding:"7px 9px",marginTop:6,fontFamily:"monospace",fontSize:11.5,color:"#1E293B",lineHeight:1.4,overflowWrap:"anywhere"}}>
+      <b style={{color:n.cat==="ferme"?"#B91C1C":n.cat==="doute"?"#B45309":"#475569"}}>{n.id}{n.q?" · "+n.q:""}</b><br/>
+      {String(n.texte||"").slice(0,220)}<br/>{notamDate(n.debut)} → {notamDate(n.fin)}{n.horaire?" · "+n.horaire:""}
+    </div>));
+}
+function NotamCadre({ res, charge, conf, setConf, peut }){
+  if(charge) return <div style={{border:"1.5px solid #CBD5E1",background:"#F8FAFC",borderRadius:12,padding:"11px 13px",fontSize:12.5,color:C.slate}}>Vérification des NOTAM…</div>;
+  if(!res) return <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45}}>Les NOTAM du départ et de l'arrivée seront vérifiés dès que la route, la date et l'heure de départ sont saisies.</div>;
+  const nom=f=>(f.oaci||f.iata||"?")+(f.role==="arrivee"?" (arrivée)":" (départ)");
+  const pied=<div style={{marginTop:7,fontSize:11,color:"#64748B"}}>Vérifiés à {notamHeure(res.verifieLe)} · aide aux Opérations : le commandant reste responsable des NOTAM officiels.</div>;
+  const fen=res.fenetres||[];
+  if(res.statut==="ferme") return (
+    <div role="alert" style={{border:"2px solid #DC2626",background:"#FEF2F2",borderRadius:12,padding:"12px 13px",fontSize:12.5,lineHeight:1.45,color:"#7F1D1D"}}>
+      <div style={{fontWeight:800,fontSize:13.5,color:"#B91C1C"}}>⛔ Planification impossible : NOTAM de fermeture</div>
+      {fen.filter(f=>f.statut==="ferme").map(f=><div key={f.role} style={{marginTop:6}}><b>{nom(f)}</b> — {f.motif}<NotamListe notams={(f.notams||[]).filter(n=>n.cat==="ferme")}/></div>)}
+      <div style={{marginTop:7}}>Changez l'heure ou la date du vol.</div>{pied}
+    </div>);
+  if(res.statut==="doute") return (
+    <div role="alert" style={{border:"2px solid #D97706",background:"#FFFBEB",borderRadius:12,padding:"12px 13px",fontSize:12.5,lineHeight:1.45,color:"#78350F"}}>
+      <div style={{fontWeight:800,fontSize:13.5,color:"#B45309"}}>⚠️ À confirmer par les Opérations</div>
+      {res.motif&&<div style={{marginTop:6}}>{res.motif}</div>}
+      {fen.filter(f=>f.statut==="doute").map(f=><div key={f.role} style={{marginTop:6}}><b>{nom(f)}</b> — {f.motif}<NotamListe notams={(f.notams||[]).filter(n=>n.cat==="doute")}/></div>)}
+      {peut?<>
+        <button onClick={()=>setConf(c=>({...c,coche:!c.coche}))} style={{display:"flex",gap:8,alignItems:"flex-start",marginTop:10,background:"none",border:"none",padding:0,textAlign:"left",color:"#78350F",fontWeight:600,fontSize:12.5,...TAP}}>
+          <span style={{width:18,height:18,border:"2px solid #B45309",borderRadius:4,flex:"none",background:conf.coche?"#B45309":"white",color:"white",fontSize:12,lineHeight:"14px",textAlign:"center"}}>{conf.coche?"✓":""}</span>
+          J'ai consulté les NOTAM officiels et je confirme que le vol est réalisable.
+        </button>
+        <div style={{marginTop:8}}><FField raw label="Motif de la confirmation (obligatoire)" value={conf.motif} onChange={v=>setConf(c=>({...c,motif:v}))}/></div>
+        <div style={{marginTop:6,fontSize:11.5,color:"#92400E"}}>La confirmation est inscrite au journal d'audit avec votre nom.</div>
+      </>:<div style={{marginTop:8,fontWeight:700}}>En attente de confirmation des Opérations.</div>}
+      {pied}
+    </div>);
+  const sig=fen.flatMap(f=>(f.notams||[]).filter(n=>n.cat==="significatif").map(n=>({...n,_f:nom(f)})));
+  return (
+    <div style={{border:"1.5px solid #86EFAC",background:"#F0FDF4",borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.45,color:"#14532D"}}>
+      <div style={{fontWeight:800}}>✅ Aucun NOTAM bloquant</div>
+      {sig.length>0&&<div style={{marginTop:6,color:"#92400E"}}>NOTAM significatifs ({sig.length}) :<NotamListe notams={sig}/></div>}
+      {pied}
+    </div>);
+}
+
 function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aPlanifier }) {
   const consult=useConsult();
   const today=new Date().toISOString().slice(0,10);
@@ -1832,11 +1881,28 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
     setLien({demandeId:v.demandeId,demandeVol:v.demandeVol,minutes:leg.minutes,clientId:v.clientId,clientNom:v.clientNom,flightType:v.flightType,finDossier:comFinDossier(dem),devisNumero:dem.devisNumero,libelle:dem.devisNumero+" · "+(leg.de.iata||leg.de.icao)+" → "+(leg.vers.iata||leg.vers.icao)}); };
   // Vol transmis : l'arrivée suit le départ saisi, avec la durée du devis
   useEffect(()=>{ if(lien&&lien.minutes){ const a=comHeurePlus(dep,lien.minutes); if(a) setArr(a); } },[dep,lien]);
+  // NOTAM : vérifiés par le serveur 1 s après la dernière saisie de la route, de la date ou de l'heure
+  const [notam,setNotam]=useState(null), [notamCharge,setNotamCharge]=useState(false);
+  const [conf,setConf]=useState({coche:false,motif:""});
+  const notamGen=useRef(0);
+  useEffect(()=>{
+    const g=++notamGen.current; setConf({coche:false,motif:""});
+    const t=setTimeout(async()=>{
+      const fen=await notamFenetres(from_,to,date,dep,arr);
+      if(g!==notamGen.current) return;
+      if(!fen){ setNotam(null); setNotamCharge(false); return; }
+      setNotamCharge(true);
+      const r=await notamVerifier(fen);
+      if(g!==notamGen.current) return;
+      setNotam(r); setNotamCharge(false);
+    },1000);
+    return ()=>clearTimeout(t);
+  },[from_,to,date,dep,arr]);
 
   const pn=Math.min(SIEGES,Math.max(0,Number(pax)||0));
   const load=Math.round(pn/SIEGES*100);
 
-  const submit=()=>{
+  const submit=async()=>{
     { const e=comControleType(flightType,lien); if(e){ uiAlert("⚠️ "+e); return; } }
     // Vol transmis dont le départ vient d'être saisi : l'arrivée est calculée ici si elle manque encore
     const arrV=arr||(lien&&lien.minutes?comHeurePlus(dep,lien.minutes):"");
@@ -1874,6 +1940,25 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
       msg+="\nRésolvez ces points, choisissez une autre date, ou désignez un autre membre.";
       uiAlert(msg); return;
     }
+    // NOTAM : le serveur revérifie au moment d'enregistrer (ils ont pu changer depuis l'affichage)
+    const fenN=await notamFenetres(from_,to,date,dep,arrV);
+    if(!fenN){ uiAlert("⚠️ Le départ, l'arrivée, la date et l'heure de départ sont nécessaires pour vérifier les NOTAM."); return; }
+    const resN=await notamVerifier(fenN);
+    const vu=notamIds(notam).join(","), maintenant=notamIds(resN).join(",");
+    setNotam(resN);
+    if(resN.statut==="ferme"){
+      auditLog("vol",num.trim().toUpperCase()+" · "+date,"planification refusée : NOTAM",{motif:[null,notamMotif(resN)]});
+      uiAlert("⛔ Planification impossible : NOTAM de fermeture.\n\n"+notamMotif(resN)+"\n\nChangez l'heure ou la date du vol."); return;
+    }
+    let confN=null;
+    if(resN.statut==="doute"){
+      if(!notamPeutConfirmer()){ uiAlert("⚠️ NOTAM à confirmer par les Opérations :\n\n"+notamMotif(resN)); return; }
+      if(!notam||notam.statut!=="doute"||vu!==maintenant){ setConf({coche:false,motif:""}); uiAlert("⚠️ Les NOTAM ont changé : lisez le cadre NOTAM, puis confirmez de nouveau."); return; }
+      if(!conf.coche||!conf.motif.trim()){ uiAlert("⚠️ NOTAM à confirmer : cochez « J'ai consulté les NOTAM officiels » et indiquez le motif de la confirmation."); return; }
+      const u=sgsCurrentUser(); confN={par:u?userLabel(u):"Administrateur",le:new Date().toISOString(),motif:conf.motif.trim()};
+    }
+    auditLog("vol",num.trim().toUpperCase()+" · "+date,"vérification NOTAM : "+resN.statut,resN.statut==="rien"?null:{notam:[null,notamMotif(resN)||notamIds(resN).join(", ")]});
+    if(confN) auditLog("vol",num.trim().toUpperCase()+" · "+date,"confirmation NOTAM par "+confN.par,{motif:[null,confN.motif]});
     // Pre-calculate planned duration
     let planDuree=0;
     if(dep&&arrV){
@@ -1886,8 +1971,9 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
       status:"Planifie",pax:pn,load,date,acId,sieges:SIEGES,flightType:flightType||"Commercial",clientId:clientId||"",
       carbDep:0,carbArr:0,consomme:0,consoH:0,fuelPct:0,delayMin:0,
       cm1:cm1.trim(),cm2:cm2.trim(),cc:cc.trim(),nps:0,dureeMin:planDuree,
+      notam:notamResume(resN,fenN,confN),
       ...(lien?{demandeId:lien.demandeId,demandeVol:lien.demandeVol}:{})});
-    setLien(null);
+    setLien(null); setNotam(null); setConf({coche:false,motif:""});
     setNum("");setFrom("");setTo("");setDep("");setArr("");setPax("");setFlightType("Ferry");
     setCm1("");setCm2("");setCc("");
   };
@@ -1968,12 +2054,14 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
           <CustomSelect value={cc} onChange={setCc} placeholder='-- Choisir --' icon='🧑‍✈️'
             options={(crew||[]).filter(m=>m.role==='CC').map(m=>({value:m.nom+' '+m.prenom,label:m.nom+' '+m.prenom,sub:(titresEchus(m).length?'⛔ INAPTE — titre échu':'CC')}))}/>
         </div>
+        <NotamCadre res={notam} charge={notamCharge} conf={conf} setConf={setConf} peut={notamPeutConfirmer()}/>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onBack}
             style={{flex:1,height:52,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,...TAP}}>
             ← Retour
           </button>
-          <div style={{flex:2}}><FSubmit label="Planifier le vol" onClick={submit} saved={saved}/></div>
+          <div style={{flex:2,...(notam&&notam.statut==="ferme"?{opacity:.45,filter:"grayscale(1)"}:{})}}>
+            <FSubmit label={notam&&notam.statut==="doute"&&notamPeutConfirmer()?"Confirmer et planifier":"Planifier le vol"} onClick={submit} saved={saved}/></div>
         </div>
       </div>
     </Card>
@@ -8016,6 +8104,52 @@ function comRhumbNM(a,b){
 }
 const comLegMin=nm=>Math.ceil(nm*COM_DV.AIRWAYS/COM_DV.SPEED*60+COM_DV.TAXI);
 const comRouteNM=l=>Math.round(l.distance*COM_DV.AIRWAYS);
+
+// ── NOTAM (chantier 2.20) : vérification par le serveur (api/notam.js) ─────────────────────────────
+// La page calcule seulement les fenêtres horaires (± 60 min autour du départ et de l'arrivée) ;
+// le serveur lit les NOTAM et décide : ferme (bloqué), doute (confirmation des Opérations),
+// significatif (affiché), rien. Aide aux Opérations : le commandant reste responsable des NOTAM officiels.
+const NOTAM_MARGE=60*60000;
+const NOTAM_HEURE=/^([01]\d|2[0-3]):[0-5]\d$/;
+const notamPeutConfirmer=()=>{ let p=""; try{ p=sessionStorage.getItem(PFX+"active_profile")||""; }catch(_e){ logSilent(_e); } return p==="ops"||p==="rdoa"; };
+async function notamFenetres(from_,to,date,dep,arr){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||""))||!NOTAM_HEURE.test(String(dep||""))||!String(from_||"").trim()||!String(to||"").trim()) return null;
+  const apts=await comAeroports();
+  const trouve=c=>{ const k=String(c||"").trim().toUpperCase(); return (apts||[]).find(a=>a.iata===k)||(apts||[]).find(a=>a.icao===k)||null; };
+  const a=trouve(from_), b=trouve(to);
+  const t0=Date.UTC(+date.slice(0,4),+date.slice(5,7)-1,+date.slice(8,10),+dep.slice(0,2),+dep.slice(3,5));
+  let ta=t0;
+  if(NOTAM_HEURE.test(String(arr||""))){ const m=((+arr.slice(0,2)*60+ +arr.slice(3,5))-(+dep.slice(0,2)*60+ +dep.slice(3,5))+1440)%1440; ta=t0+m*60000; }
+  else if(a&&b) ta=t0+comLegMin(comRhumbNM(a,b))*60000;   // arrivée estimée comme le module Commercial
+  const W=(ap,code,t,role)=>({oaci:ap?ap.icao:"",iata:String(code||"").trim().toUpperCase(),debut:t-NOTAM_MARGE,fin:t+NOTAM_MARGE,role});
+  return [W(a,from_,t0,"depart"),W(b,to,ta,"arrivee")];
+}
+async function notamVerifier(fenetres){
+  const doute=m=>({statut:"doute",fenetres:[],motif:"vérification impossible : "+m,verifieLe:new Date().toISOString()});
+  try{
+    const r=await fetch("/api/notam",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:sessionToken(),op:"verifier",fenetres})});
+    let d={}; try{ d=await r.json(); }catch(_e){ /* réponse vide */ }
+    return r.ok&&d&&d.statut?d:doute(d.error||("erreur "+r.status));
+  }catch(e){ logSilent(e); return doute("serveur injoignable"); }
+}
+const notamMotif=res=>[res&&res.motif,...((res&&res.fenetres)||[]).map(f=>f.motif)].filter(Boolean).join(" ; ");
+const notamIds=res=>[...new Set(((res&&res.fenetres)||[]).flatMap(f=>(f.notams||[]).map(n=>n.id)).filter(Boolean))];
+// Enregistré avec le vol : statut, fenêtres (vérification quotidienne), NOTAM vus, confirmation éventuelle
+function notamResume(res,fenetres,conf){
+  return {statut:res.statut,verifieLe:res.verifieLe||new Date().toISOString(),ids:notamIds(res),motif:notamMotif(res),
+    fenetres:(fenetres||[]).map(f=>({oaci:f.oaci,iata:f.iata,debut:f.debut,fin:f.fin,role:f.role})),confirmation:conf||null};
+}
+const notamDate=v=>{ const m=String(v||"").match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(EST)?$/); return m?m[3]+"/"+m[2]+" "+m[4]+m[5]+(m[6]?" (est.)":""):String(v||""); };
+const notamHeure=iso=>{ try{ return new Date(iso).toISOString().slice(11,16)+" UTC"; }catch(_e){ return ""; } };
+// Alertes de la vérification quotidienne encore valables : vol toujours planifié, NOTAM pas encore vus
+function notamAlertesActives(al,flights){
+  return ((al&&al.alertes)||[]).filter(a=>{
+    const f=(flights||[]).find(x=>(a.volId&&x.id===a.volId)||(x.num===a.num&&x.date===a.date&&x.dep===a.dep));
+    if(!f||f.status!=="Planifie") return false;
+    const vus=new Set((f.notam&&f.notam.ids)||[]);
+    return (a.notams||[]).some(n=>!vus.has(n.id));
+  });
+}
 const comHorsRange=l=>l.distance>0&&comRouteNM(l)>COM_DV.RANGE;
 // Base de l'avion → départ, mission, puis dernier aéroport → retour de l'avion
 function comBuildLegs(dep,arr,ar,base,ret){
@@ -9251,7 +9385,7 @@ function ScreenOps({ flights, satis, safetyData, aircraft, frats, onUpdateFlight
     return{delayMin,consomme,consoH,fuelPct,nps:(ef.nps===''||ef.nps===undefined||ef.nps===null)?null:Number(ef.nps),dureeMin,flightMin};
   };
 
-  const doUpdate=()=>{
+  const doUpdate=async()=>{
     if(!edit)return;
     // Clôture d'un vol : tous les éléments sont exigés, pour tout le monde.
     // Une correction ultérieure d'un vol déjà terminé reste libre (rattrapage d'un vol ancien).
@@ -9347,9 +9481,29 @@ function ScreenOps({ flights, satis, safetyData, aircraft, frats, onUpdateFlight
     if(canEdit===false){
       if(!aClore(flights.find(f=>edit.id?f.id===edit.id:(f.num===edit.num&&f.date===edit.date&&f.dep===edit.dep))||edit)){ uiAlert("⚠️ Vous ne pouvez clôturer que vos propres vols en cours, du jour ou de la veille."); return; }
     }
+    // NOTAM : vol planifié dont la route, la date ou les heures changent → nouvelle vérification, mêmes règles
+    let notamMaj=null;
+    { const orig=flights.find(f=>edit.id?f.id===edit.id:(f.num===edit.num&&f.date===edit.date&&f.dep===edit.dep));
+      if(edit.status==="Planifie"&&orig&&["from","to","date","dep","arr"].some(k=>String(orig[k]||"")!==String(edit[k]||""))){
+        const fenN=await notamFenetres(edit.from,edit.to,edit.date,edit.dep,edit.arr);
+        if(fenN){
+          const r=await notamVerifier(fenN), lib=String(edit.num||"")+" · "+edit.date;
+          if(r.statut==="ferme"){ auditLog("vol",lib,"modification refusée : NOTAM",{motif:[null,notamMotif(r)]});
+            uiAlert("⛔ Modification impossible : NOTAM de fermeture.\n\n"+notamMotif(r)+"\n\nChoisissez une autre heure ou une autre date."); return; }
+          let cf=null;
+          if(r.statut==="doute"){
+            const m=await uiPrompt("⚠️ NOTAM à confirmer par les Opérations :\n\n"+notamMotif(r)+"\n\nAprès avoir consulté les NOTAM officiels, indiquez le motif de la confirmation (obligatoire) :","");
+            if(!m||!String(m).trim()) return;
+            const u=sgsCurrentUser(); cf={par:u?userLabel(u):"Administrateur",le:new Date().toISOString(),motif:String(m).trim()};
+            auditLog("vol",lib,"confirmation NOTAM par "+cf.par,{motif:[null,cf.motif]});
+          }
+          auditLog("vol",lib,"vérification NOTAM : "+r.statut,r.statut==="rien"?null:{notam:[null,notamMotif(r)||notamIds(r).join(", ")]});
+          notamMaj=notamResume(r,fenN,cf);
+        }
+      } }
     const c=calcEdit(edit);
     // Taux de remplissage sur le nombre de sièges réel de l'appareil (CN-KTB : 8)
-    onUpdateFlight({...edit,...(modePilote?{status:"Termine"}:{}),load:Math.round((Number(edit.pax)||0)/siegesVol*100),...c});
+    onUpdateFlight({...edit,...(modePilote?{status:"Termine"}:{}),...(notamMaj?{notam:notamMaj}:{}),load:Math.round((Number(edit.pax)||0)/siegesVol*100),...c});
 
     // Mise à jour automatique du TTAF et A/B/C-Check avec le Flight Time (Take Off → Landing)
     // Correction d'un vol déjà clôturé : on n'applique que l'écart, et le cycle n'est compté qu'une fois
@@ -9616,8 +9770,8 @@ function ScreenOps({ flights, satis, safetyData, aircraft, frats, onUpdateFlight
 }
 
 
-function ScreenAlertes({ sgsRed, kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist, crew, frats }) {
-  const all=computeAlerts(kpis,flights,maintData,aircraft,crew,sgsRed,frats);
+function ScreenAlertes({ sgsRed, kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist, crew, frats, notamAl }) {
+  const all=computeAlerts(kpis,flights,maintData,aircraft,crew,sgsRed,frats,notamAl);
   const active=all.filter(a=>!dismissed.includes(a.id));
   const colors={danger:{bg:"#FEE2E2",border:"#DC2626",text:"#DC2626"},warn:{bg:"#FEF3C7",border:"#D97706",text:"#D97706"}};
   const [melFilter,setMelFilter]=React.useState("Tout");
@@ -12868,6 +13022,8 @@ function AppMain({ onLogout, profileId }) {
   const [prospects,setProspects] = usePersist("prospects",[]);
   // Devis : écrits seulement par le serveur (api/commercial.js, script s3) ; la page les lit
   const [devis,setDevis]         = useLectureSeule("devis",[]);
+  // Alertes NOTAM : écrites seulement par le serveur (vérification quotidienne, script s4) ; la page les lit
+  const [notamAl]                = useLectureSeule("notamAlertes",null);
   const majDevis=d=>setDevis(L=>{ const X=L||[]; return X.some(x=>x.id===d.id)?X.map(x=>x.id===d.id?d:x):[...X,d]; });
   // Restauration d'une sauvegarde ou effacement : la liste des devis est remplacée par le serveur (Administrateur)
   const restaurerDevis=async(liste,quoi)=>{ const r=await comApi("restaurer",{devis:liste});
@@ -13059,7 +13215,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     setReport(null);setReset(false);setTab("forms");
   };
 
-  const allAlerts  = computeAlerts(kpis,flights,maintData,aircraft,crew,sgsRed);
+  const allAlerts  = computeAlerts(kpis,flights,maintData,aircraft,crew,sgsRed,undefined,notamAl);
   const critCount  = allAlerts.filter(a=>!dismissed.includes(a.id)).length;
 
   // Record new alerts in history
@@ -13165,7 +13321,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           onImport={onImport}
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
-        {tab==="alertes" && <ScreenAlertes frats={sgsFrat} sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew}/>}
+        {tab==="alertes" && <ScreenAlertes frats={sgsFrat} sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew} notamAl={notamAl}/>}
         {tab==="ops"     && <ScreenOps frats={sgsFrat} canClose={profileId==="eqp"&&["TRI","CM1","CM2"].includes((sgsCurrentUser()||{}).role||"CM1")} flights={flights} satis={satis} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>(x.id&&u.id)?(x.id===u.id?u:x):((x.num===u.num&&x.date===u.date&&x.dep===u.dep)?u:x)))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>(x.id&&f.id)?x.id!==f.id:!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}

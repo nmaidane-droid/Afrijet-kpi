@@ -70,6 +70,10 @@
     {
       "path": "/api/backup",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/notam",
+      "schedule": "0 6 * * *"
     }
   ]
 }
