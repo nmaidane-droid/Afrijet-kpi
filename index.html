@@ -8616,10 +8616,14 @@ async function comPdf(d){
   rrect(t0,y+13,R-t0,10,1.5,{fill:RED}); tx('Total TTC',t0+3,y+19.5,10.5,{b:1,c:WHITE}); tx(comMadP(d.ttc),R-3,y+19.5,10.5,{b:1,c:WHITE,align:'right'});
   // Conditions
   y+=31; tx('CONDITIONS',M,y,8,{b:1,c:BDX}); y+=5;
-  const conds=[['Inclus : ',"toutes les prestations, à l'exception du dégivrage et du handling."],['Non inclus : ','dégivrage (de-icing) et handling, refacturés au réel.'],["Validité de l'offre : ",COM_DV.VALID+' jours.'],['Paiement : ','100 % à la confirmation.'],['Temps de vol : ','estimés ; la facturation se fait sur les temps de vol réels.']]
+  const conds=[['Inclus : ','taxes (aéroports, passagers, sécurité), catering.'],['Non inclus : ','dégivrage (de-icing) et handling, refacturés au réel.'],["Validité de l'offre : ",COM_DV.VALID+' jours.'],['Paiement : ','100 % à la confirmation.'],['Temps de vol : ','estimés ; la facturation se fait sur les temps de vol réels.']]
   if (d.carburant) conds.splice(2,0,['Carburant : ','tarif établi sur une base de '+comDec2(d.carburant.ref)+' MAD/litre de Jet A-1 ; surcharge selon l\'indice mondial Jet A-1 au jour du devis, à la hausse comme à la baisse.']);
   if (d.lignes.filter(l=>l.passagers).length>1) conds.splice(2,0,['Immobilisation : ',"1 jour inclus ; chaque jour supplémentaire est facturé "+(d.immoMin||2)+" h d'immobilisation."]);
   conds.forEach(([k,v])=>{ const w=tx(k,M,y,8.5,{b:1}); wrap(v,8.5,R-M-w).forEach((s,i)=>{ tx(s,M+w,y,8.5); y+=4.4; }); });
+  // Conditions Générales et formule de fin (comme Fiches Airshow)
+  y+=1.2;
+  wrap("Les Conditions Générales d'Afrijet Sahara s'appliquent à toutes les offres, tous les devis et tous les contrats conclus avec Afrijet Sahara..",7.6,R-M).forEach(s=>{ tx(s,M,y,7.6,{c:MUTE}); y+=3.7; });
+  y+=1.4; tx("Dans l'attente de votre réponse, nous restons à votre disposition pour toute information complémentaire.",M,y,7.6,{c:MUTE}); y+=3.2;
   y=Math.min(y, 282-3-22-2); // garde-fou : les signatures ne touchent jamais le pied de page
   // Signatures
   y+=3; rrect(M,y,88,22,2,{stroke:LINE,bw:0.4}); rrect(R-88,y,88,22,2,{stroke:LINE,bw:0.4});
