@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.19";
+const APP_VERSION = "2.20";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -104,46 +104,31 @@ const SUPA_URL = "https://zulwubuzuylmwkittnbg.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1bHd1YnV6dXlsbXdraXR0bmJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3Mjk5MjQsImV4cCI6MjA5ODMwNTkyNH0.Bt2MXASzrqWPaxTxo7ImZu-FtdjahLG9FLOMIgz9SWA";
 // Position et météo passent par le serveur (api/fr24.js, api/wx.js) : aucune clé dans la page.
 const API_FR24 = "/api/fr24", API_WX = "/api/wx";
-const APP_PASSWORD_HASH = "bd6b04909ddd0c28d9c78b07cc375cbd6ae976cbb5a8d8dc4e813f67ec439268";
+// 2.20 : plus aucun mot de passe partagé dans la page ; comptes nominatifs vérifiés par le serveur (api/auth.js)
 
 const PROFILES = [
   {id:"ops",   label:"Opérations",  icon:"✈️",  color:"#0369A1",
-   pwdHash:"74de07c4e919534b1b460e3465bb216ce0cc2bd458e42abaf0f22448da08d063",
    forms:["avion","crew","vol","frat","regl","sat"],
    tabs:["forms","ops"], readOnly:["live","secu","perf","maint","alertes"] },
   {id:"eqp",   label:"Équipage",   icon:"👨‍✈️", color:"#0369A1",
-   pwdHash:"a52e38e3b5f9ef8b577b932c0377e1fe367325f900586baad157cfe688975d11",
    forms:["secu","frat","regl","sat"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"sgs",   label:"SGS",  icon:"🛡", color:"#0F766E",
-   pwdHash:"e6a585f2870b2afbc4e0900a53d6b6b050781460d2d1eb575c347693b29b0d4e",
    forms:["sgs","secu","nds","frat","regl"], tabs:["forms"], readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"maint", label:"Maintenance", icon:"🔧",  color:"#00936A",
-   pwdHash:"8589c63b0943a62bfda9b35dccc71a30f5677386f6f7c644c3307465ce2cfa55",
    forms:["maint"],
    tabs:["forms"],       readOnly:["live","secu","ops","perf","alertes","maint"] },
   {id:"comm",  label:"Commercial",     icon:"💼",  color:"#0891B2",
-   pwdHash:"d01acdec3a3b87b33882a0fb8959ffda858a0642f7f54190f67aa230e04d1547",
    forms:["commercial","params"], tabs:["forms"], readOnly:["live","ops"], blocked:[] },   // prospects, devis, clients : module Commercial
   {id:"fin",   label:"Finances",    icon:"💰",  color:"#7C3AED",
-   pwdHash:"2bb078f176007917292c786bdc9fd0a51a88eebf9bfbae142455c0c652f9475c",
    forms:["fin"],
    tabs:["forms"],       readOnly:["live","secu","maint","ops","fin","alertes","perf"] },
   {id:"dir",   label:"Direction",   icon:"🏢",  color:"#A0720A",
-   pwdHash:"ed494928275b93b897810bd7b090babaee8d4d92268cd96119eef7948b251184",
    forms:["avion","crew","maint","vol","frat","sgs","regl","sat","commercial","params","nds","rapport","fin","journal"],   // 2.19 : tout en consultation (bandeau), sauf la décision sur un FRAT rouge ; pas de Comptes rendus
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
-   pwdHash:APP_PASSWORD_HASH,
    forms:null, tabs:null, readOnly:[] },
 ];
 
-async function checkPassword(pwd, profileId) {
-  const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest("SHA-256", enc.encode(pwd));
-  const hex = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
-  const profile = PROFILES.find(p=>p.id===profileId);
-  return hex === (profile ? profile.pwdHash : APP_PASSWORD_HASH);
-}
 const supabase = window.supabase?.createClient(SUPA_URL, SUPA_KEY);
 
 // Liste des sauvegardes : un seul enregistrement léger, écrit chaque nuit par le serveur.
@@ -10499,31 +10484,17 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
 
 // ── Login Gate ──────────────────────────────────────────────────────────────
 // ── TOTP (Microsoft Authenticator) ──────────────────────────────────────────────
-const TOTP_KEY = PFX + "totp_secret";
 // ══ Comptes nominatifs (lot 1) ══════════════════════════════════════
-// Profils à comptes nominatifs : chaque personne a son nom, son mot de passe et sa double authentification.
-// Tant qu'aucun compte actif n'existe pour un profil, son mot de passe partagé reste valable (démarrage).
-// Tous les profils : comptes personnels avec double authentification ; mot de passe partagé du profil tant qu'aucun compte n'y a été créé
+// 2.20 : tous les départements se connectent avec un compte nominatif (nom, mot de passe, Authenticator).
+// Le serveur tient seul les comptes, les clés et les verrous (protection s1) ; la page ne les lit plus.
 const NOMINATIVE_PROFILES=["ops","eqp","maint","fin","comm","dir","sgs","rdoa"];
-const USERS_KEY=PFX+"users";
-async function sha256hex(s){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)); return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join(""); }
-const userHash=(pwd,salt)=>sha256hex(salt+":"+pwd);
-function randomToken(n,alpha){ const a=alpha||"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; const r=new Uint32Array(n); crypto.getRandomValues(r); return Array.from(r).map(x=>a[x%a.length]).join(""); }
 const userLabel=u=>u?((u.prenom||"")+" "+(u.nom||"")).trim():"";
-// Liste des comptes : Supabase, avec copie locale pour pouvoir se connecter si le réseau est lent
-async function usersLoad(){
-  const u=await sbGet(USERS_KEY);
-  if(Array.isArray(u)){ try{ localStorage.setItem(USERS_KEY+"_cache",JSON.stringify(u)); }catch(_e){ logSilent(_e); } return u; }
-  try{ return JSON.parse(localStorage.getItem(USERS_KEY+"_cache")||"[]")||[]; }catch(_e){ return []; }
-}
-async function usersSave(list){ const ok=await sbSet(USERS_KEY,list); try{ localStorage.setItem(USERS_KEY+"_cache",JSON.stringify(list)); }catch(_e){ logSilent(_e); } return ok; }
+function randomToken(n,alpha){ const a=alpha||"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; const r=new Uint32Array(n); crypto.getRandomValues(r); return Array.from(r).map(x=>a[x%a.length]).join(""); }
 // Personne connectée pendant la session (null pour les profils encore à mot de passe partagé)
 function sgsCurrentUser(){ try{ return JSON.parse(sessionStorage.getItem(PFX+"active_user")||"null"); }catch(_e){ return null; } }
-const USER_TOTP_KEY=u=>TOTP_KEY+"_u_"+u.id;
 // ── Connexion vérifiée par le serveur (lot S1) ──
 // La page envoie le nom, le mot de passe puis le code ; le serveur vérifie et renvoie un jeton
-// de session signé, valable 12 h. Si le serveur n'est pas joignable — fichier ouvert seul, ou
-// profil encore à mot de passe partagé — on revient au fonctionnement précédent.
+// de session signé, valable 12 h. Sans serveur, pas de connexion (2.20).
 const SESSION_KEY=PFX+"session_token";
 async function authApi(action, body){
   try{
@@ -10537,21 +10508,8 @@ const sessionToken=()=>{ try{ return sessionStorage.getItem(SESSION_KEY)||""; }c
 const sessionSet=t=>{ try{ t?sessionStorage.setItem(SESSION_KEY,t):sessionStorage.removeItem(SESSION_KEY); }catch(e){ logSilent(e); } };
 // ── Limitation des tentatives de connexion ──
 // 3 et 4 échecs : 30 s d'attente ; 5 échecs : blocage 15 min (journalisé). Réussite : compteur remis à zéro.
-// Compteur dans Supabase (clé auth_locks), par compte (« u:<id> ») ou par profil à mot de passe partagé (« p:<profil> »).
-const LOCK_KEY=PFX+"auth_locks";
+// Compteur tenu par le serveur, par compte (« u:<id> ») ; la page n'affiche que l'attente renvoyée.
 const LOCK_RULE={delayAfter:3,delayS:30,lockAfter:5,lockMin:15};
-async function locksAll(){ const r=await sbGet(LOCK_KEY); if(r&&typeof r==="object"){ try{ localStorage.setItem(LOCK_KEY+"_c",JSON.stringify(r)); }catch(_e){ logSilent(_e); } return r; }
-  try{ return JSON.parse(localStorage.getItem(LOCK_KEY+"_c")||"{}")||{}; }catch(_e){ return {}; } }
-async function lockSet(id,v){ const L={...(await locksAll())}; if(v) L[id]=v; else delete L[id]; await sbSet(LOCK_KEY,L); try{ localStorage.setItem(LOCK_KEY+"_c",JSON.stringify(L)); }catch(_e){ logSilent(_e); } }
-async function authWait(id){ const s=(await locksAll())[id]||{}; return Math.max(0,(s.until||0)-Date.now()); }
-async function authFail(id,label){
-  const s=(await locksAll())[id]||{}; const fails=(s.fails||0)+1; let until=0;
-  if(fails>=LOCK_RULE.lockAfter) until=Date.now()+LOCK_RULE.lockMin*60000; else if(fails>=LOCK_RULE.delayAfter) until=Date.now()+LOCK_RULE.delayS*1000;
-  await lockSet(id,{fails,until,last:new Date().toISOString(),label});
-  if(fails===LOCK_RULE.lockAfter) auditLog("connexion",label,"blocage après "+fails+" échecs",{duree:[null,LOCK_RULE.lockMin+" min"]});
-  return {fails,until};
-}
-async function authOk(id){ const s=(await locksAll())[id]; if(s) await lockSet(id,null); }
 const fmtWait=ms=>{ const s=Math.ceil(ms/1000); return s>=60?Math.floor(s/60)+" min "+String(s%60).padStart(2,"0")+" s":s+" s"; };
 const failMsg=(r,base)=>r.until?(r.fails>=LOCK_RULE.lockAfter?"Trop d'essais : accès bloqué "+LOCK_RULE.lockMin+" minutes.":"Trop d'essais : patientez "+LOCK_RULE.delayS+" secondes."):base+(r.fails>=1?" ("+(LOCK_RULE.delayAfter-r.fails)+" essai(s) avant un délai)":"");
 // Compte à rebours affiché tant que l'attente court
@@ -10762,33 +10720,31 @@ function AccountsModal({ onClose, crew }){
   // Profil Équipage : la personne est choisie dans le registre Équipage, jamais saisie à la main
   const FRAT_ROLES=["CM1"];   // FRAT : rôle CM1 (commandant de bord) seulement
   const [list,setList]=useState(null), [form,setForm]=useState(null), [shown,setShown]=useState(null), [busy,setBusy]=useState(false);
-  const [locks,setLocks]=useState({});
-  useEffect(()=>{ usersLoad().then(setList); locksAll().then(setLocks); },[]);
-  const unlock=async u=>{ await lockSet("u:"+u.id,null); setLocks(await locksAll()); auditLog("comptes",userLabel(u),"déblocage",null); sgsToast("Compte débloqué · "+userLabel(u)); };
+  const [panne,setPanne]=useState("");
   const me=sgsCurrentUser();
-  const persist=async L=>{ setBusy(true); const ok=await usersSave(L); setBusy(false); setList(L); if(!ok) uiAlert("⚠️ Enregistrement dans le cloud impossible. Vérifiez la connexion, puis recommencez."); return ok; };
-  const tempPwd=()=>randomToken(10);
+  // 2.20 : les comptes sont tenus par le serveur ; la page n'en voit ni les empreintes ni les clés
+  const op=async(nom,extra)=>{ setBusy(true); const r=await authApi("comptes",{token:sessionToken(),op:nom,...(extra||{})}); setBusy(false);
+    if(!r){ setPanne("Serveur injoignable : vérifiez la connexion, puis recommencez."); return null; }
+    if(r.status!==200){ if(nom==="liste") setPanne(r.error||"Accès refusé."); else uiAlert("⚠️ "+(r.error||"Opération refusée par le serveur.")); return null; }
+    setPanne(""); if(Array.isArray(r.comptes)) setList(r.comptes); return r; };
+  useEffect(()=>{ op("liste"); },[]);
+  const unlock=async u=>{ if(await op("debloquer",{id:u.id})){ auditLog("comptes",userLabel(u),"déblocage",null); sgsToast("Compte débloqué · "+userLabel(u)); } };
   const create=async()=>{
     const f=form||{};
     if(f.profil==="eqp"&&!f.crewId){ uiAlert("⚠️ Choisissez la personne dans le registre Équipage. Si elle n'y figure pas, créez-la d'abord dans la tuile Équipage."); return; }
     if(!(f.nom||"").trim()||!(f.prenom||"").trim()||!f.profil){ uiAlert("⚠️ Nom, prénom et profil sont obligatoires."); return; }
-    if((list||[]).some(u=>u.actif&&u.profil===f.profil&&u.nom.trim().toLowerCase()===f.nom.trim().toLowerCase()&&u.prenom.trim().toLowerCase()===f.prenom.trim().toLowerCase())){ uiAlert("⚠️ Ce compte existe déjà pour ce profil."); return; }
-    const pwd=tempPwd(), salt=randomToken(16), now=new Date().toISOString();
-    const u={id:"U"+Date.now().toString(36)+randomToken(4,"abcdefghjkmnpqrstuvwxyz23456789"),nom:f.nom.trim().toUpperCase(),prenom:f.prenom.trim(),fonction:(f.fonction||"").trim(),profil:f.profil,
-      ...(f.crewId?{crewId:f.crewId,role:f.role}:{}),
-      salt,hash:await userHash(pwd,salt),mustChange:true,actif:true,createdAt:now,createdBy:userLabel(me)||"Administrateur"};
-    if(await persist([...(list||[]),u])){ setForm(null); setShown({u,pwd,motif:"Compte créé"}); auditLog("comptes",userLabel(u),"création de compte",{profil:[null,u.profil],fonction:[null,u.fonction||null]}); }
+    const r=await op("creer",{nom:f.nom,prenom:f.prenom,fonction:f.fonction||"",profil:f.profil,crewId:f.crewId,role:f.role});
+    if(r){ setForm(null); setShown({u:r.user,pwd:r.pwd,motif:"Compte créé"}); auditLog("comptes",userLabel(r.user),"création de compte",{profil:[null,r.user.profil],fonction:[null,r.user.fonction||null]}); }
   };
   const resetPwd=async u=>{ if(!(await uiConfirm("Réinitialiser le mot de passe de "+userLabel(u)+" ? Un mot de passe provisoire sera généré."))) return;
-    const pwd=tempPwd(), salt=randomToken(16), h=await userHash(pwd,salt);
-    if(await persist(list.map(x=>x.id===u.id?{...x,salt,hash:h,mustChange:true,pwdResetAt:new Date().toISOString()}:x))){ setShown({u,pwd,motif:"Mot de passe réinitialisé"}); auditLog("comptes",userLabel(u),"réinitialisation du mot de passe",null); } };
+    const r=await op("mdp",{id:u.id}); if(r){ setShown({u,pwd:r.pwd,motif:"Mot de passe réinitialisé"}); auditLog("comptes",userLabel(u),"réinitialisation du mot de passe",null); } };
   const resetTotp=async u=>{ if(!(await uiConfirm("Réinitialiser la double authentification de "+userLabel(u)+" ? À sa prochaine connexion, il activera à nouveau Microsoft Authenticator."))) return;
-    await sbSet(USER_TOTP_KEY(u),null); await persist(list.map(x=>x.id===u.id?{...x,totpResetAt:new Date().toISOString()}:x)); auditLog("comptes",userLabel(u),"réinitialisation de l'Authenticator",null); sgsToast("Double authentification réinitialisée · "+userLabel(u)); };
+    if(await op("totp",{id:u.id})){ auditLog("comptes",userLabel(u),"réinitialisation de l'Authenticator",null); sgsToast("Double authentification réinitialisée · "+userLabel(u)); } };
   const toggle=async u=>{
     if(u.actif&&me&&u.id===me.id){ uiAlert("⚠️ Vous ne pouvez pas désactiver votre propre compte."); return; }
     if(u.actif&&u.profil==="rdoa"&&(list||[]).filter(x=>x.actif&&x.profil==="rdoa").length===1){ uiAlert("⚠️ Il doit rester au moins un compte Administrateur actif."); return; }
     if(!(await uiConfirm((u.actif?"Désactiver":"Réactiver")+" le compte de "+userLabel(u)+" ?"))) return;
-    await persist(list.map(x=>x.id===u.id?{...x,actif:!u.actif,[u.actif?"desactiveAt":"reactiveAt"]:new Date().toISOString()}:x)); auditLog("comptes",userLabel(u),u.actif?"désactivation":"réactivation",null); };
+    if(await op("actif",{id:u.id,actif:!u.actif})) auditLog("comptes",userLabel(u),u.actif?"désactivation":"réactivation",null); };
   const copy=async t=>{ try{ await navigator.clipboard.writeText(t); sgsToast("Mot de passe copié"); }catch(e){ logSilent(e); } };
   const inp={width:"100%",height:42,boxSizing:"border-box",border:"1.5px solid "+C.border,borderRadius:9,padding:"0 11px",fontSize:13.5,fontFamily:"inherit",outline:"none",background:C.bg};
   const btn=(l,f,col)=><button onClick={f} disabled={busy} style={{border:"1px solid "+(col||C.border),background:"white",color:col||C.navy,borderRadius:8,padding:"6px 9px",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{l}</button>;
@@ -10796,21 +10752,22 @@ function AccountsModal({ onClose, crew }){
     <div style={{background:"white",borderRadius:14,width:"100%",maxWidth:560,padding:16}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}><div style={{fontSize:17,fontWeight:800,color:C.text,flex:1}}>Comptes nominatifs</div>
         <button onClick={onClose} aria-label="Fermer" style={{border:"none",background:C.bg,borderRadius:8,width:34,height:34,fontSize:16,cursor:"pointer"}}>✕</button></div>
-      <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45,marginBottom:12}}>Chaque personne se connecte avec son nom, son mot de passe et son propre Microsoft Authenticator. Tant qu'aucun compte n'a été créé pour un département, son mot de passe partagé reste valable ; dès le premier compte, il est refusé. Un compte n'est jamais supprimé, seulement désactivé.</div>
+      <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45,marginBottom:12}}>Chaque personne se connecte avec son nom, son mot de passe et son propre Microsoft Authenticator. Un département sans compte ne peut pas se connecter. Un compte n'est jamais supprimé, seulement désactivé.</div>
+      {panne&&<div role="alert" style={{fontSize:12,color:"#B91C1C",background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:9,padding:"9px 11px",marginBottom:12}}>{panne}</div>}
       {shown&&<div style={{background:"#F0FDFA",border:"1.5px solid #0F766E",borderRadius:10,padding:12,marginBottom:12}}>
         <div style={{fontSize:12.5,fontWeight:800,color:"#0F766E"}}>{shown.motif} — {userLabel(shown.u)}</div>
         <div style={{fontSize:11.5,color:C.text,margin:"6px 0"}}>Mot de passe provisoire, affiché une seule fois. Transmettez-le par un autre canal que l'adresse de l'application ; il devra le changer à sa première connexion.</div>
         <div role="button" onClick={()=>copy(shown.pwd)} style={{fontFamily:"monospace",fontSize:18,letterSpacing:2,textAlign:"center",background:"white",border:"1.5px dashed #0F766E",borderRadius:9,padding:"8px 0",cursor:"pointer"}}>{shown.pwd}</div>
         <div style={{textAlign:"right",marginTop:8}}>{btn("J'ai noté le mot de passe",()=>setShown(null),"#0F766E")}</div></div>}
-      {list===null?<div style={{fontSize:12.5,color:C.slate}}>Chargement…</div>:
+      {list===null?(!panne&&<div style={{fontSize:12.5,color:C.slate}}>Chargement…</div>):
         NOMINATIVE_PROFILES.map(pid=>{ const P=PROFILES.find(p=>p.id===pid), L=list.filter(u=>u.profil===pid);
           return <div key={pid} style={{marginBottom:12}}>
-            <div style={{fontSize:11,fontWeight:800,color:P.color,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{P.label} · {L.filter(u=>u.actif).length} actif(s){!L.length?" — mot de passe partagé encore valable":!L.some(u=>u.actif)?" — aucun compte actif : accès fermé":""}</div>
+            <div style={{fontSize:11,fontWeight:800,color:P.color,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{P.label} · {L.filter(u=>u.actif).length} actif(s){!L.some(u=>u.actif)?" — aucun compte : accès fermé":""}</div>
             {L.map(u=><div key={u.id} style={{border:"1px solid "+C.border,borderRadius:10,padding:"9px 10px",marginBottom:6,opacity:u.actif?1:.55}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,minWidth:0}}><b style={{fontSize:13}}>{userLabel(u)}</b>{u.fonction&&<span style={{fontSize:11.5,color:C.slate}}> · {u.fonction}</span>}
                 <div style={{fontSize:10.5,color:C.slate}}>{u.actif?(u.mustChange?"Mot de passe provisoire à changer":"Actif"):"Désactivé"}{me&&me.id===u.id?" · vous":""}</div>
-                {((locks["u:"+u.id]||{}).until||0)>Date.now()&&<div style={{fontSize:10.5,color:"#B91C1C",fontWeight:700}}>Bloqué jusqu'à {new Date(locks["u:"+u.id].until).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})} · {locks["u:"+u.id].fails} échecs</div>}</div></div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>{((locks["u:"+u.id]||{}).until||0)>Date.now()&&btn("Débloquer",()=>unlock(u),"#B45309")}{u.actif&&btn("Réinitialiser le mot de passe",()=>resetPwd(u))}{u.actif&&btn("Réinitialiser l'Authenticator",()=>resetTotp(u))}{btn(u.actif?"Désactiver":"Réactiver",()=>toggle(u),u.actif?"#B91C1C":"#0F766E")}</div>
+                {u.verrou&&u.verrou.until>Date.now()&&<div style={{fontSize:10.5,color:"#B91C1C",fontWeight:700}}>Bloqué jusqu'à {new Date(u.verrou.until).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})} · {u.verrou.fails} échecs</div>}</div></div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>{u.verrou&&u.verrou.until>Date.now()&&btn("Débloquer",()=>unlock(u),"#B45309")}{u.actif&&btn("Réinitialiser le mot de passe",()=>resetPwd(u))}{u.actif&&btn("Réinitialiser l'Authenticator",()=>resetTotp(u))}{btn(u.actif?"Désactiver":"Réactiver",()=>toggle(u),u.actif?"#B91C1C":"#0F766E")}</div>
             </div>)}
           </div>; })}
       {form?<div style={{border:"1.5px solid "+C.border,borderRadius:10,padding:11,display:"flex",flexDirection:"column",gap:8}}>
@@ -10852,43 +10809,7 @@ async function generateTotpSecret() {
   return secret;
 }
 
-function base32Decode(encoded) {
-  const base32chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  encoded = encoded.toUpperCase().replace(/=+$/, "");
-  let bits = 0, val = 0;
-  const output = [];
-  for(let i=0; i<encoded.length; i++) {
-    val = (val<<5) | base32chars.indexOf(encoded[i]);
-    bits += 5;
-    if(bits>=8) { output.push((val>>(bits-8))&255); bits-=8; }
-  }
-  return new Uint8Array(output);
-}
-
-async function computeTotp(secret, timeStep) {
-  const key = base32Decode(secret);
-  const counter = Math.floor(timeStep/30);
-  const counterBytes = new Uint8Array(8);
-  for(let i=7; i>=0; i--) { counterBytes[i]=counter&255; const c=counter>>8; }
-  // Write counter properly
-  let c = Math.floor(timeStep/30);
-  for(let i=7; i>=0; i--) { counterBytes[i]=c&0xff; c=Math.floor(c/256); }
-  const cryptoKey = await crypto.subtle.importKey("raw",key,{name:"HMAC",hash:"SHA-1"},false,["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, counterBytes);
-  const hmac = new Uint8Array(sig);
-  const offset = hmac[19]&0xf;
-  const code = ((hmac[offset]&0x7f)<<24|(hmac[offset+1]&0xff)<<16|(hmac[offset+2]&0xff)<<8|(hmac[offset+3]&0xff)) % 1000000;
-  return String(code).padStart(6,"0");
-}
-
-async function verifyTotp(secret, userCode) {
-  const now = Date.now()/1000;
-  for(let delta=-1; delta<=1; delta++) {
-    const code = await computeTotp(secret, now+delta*30);
-    if(code===userCode) return true;
-  }
-  return false;
-}
+// Les codes Authenticator sont vérifiés par le serveur (api/auth.js) ; la page ne fait que créer la clé et le QR code.
 
 
 // Générateur de QR code local (QRCode for JavaScript, © 2009 Kazuhiko Arase, licence MIT).
@@ -12156,7 +12077,7 @@ function qrSvgDataUrl(text){ const q=new SGS_QR.QRCode(-1,SGS_QR.L.M); q.addData
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+s+' '+s+'" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="'+d+'" fill="#000"/></svg>'); }
 // Libellé du compte dans Microsoft Authenticator, propre à chaque profil (auparavant identique pour tous)
 const TOTP_ACCOUNTS={dir:"Direction",rdoa:"Administrateur",sgs:"SGS"};
-function TotpSetup({ secret, onVerified, profileId, account:accountLabel }) {
+function TotpSetup({ secret, verifServeur, profileId, account:accountLabel }) {
   const [code,setCode]=useState("");
   const [err,setErr]=useState("");
   const [copied,setCopied]=useState(false);
@@ -12167,12 +12088,11 @@ function TotpSetup({ secret, onVerified, profileId, account:accountLabel }) {
   const copy=async()=>{ try{ await navigator.clipboard.writeText(secret); setCopied(true); setTimeout(()=>setCopied(false),2500); }catch(e){ logSilent(e); } };
   const verify=async()=>{
     if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
-    if(await verifyTotp(secret,code)){
-      onVerified();
-    } else {
-      setErr("Code incorrect. Vérifiez que l'heure du téléphone est réglée automatiquement.");
-      setCode("");
-    }
+    // Le serveur vérifie le code avec cette clé, puis l'enregistre (la page ne peut plus écrire les clés)
+    const r=await verifServeur(code);
+    if(r&&r.ok) return;
+    setErr((r&&r.erreur)||"Code incorrect. Vérifiez que l'heure du téléphone est réglée automatiquement.");
+    setCode("");
   };
   const step={fontSize:11.5,color:"#475569",textAlign:"left",lineHeight:1.45};
   return (
@@ -12200,59 +12120,30 @@ function TotpSetup({ secret, onVerified, profileId, account:accountLabel }) {
   );
 }
 
-function TotpVerify({ profileId, onVerified, storeKey, account, lockId, lockLabel, verifServeur }) {
+function TotpVerify({ profileId, account, verifServeur, ajoutDebut, ajoutFin }) {
   const [code,setCode]=useState("");
   const [waitMs,setUntil]=useCountdown();
-  const lid=lockId||"p:"+(profileId||"rdoa");
-  const fail=async base=>{ const r=await authFail(lid,lockLabel||profileId); if(r.until) setUntil(r.until); setErr(failMsg(r,base)); setCode(""); auditLog("connexion",lockLabel||profileId,"échec de connexion",{motif:[null,"code Authenticator incorrect"]}); };
-  const blocked=async()=>{ const w=await authWait(lid); if(w){ setUntil(Date.now()+w); setErr("Trop d'essais : patientez."); return true; } return false; };
   const [err,setErr]=useState("");
-  const [addingDevice,setAddingDevice]=useState(false);
   const [newSecret,setNewSecret]=useState("");
 
-  // Ajouter un autre téléphone Authenticator exige d'abord un code valide de celui déjà activé
+  // Ajouter un autre téléphone Authenticator : un code juste de celui déjà activé, vérifié par le serveur
   const startAddDevice=async()=>{
-    if(await blocked()) return;
     if(code.length!==6){ setErr("Pour ajouter un autre téléphone, entrez d'abord le code de votre Authenticator actuel."); return; }
-    const stored=await sbGet(storeKey||TOTP_KEY+"_"+(profileId||"rdoa"));
-    const secrets=stored?(Array.isArray(stored)?stored:[stored]):[];
-    let okc=false; for(const s of secrets){ if(await verifyTotp(s,code)){ okc=true; break; } }
-    if(!okc){ await fail("Code incorrect : impossible d'ajouter un autre téléphone."); return; }
-    const secret=await generateTotpSecret();
-    setNewSecret(secret);
-    setAddingDevice(true);
+    const r=await ajoutDebut(code);
+    if(!r||!r.ok){ if(r&&r.attente) setUntil(Date.now()+r.attente); setErr((r&&r.erreur)||"Code incorrect : impossible d'ajouter un autre téléphone."); setCode(""); return; }
+    setNewSecret(await generateTotpSecret());
   };
 
-  const handleNewDeviceVerified=async()=>{
-    // Add new secret to existing list
-    const key=storeKey||TOTP_KEY+"_"+(profileId||"rdoa");
-    const existing=await sbGet(key);
-    let secrets=[];
-    if(existing){
-      secrets=Array.isArray(existing)?existing:[existing];
-    }
-    secrets.push(newSecret);
-    await sbSet(key,secrets);
-    onVerified();
-  };
-
-  if(addingDevice){
-    return <TotpSetup secret={newSecret} profileId={profileId} account={account} onVerified={handleNewDeviceVerified}/>;
+  if(newSecret){
+    return <TotpSetup secret={newSecret} profileId={profileId} account={account} verifServeur={c=>ajoutFin(newSecret,c)}/>;
   }
 
   const verify=async()=>{
     if(code.length!==6){setErr("Code à 6 chiffres requis");return;}
-    // Vérification par le serveur quand la connexion en vient
-    if(verifServeur){ const r=await verifServeur(code); if(r&&r.ok) return; setErr((r&&r.erreur)||"Code incorrect."); setCode(""); return; }
-    if(await blocked()) return;
-    const key=storeKey||TOTP_KEY+"_"+(profileId||"rdoa");
-    const stored=await sbGet(key);
-    if(!stored){setErr("TOTP non configuré");return;}
-    const secrets=Array.isArray(stored)?stored:[stored];
-    for(const secret of secrets){
-      if(await verifyTotp(secret,code)){onVerified();return;}
-    }
-    await fail("Code incorrect.");
+    // Vérification par le serveur
+    const r=await verifServeur(code); if(r&&r.ok) return;
+    if(r&&r.attente) setUntil(Date.now()+r.attente);
+    setErr((r&&r.erreur)||"Code incorrect."); setCode("");
   };
   return (
     <div style={{textAlign:"center"}}>
@@ -12398,84 +12289,82 @@ function LoginGate({ onAuth }) {
   const [totpSecret,setTotpSecret]=useState("");
   const [users,setUsers]=useState([]), [user,setUser]=useState(null);
   const [waitMs,setUntil]=useCountdown();
-  const [jeton,setJeton]=useState("");
-  const [attenteTotp,setAttenteTotp]=useState("");
-  useEffect(()=>{ (async()=>{ const r=await authApi("profils",{});
-    if(r&&r.status===200&&Array.isArray(r.users)) setUsers(r.users); else setUsers(await usersLoad()); })(); },[]);
-  const TOTP_REQUIRED = ["dir","rdoa","sgs","comm"]; // double authentification : Direction, Administrateur, SGS, Commercial
+  const [attente,setAttente]=useState("");          // étape signée par le serveur (mot de passe, code, activation)
+  const [info,setInfo]=useState({avecComptes:[],amorce:false});
+  // 2.20 : tous les départements ont des comptes nominatifs ; tout passe par le serveur
+  const charger=async()=>{ const r=await authApi("profils",{});
+    if(!r||r.status!==200||!Array.isArray(r.users)) return null;
+    setUsers(r.users); const inf={avecComptes:r.avecComptes||[],amorce:!!r.amorce}; setInfo(inf); return {...inf,users:r.users}; };
+  useEffect(()=>{ charger(); },[]);
   const actifs=pid=>(users||[]).filter(u=>(u.actif!==false)&&u.profil===pid).sort((a,b)=>userLabel(a).localeCompare(userLabel(b)));
-  const selectProfile=async(id)=>{ setProfileId(id); setErr(""); setPwd(""); setUser(null); setAttenteTotp(""); setJeton("");
-    const s=await authApi("profils",{});
-    const fresh=(s&&s.status===200&&Array.isArray(s.users))?s.users:await usersLoad(); setUsers(fresh);
-    // Dès qu'un compte nominatif a existé pour ce profil, même désactivé, le mot de passe partagé n'est plus accepté
-    setStep(NOMINATIVE_PROFILES.includes(id)&&fresh.some(u=>u.profil===id)?"user":"pwd"); };
+  const selectProfile=async(id)=>{ setProfileId(id); setErr(""); setPwd(""); setPwd2(""); setUser(null); setAttente("");
+    const r=await charger();
+    if(!r){ setStep("panne"); return; }
+    // Administrateur sans compte encore utilisé : mot de passe d'installation
+    if(id==="rdoa"&&r.amorce&&!r.users.some(u=>u.profil==="rdoa")){ setStep("pwd"); return; }
+    setStep(r.users.some(u=>u.profil===id)?"user":"aucun"); };
   const finish=(u,token)=>{
-    sessionSet(token||jeton||"");
-    authOk(u?"u:"+u.id:"p:"+profileId);
+    sessionSet(token||"");
     try{ sessionStorage.setItem(PFX+"active_profile",profileId); }catch(_e){ logSilent(_e); }
     try{ sessionStorage.setItem(PFX+"authed_"+profileId,"1"); if(u) sessionStorage.setItem(PFX+"active_user",JSON.stringify({id:u.id,nom:u.nom,prenom:u.prenom,fonction:u.fonction,profil:u.profil,role:u.role,crewId:u.crewId})); else sessionStorage.removeItem(PFX+"active_user"); }catch(_e){ logSilent(_e); }
-    setOk(true); auditLog("connexion",u?userLabel(u):profileId,"connexion réussie",{profil:[null,profileId]}); setTimeout(()=>onAuth(profileId,u||null),400); };
-  const goTotp=async(u)=>{
-    const key=u?USER_TOTP_KEY(u):TOTP_KEY+"_"+profileId;
-    const existing=await sbGet(key);
-    if(existing&&(!Array.isArray(existing)||existing.length)) setStep("totp_verify");
-    else { setTotpSecret(await generateTotpSecret()); setStep("totp_setup"); }
+    setOk(true); auditLog("connexion",u?userLabel(u):PROFILES.find(p=>p.id===profileId).label+" (installation)","connexion réussie",{profil:[null,profileId]}); setTimeout(()=>onAuth(profileId,u||null),400); };
+  // Réponse du serveur après le mot de passe : nouveau mot de passe, code, ou activation de l'Authenticator
+  const etapeSuivante=async(s)=>{
+    if(s.user) setUser(u=>({...(u||{}),...s.user}));
+    setPwd(""); setPwd2(""); setErr("");
+    if(s.besoin==="mdp"){ setAttente(s.attente); setStep("newpwd"); return; }
+    if(s.besoin==="totp"){ setAttente(s.attente_totp); setStep("totp_verify"); return; }
+    if(s.besoin==="activer"){ setAttente(s.attente); setTotpSecret(await generateTotpSecret()); setStep("totp_setup"); return; }
+    setErr("Réponse inattendue du serveur.");
   };
-  // Profil encore à mot de passe partagé (aucun compte nominatif actif)
+  const refus=(s,base,label)=>{
+    if(!s){ setErr("Serveur injoignable : vérifiez la connexion."); return; }
+    if(s.attente) setUntil(Date.now()+s.attente);
+    setErr(s.status===429?"Trop d'essais : patientez.":s.status===401?failMsg({fails:s.fails||1,until:s.attente?Date.now()+s.attente:0},base):(s.error||"Connexion impossible."));
+    setPwd(""); if(s.status===401||s.status===429) auditLog("connexion",label,"échec de connexion",{motif:[null,base.toLowerCase()],profil:[null,profileId]}); };
+  // Mot de passe d'installation de l'Administrateur
   const submit=async()=>{
-    if(NOMINATIVE_PROFILES.includes(profileId)&&(users||[]).some(u=>u.profil===profileId)){ setErr("Ce profil utilise des comptes nominatifs : choisissez votre nom."); setStep("user"); return; }
-    { const w=await authWait("p:"+profileId); if(w){ setUntil(Date.now()+w); setErr("Trop d'essais : patientez."); return; } }
-    if(!await checkPassword(pwd, profileId)){ const r=await authFail("p:"+profileId,profileId); if(r.until) setUntil(r.until); setErr(failMsg(r,"Mot de passe incorrect")); setPwd(""); auditLog("connexion",profileId,"échec de connexion",{motif:[null,"mot de passe incorrect"],profil:[null,profileId]}); return; }
-    if(!TOTP_REQUIRED.includes(profileId)){ finish(null); return; }
-    await goTotp(null);
+    const s=await authApi("amorcer",{password:pwd});
+    if(!s||s.status!==200){ if(s&&s.status===403){ setErr("Des comptes Administrateur existent : choisissez votre nom."); await selectProfile("rdoa"); return; } refus(s,"Mot de passe incorrect","Administrateur (installation)"); return; }
+    await etapeSuivante(s);
   };
   // Compte nominatif : mot de passe personnel
   const submitUser=async()=>{
-    // Vérification par le serveur : la page n'a plus accès aux empreintes ni aux clés
     const s=await authApi("login",{userId:user.id,password:pwd});
-    if(s){
-      if(s.status===429||s.status===401){
-        if(s.attente) setUntil(Date.now()+s.attente);
-        setErr(s.status===429?"Trop d'essais : patientez.":failMsg({fails:s.fails||1,until:s.attente?Date.now()+s.attente:0},"Mot de passe incorrect"));
-        setPwd(""); auditLog("connexion",userLabel(user),"échec de connexion",{motif:[null,"mot de passe incorrect"]}); return;
-      }
-      if(s.status!==200){ setErr(s.error||"Connexion impossible."); return; }
-      setPwd("");
-      if(s.besoin==="totp"){ setAttenteTotp(s.attente_totp); setUser({...user,...(s.user||{})}); setStep("totp_verify"); return; }
-      const u={...user,...(s.user||{})};
-      setUser(u); setJeton(s.token||"");
-      if(u.mustChange){ setStep("newpwd"); return; }
-      if(s.totpAActiver){ await goTotp(u); return; }
-      finish(u,s.token); return;
-    }
-    // Serveur absent : ancien fonctionnement
-    const fresh=(await usersLoad()).find(x=>x.id===user.id);
-    if(!fresh||!fresh.actif){ setErr("Ce compte est désactivé. Contactez l'Administrateur."); return; }
-    { const w=await authWait("u:"+fresh.id); if(w){ setUntil(Date.now()+w); setErr("Trop d'essais : patientez."); return; } }
-    if(await userHash(pwd,fresh.salt)!==fresh.hash){ const r=await authFail("u:"+fresh.id,userLabel(fresh)); if(r.until) setUntil(r.until); setErr(failMsg(r,"Mot de passe incorrect")); setPwd(""); auditLog("connexion",userLabel(fresh),"échec de connexion",{motif:[null,"mot de passe incorrect"],profil:[null,profileId]}); return; }
-    setUser(fresh); setPwd("");
-    if(fresh.mustChange){ setStep("newpwd"); return; }
-    await goTotp(fresh);
+    if(!s||s.status!==200){ refus(s,"Mot de passe incorrect",userLabel(user)); return; }
+    await etapeSuivante(s);
   };
   const submitNew=async()=>{
     if(pwd.length<8){ setErr("8 caractères au minimum."); return; }
     if(!/[A-Za-z]/.test(pwd)||!/\d/.test(pwd)){ setErr("Mélangez lettres et chiffres."); return; }
     if(pwd!==pwd2){ setErr("Les deux saisies ne correspondent pas."); return; }
-    const L=await usersLoad(), salt=randomToken(16), h=await userHash(pwd,salt);
-    const u={...user,salt,hash:h,mustChange:false,pwdChangedAt:new Date().toISOString()};
-    if(!(await usersSave(L.map(x=>x.id===u.id?u:x)))){ setErr("Enregistrement impossible : vérifiez la connexion."); return; }
-    setUser(u); setPwd(""); setPwd2(""); setErr(""); await goTotp(u);
+    const s=await authApi("mdp",{attente,password:pwd});
+    if(!s||s.status!==200){ setErr(s?(s.status===401?"Délai dépassé : recommencez la connexion.":(s.error||"Enregistrement impossible.")):"Serveur injoignable : vérifiez la connexion."); return; }
+    auditLog("connexion",userLabel(user),"mot de passe personnel choisi",null);
+    await etapeSuivante(s);
   };
-  const handleTotpVerified=async(token)=>finish(user,token);
+  const ouvrirSession=s=>{ finish(s.user?{...(user||{}),...s.user}:null,s.token); return {ok:true}; };
+  const erreurCode=(s,base)=>{ if(!s) return {erreur:"Serveur injoignable."};
+    if(s.status===401&&!s.fails) return {erreur:"Délai dépassé : recommencez la connexion."};
+    auditLog("connexion",user?userLabel(user):"Administrateur (installation)","échec de connexion",{motif:[null,"code Authenticator incorrect"]});
+    return {erreur:s.status===429?"Trop d'essais : patientez.":base, attente:s.attente}; };
   // Code Authenticator vérifié par le serveur
   const verifTotpServeur=async(code)=>{
-    const s=await authApi("totp",{attente_totp:attenteTotp,code});
-    if(!s) return {erreur:"Serveur indisponible."};
-    if(s.status===200){ setJeton(s.token||""); finish({...user,...(s.user||{})},s.token); return {ok:true}; }
-    if(s.attente) setUntil(Date.now()+s.attente);
-    return {erreur:s.status===429?"Trop d'essais : patientez.":"Code incorrect."};
+    const s=await authApi("totp",{attente_totp:attente,code});
+    return s&&s.status===200?ouvrirSession(s):erreurCode(s,"Code incorrect.");
   };
-  const handleTotpSetupVerified=async()=>{ await sbSet(user?USER_TOTP_KEY(user):TOTP_KEY+"_"+profileId,[totpSecret]); finish(user); };
+  // Première activation : le serveur vérifie le code avec la nouvelle clé, puis l'enregistre
+  const activerServeur=async(code)=>{
+    const s=await authApi("activer",{attente,secret:totpSecret,code});
+    if(s&&s.status===200) auditLog("connexion",user?userLabel(user):"Administrateur (installation)","activation de l'Authenticator",null);
+    return s&&s.status===200?ouvrirSession(s):erreurCode(s,"Code incorrect. Vérifiez que l'heure du téléphone est réglée automatiquement.");
+  };
+  // Autre téléphone : code de l'Authenticator actuel, puis code du nouveau
+  const ajoutDebut=async(code)=>{ const s=await authApi("appareil_debut",{attente_totp:attente,code});
+    if(s&&s.status===200){ setAttente(s.attente); return {ok:true}; } return erreurCode(s,"Code incorrect : impossible d'ajouter un autre téléphone."); };
+  const ajoutFin=async(secret,code)=>{ const s=await authApi("appareil",{attente,secret,code});
+    if(s&&s.status===200) auditLog("connexion",user?userLabel(user):"Administrateur (installation)","ajout d'un téléphone Authenticator",null);
+    return s&&s.status===200?ouvrirSession(s):erreurCode(s,"Code incorrect. Vérifiez que l'heure du téléphone est réglée automatiquement."); };
   if(step==="select") return <ProfileSelectScreen onSelect={selectProfile}/>;
   const profile=PROFILES.find(p=>p.id===profileId);
   const inp={width:"100%",height:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",borderRadius:10,padding:"0 14px",fontSize:14,outline:"none",marginBottom:10};
@@ -12498,10 +12387,14 @@ function LoginGate({ onAuth }) {
             style={{width:"100%",minHeight:46,boxSizing:"border-box",border:"1.5px solid #CBD5E1",background:"#fff",borderRadius:10,padding:"8px 14px",marginBottom:8,textAlign:"left",cursor:"pointer"}}>
             <div style={{fontSize:14,fontWeight:700,color:"#0F1F3D"}}>{userLabel(u)}</div>{u.fonction&&<div style={{fontSize:11,color:"#64748B"}}>{u.fonction}</div>}</button>)}
           {!actifs(profileId).length&&<div style={{fontSize:12.5,color:"#B91C1C",textAlign:"center",lineHeight:1.45}}>Aucun compte actif pour ce profil. Contactez l'Administrateur pour qu'il réactive ou crée votre compte.</div>}
+          {profileId==="rdoa"&&info.amorce&&<button onClick={()=>{ setStep("pwd"); setErr(""); setPwd(""); }} style={{width:"100%",marginTop:4,background:"none",border:"none",color:"#0369A1",fontSize:12,cursor:"pointer",textDecoration:"underline"}}>Mot de passe d'installation</button>}
           {err&&<div style={{color:"#DC2626",fontSize:12}}>{err}</div>}
         </>)}
+        {step==="aucun"&&<div role="alert" style={{fontSize:12.5,color:"#B91C1C",textAlign:"center",lineHeight:1.5}}>Aucun compte pour ce profil : demandez à l'Administrateur de créer le vôtre.</div>}
+        {step==="panne"&&<div role="alert" style={{fontSize:12.5,color:"#B91C1C",textAlign:"center",lineHeight:1.5}}>Serveur injoignable : vérifiez la connexion internet, puis touchez « Changer de profil » et recommencez.</div>}
         {(step==="pwd"||step==="upwd")&&(<>
-          <input type="password" value={pwd} placeholder={step==="upwd"?"Votre mot de passe":"Mot de passe"} autoComplete={step==="upwd"?"current-password":"off"}
+          {step==="pwd"&&<div style={{fontSize:11.5,color:"#64748B",textAlign:"center",marginBottom:8,lineHeight:1.4}}>Mot de passe d'installation : il sert seulement à créer les premiers comptes, jusqu'à la première connexion d'un compte Administrateur.</div>}
+          <input type="password" value={pwd} placeholder={step==="upwd"?"Votre mot de passe":"Mot de passe d'installation"} autoComplete={step==="upwd"?"current-password":"off"}
             onChange={e=>{setPwd(e.target.value);setErr("");}} onKeyDown={e=>{if(e.key==="Enter")(step==="upwd"?submitUser:submit)();}} autoFocus style={inp}/>
           {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
           {waitMs>0&&<div role="alert" style={{background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:9,padding:"8px 10px",color:"#991B1B",fontSize:12.5,marginBottom:10,textAlign:"center"}}>Réessayez dans <b>{fmtWait(waitMs)}</b></div>}
@@ -12516,8 +12409,8 @@ function LoginGate({ onAuth }) {
           {err && <div style={{color:"#DC2626",fontSize:12,marginBottom:10}}>{err}</div>}
           <button onClick={submitNew} style={main}>Enregistrer et continuer</button>
         </>)}
-        {step==="totp_setup"&&<TotpSetup secret={totpSecret} profileId={profileId} account={user?userLabel(user):null} onVerified={handleTotpSetupVerified}/>}
-        {step==="totp_verify"&&<TotpVerify verifServeur={attenteTotp?verifTotpServeur:null} profileId={profileId} storeKey={user?USER_TOTP_KEY(user):null} account={user?userLabel(user):null} lockId={user?"u:"+user.id:"p:"+profileId} lockLabel={user?userLabel(user):profileId} onVerified={handleTotpVerified}/>}
+        {step==="totp_setup"&&<TotpSetup secret={totpSecret} profileId={profileId} account={user?userLabel(user):null} verifServeur={activerServeur}/>}
+        {step==="totp_verify"&&<TotpVerify verifServeur={verifTotpServeur} ajoutDebut={ajoutDebut} ajoutFin={ajoutFin} profileId={profileId} account={user?userLabel(user):null}/>}
       </div>
       <div style={{flex:1}}/>
       <VersionMention/>
@@ -12550,10 +12443,10 @@ function ResetPasswordCheck({ onConfirm, onCancel }) {
   const handle = async () => {
     if(!pwd.trim()){ setErr("Mot de passe requis."); return; }
     setChecking(true);
-    const ok = await checkPassword(pwd);
+    const r = await authApi("confirmer",{token:sessionToken(),password:pwd});
     setChecking(false);
-    if(ok){ onConfirm(); }
-    else { setErr("Mot de passe incorrect."); setPwd(""); }
+    if(r&&r.status===200&&r.ok){ onConfirm(); }
+    else { setErr(!r?"Serveur injoignable.":r.status===429?"Trop d'essais : patientez.":"Mot de passe incorrect."); setPwd(""); }
   };
 
   return (
