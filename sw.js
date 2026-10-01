@@ -19,7 +19,7 @@ const HORS_LIGNE = [
   '/',
   '/index.html',
   '/manuel.html',
-  '/Manuel_Utilisateur_Afrijet_v2.17.pdf',
+  '/Manuel_Utilisateur_Afrijet_v2.18.pdf',
 ];
 
 self.addEventListener('install', e => {
