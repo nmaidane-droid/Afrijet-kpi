@@ -11,7 +11,7 @@
 //
 // VERSION à incrémenter à chaque livraison : elle déclenche le ménage des anciennes copies.
 
-const VERSION = 'afrijet-2.17';
+const VERSION = 'afrijet-2.18';
 const CACHE   = VERSION;
 
 // Ce qui doit rester lisible sans réseau

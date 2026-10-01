@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.17";
+const APP_VERSION = "2.18";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -409,6 +409,44 @@ function usePersist(key, init) {
     schedule(env);
     setVal(next);
     auditDiff(key, prev, next);
+  };
+  return [val, set];
+}
+
+// Donnée écrite seulement par le serveur (ex. devis, script s3) : la page la lit dans la base, la garde
+// en copie locale et la relit régulièrement, mais ne l'écrit jamais. set() met à jour l'affichage et la
+// copie locale avec la réponse du serveur, et note la modification au journal d'audit.
+function useLectureSeule(key, init) {
+  const fk = PFX+key;
+  const valRef = useRef(null), gen = useRef(0);   // gen : change à chaque mise à jour locale
+  const [val, setVal] = useState(() => {
+    const s = lsGet(fk); if (!s) return init;
+    try { return unwrapEnv(JSON.parse(s)).v; } catch(_e) { return init; }
+  });
+  valRef.current = val;
+  useEffect(() => {
+    let vivant = true;
+    const relire = async () => {
+      if (!vivant || document.visibilityState === "hidden") return;
+      try{
+        // Le serveur est le seul à écrire : sa valeur fait foi (sans comparer les horloges des téléphones).
+        // Une lecture partie avant une mise à jour locale est ignorée : elle pourrait être plus ancienne.
+        const g = gen.current, brut = await sbGet(fk); if (!vivant || brut === null || g !== gen.current) return;
+        const u = unwrapEnv(brut);
+        if (!memeValeur(u.v, valRef.current)) { valRef.current = u.v; setVal(u.v); lsSet(fk, JSON.stringify({__v:u.v, __t:u.t})); }
+      }catch(e){ logSilent(e); }
+    };
+    relire();
+    const t = setInterval(relire, 30000);
+    const onShow = () => { if (document.visibilityState === "visible") relire(); };
+    document.addEventListener("visibilitychange", onShow);
+    return () => { vivant = false; clearInterval(t); document.removeEventListener("visibilitychange", onShow); };
+  }, [fk]);
+  const set = v => {
+    const prev = valRef.current, next = typeof v === "function" ? v(prev) : v;
+    valRef.current = next; gen.current++;
+    lsSet(fk, JSON.stringify({__v:next, __t:Date.now()}));
+    setVal(next); auditDiff(key, prev, next);
   };
   return [val, set];
 }
@@ -7773,8 +7811,9 @@ const COM_CHOIX={
   role:{decideur:"Décideur",prescripteur:"Prescripteur",info:"Information"},
   suites:{devis:"Devis sous 48 h",rdv:"Rendez-vous",doc:"Documentation"},
   potentiel:{chaud:"chaud",tiede:"tiède",froid:"froid"}};
-// Variables de calcul des devis (écran Variables d'Airshow) + signataire des devis
-const COM_DEFAUTS={tarifVol:75000,tarifImmo:75000,immoMin:2,fuelRef:10,conso:1100,signataire:"Hicham QADRI"};
+// Variables de calcul des devis + signataire. Carburant (2.18) : l'heure de vol comprend le carburant au prix
+// du Maroc ; un départ de l'étranger ajoute l'écart (Carburant Étranger − Carburant Maroc) × litres du vol.
+const COM_DEFAUTS={tarifVol:75000,tarifImmo:75000,immoMin:2,fuelMaroc:12.5,fuelEtranger:16.4,conso:1100,signataire:"Hicham QADRI"};
 // Règles fixes d'Airshow (constante DV et api/devis.js), affichées en lecture dans Paramètres
 const COM_REGLES={base:"Rabat (RBA / GMME)",vitesse:400,routes:1.10,roulage:15,validite:15,rayon:1750,tva:20};
 // Contrôle des valeurs, identique à api/variables.js d'Airshow
@@ -7783,7 +7822,7 @@ function comParamsValides(b){
   const dec=(v,min,max)=>{ const n=Math.round(Number(String(v).replace(',','.'))*100)/100; return Number.isFinite(n)&&n>=min&&n<=max?n:null; };
   const ent=(v,min,max)=>{ const s=String(v).replace(/\s/g,''); if(s==="") return null; const n=Math.round(Number(s)); return Number.isFinite(n)&&n>=min&&n<=max?n:null; };
   const r={tarifVol:ent(b.tarifVol,1000,1000000),tarifImmo:ent(b.tarifImmo,0,1000000),immoMin:ent(b.immoMin,0,24),
-    fuelRef:dec(b.fuelRef,0.1,100),conso:ent(b.conso,100,10000),signataire:String(b.signataire||"").trim().slice(0,80)};
+    fuelMaroc:dec(b.fuelMaroc,0.1,100),fuelEtranger:dec(b.fuelEtranger,0.1,100),conso:ent(b.conso,100,10000),signataire:String(b.signataire||"").trim().slice(0,80)};
   if(Object.values(r).some(v=>v===null)||r.signataire.length<2) return null;
   return r;
 }
@@ -7950,21 +7989,26 @@ function comBuildLegs(dep,arr,ar,base,ret){
   if(last.icao!==ret.icao) leg("mep","Retour de l'avion",last,ret,false);
   return L;
 }
-// Carburant par aéroport de départ : chaque vol fait le plein à son aéroport de départ
-function comFuelAirports(L,F,force,V){
+// Carburant par aéroport de départ : chaque vol fait le plein à son aéroport de départ (identique à api/commercial.js).
+// « Maroc » : code OACI commençant par GM (Laâyoune, Dakhla, Smara compris) ; sinon « Étranger ».
+// Supplément = litres × (prix de l'aéroport − Carburant Maroc), calculé en centimes, arrondi au dirham.
+const comEstMaroc=icao=>/^GM/.test(String(icao||"").toUpperCase());
+const comPrixValide=v=>{ const n=Math.round(Number(String(v).replace(",","."))*100)/100; return Number.isFinite(n)&&n>=0.1&&n<=100?n:null; };
+const comSuppl=(litres,prix,maroc)=>Math.round(litres*(Math.round(prix*100)-Math.round(maroc*100))/100)||0;
+function comFuelAirports(L,force,V){
   const map=new Map();
   L.filter(l=>l.type!=="immo"&&l.type!=="fuel").forEach(l=>{ const k=l.de.icao; if(!map.has(k)) map.set(k,{icao:k,ville:l.de.ville,vols:[],min:0}); const a=map.get(k); a.vols.push(l.libelle); a.min+=l.minutes; });
-  return [...map.values()].map(a=>{ const forced=(force||{})[a.icao]!=null, prix=forced?force[a.icao]:(F&&F.madL>0?F.madL:null), litres=Math.round(a.min/60*V.conso);
-    return {icao:a.icao,ville:a.ville,vols:a.vols,litres,prix,force:forced,montant:prix==null?0:Math.round(litres*(prix-V.fuelRef))}; });
+  return [...map.values()].map(a=>{ const zone=comEstMaroc(a.icao)?"maroc":"etranger", prixStandard=zone==="maroc"?V.fuelMaroc:V.fuelEtranger;
+    const f=force&&force[a.icao]!=null?comPrixValide(force[a.icao]):null, prix=f!=null?f:prixStandard, litres=Math.round(a.min/60*V.conso);
+    return {icao:a.icao,ville:a.ville,zone,vols:a.vols,litres,prixStandard,prix,force:f!=null,supplement:comSuppl(litres,prix,V.fuelMaroc)}; });
 }
-// Lignes du devis en cours : vols, immobilisation (1 jour inclus en aller-retour), surcharge carburant
-function comDvLegs(e,V,F){
+// Lignes du devis en cours : vols (tarif unique), immobilisation (1 jour inclus en aller-retour, sans carburant), supplément carburant
+function comDvLegs(e,V){
   const L=comBuildLegs(e.dep,e.arr,e.ar,e.bas,e.ret).map((l,i)=>Object.assign(l,e.ovr&&e.ovr[i]?{minutes:e.ovr[i]}:{}));
   const j=e.ar&&L.length?Math.max(0,(Number(e.immo)||1)-1):0;
   if(j) L.push({type:"immo",libelle:"Immobilisation de l'appareil",jours:j,de:{icao:"",ville:""},vers:{icao:"",ville:""},national:L.every(l=>l.national),passagers:false,distance:0,minutes:j*V.immoMin*60});
-  const A=comFuelAirports(L,F,e.fuelForce,V);
-  if(A.length){ const montant=A.reduce((s,a)=>s+a.montant,0);
-    if(montant!==0) L.push({type:"fuel",libelle:"Surcharge carburant",de:{icao:"",ville:""},vers:{icao:"",ville:""},national:L.every(l=>l.national),passagers:false,distance:0,minutes:0,aeroports:A,montant}); }
+  const A=comFuelAirports(L,e.fuelForce,V), montant=A.reduce((s,a)=>s+a.supplement,0);
+  if(montant!==0) L.push({type:"fuel",libelle:"Supplément carburant",de:{icao:"",ville:""},vers:{icao:"",ville:""},national:L.every(l=>l.national),passagers:false,distance:0,minutes:0,montant});
   return L;
 }
 const comLineAmt=(l,V)=>l.type==="fuel"?l.montant:Math.round(l.minutes/60*(l.type==="immo"?V.tarifImmo:V.tarifVol));
@@ -7972,10 +8016,13 @@ function comTotaux(L,V){
   const ht=L.reduce((s,l)=>s+comLineAmt(l,V),0), national=L.length>0&&L.every(l=>l.national), tva=national?Math.round(ht*0.2):0;
   return {ht,national,tva,ttc:ht+tva};
 }
-// Contrôle d'un devis enregistré (importé d'Airshow ou créé ici) : montants recalculés avec ses propres tarifs
+// Contrôle d'un devis enregistré (importé d'Airshow ou créé ici) : montants recalculés avec ses propres tarifs.
+// Carburant : devis 2.18 (modele 2) recalculé depuis son détail par aéroport ; devis plus ancien ou importé
+// d'Airshow : supplément gardé tel quel, le contrôle porte sur les vols et l'immobilisation.
+const comCarbNouveau=d=>!!(d&&d.carburant&&d.carburant.modele===2);
 function comRecalcul(d){
   const V={tarifVol:d.tarif,tarifImmo:d.tarifImmo!=null?d.tarifImmo:d.tarif,immoMin:d.immoMin!=null?d.immoMin:2};
-  const fuel=d.carburant&&Array.isArray(d.carburant.aeroports)?d.carburant.aeroports.reduce((s,a)=>s+(a.prix==null?0:Math.round(a.litres*(a.prix-d.carburant.ref))),0):null;
+  const fuel=comCarbNouveau(d)&&Array.isArray(d.carburant.aeroports)?d.carburant.aeroports.reduce((s,a)=>s+comSuppl(a.litres,a.prix,d.carburant.maroc),0):null;
   const ht=(d.lignes||[]).reduce((s,l)=>s+(l.type==="fuel"?(fuel!=null?fuel:l.montant):l.type==="immo"?Math.round(l.jours*V.immoMin*V.tarifImmo):Math.round(l.minutes/60*V.tarifVol)),0);
   const national=(d.lignes||[]).every(l=>l.national), tva=national?Math.round(ht*0.2):0;
   return {ht,tva,ttc:ht+tva,ecart:ht-(Number(d.totalHT)||0)};
@@ -8388,13 +8435,16 @@ function ComDevisListe({ devis, ouvrir }){
 function ComDevisDetail({ d, canEdit, com, fiche, nouvelleVersion, flights, demandes, accepter }){
   if(!d) return <ComCarte>Devis introuvable.</ComCarte>;
   const qui=comQui(), rc=comRecalcul(d);
-  const envoye=async()=>{
-    if(!(await uiConfirm("Marquer le devis "+d.numero+" v"+d.version+" comme envoyé au client ?\n\nLes relances J+2 et J+7 repartiront d'aujourd'hui."))) return;
-    const iso=new Date().toISOString();
-    com.setDevis(L=>(L||[]).map(x=>x.id===d.id?{...x,envoye:{date:iso,auteur:qui}}:x));
-    if(fiche) com.setProspects(L=>(L||[]).map(p=>p.id===fiche.id?comDevisEnvoye(p,d.numero+" v"+d.version,iso,qui):p));
+  // Le devis est marqué par le serveur (seul autorisé à écrire les devis) ; la fiche prospect, par la page
+  const envoye=async(sansQuestion)=>{
+    if(!sansQuestion&&!(await uiConfirm("Marquer le devis "+d.numero+" v"+d.version+" comme envoyé au client ?\n\nLes relances J+2 et J+7 repartiront d'aujourd'hui."))) return;
+    const r=await comApi("envoye",{id:d.id});
+    if(r.status!==200||!r.data.devis){ uiAlert("⚠️ Devis non marqué comme envoyé : "+comErreur(r)); return; }
+    com.majDevis(r.data.devis);
+    const iso=r.data.devis.envoye.date;
+    if(fiche&&!r.data.inchange) com.setProspects(L=>(L||[]).map(p=>p.id===fiche.id?comDevisEnvoye(p,d.numero+" v"+d.version,iso,qui):p));
   };
-  const envoyer=async()=>{ const ok=await comEnvoyerPdf(d); if(ok&&!d.envoye&&canEdit) envoye(); };
+  const envoyer=async()=>{ const ok=await comEnvoyerPdf(d); if(ok&&!d.envoye&&canEdit) envoye(true); };
   return (<>
     <ComCarte><div style={{display:"flex",justifyContent:"space-between"}}><b style={{fontSize:15,color:C.navy}}>{d.numero} · v{d.version}</b><b style={{fontSize:15,color:C.navy}}>{comMad(d.totalHT)}</b></div>
       <div style={{fontSize:12}}>{[d.client&&d.client.nom,d.client&&d.client.fonction,d.client&&d.client.organisation].filter(Boolean).join(" · ")}</div>
@@ -8403,7 +8453,7 @@ function ComDevisDetail({ d, canEdit, com, fiche, nouvelleVersion, flights, dema
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
       <button onClick={()=>comOuvrirPdf(d)} style={comBtn("white",C.navy,"#CBD5E1")}>📄 Ouvrir le PDF</button>
       <button onClick={envoyer} style={comBtn("#25D366","white")}>📤 Envoyer</button></div>
-    {canEdit&&!d.envoye&&!d.accepte&&<button onClick={envoye} style={comBtn(COM_BLEU,"white")}>✓ Marquer comme envoyé</button>}
+    {canEdit&&!d.envoye&&!d.accepte&&<button onClick={()=>envoye()} style={comBtn(COM_BLEU,"white")}>✓ Marquer comme envoyé</button>}
     {canEdit&&fiche&&!d.accepte&&<button onClick={()=>nouvelleVersion(d)} style={comBtn("white",COM_BLEU,COM_BLEU)}>Modifier · créera la v{d.version+1}</button>}
     {canEdit&&!d.accepte&&fiche&&fiche.statut!=="archive"&&<button onClick={()=>accepter(d)} style={comBtn("#00936A","white")}>Le client accepte ce devis</button>}
     {canEdit&&d.accepte&&!(demandes||[]).some(x=>x.statut==="active")&&<button onClick={()=>accepter(d)} style={comBtn("#00936A","white")}>📤 Transmettre aux Opérations</button>}
@@ -8417,8 +8467,13 @@ function ComDevisDetail({ d, canEdit, com, fiche, nouvelleVersion, flights, dema
       <ComLigne l="Total TTC" v={<b>{comMad(d.ttc)}</b>}/>
       <ComLigne l="Tarif appliqué" v={comMad(d.tarif)+" / heure"}/>
       <ComLigne l="Contrôle du calcul" v={rc.ecart===0?"✓ écart 0 MAD":"⚠️ écart "+comMad(rc.ecart)} c={rc.ecart===0?"#00936A":"#991B1B"}/></ComCarte>
-    {d.carburant&&d.carburant.aeroports&&<ComCarte><ComLbl>Carburant (détail interne)</ComLbl>{d.carburant.aeroports.map(a=><ComLigne key={a.icao} l={a.ville+" · "+comGrp3(a.litres)+" L"}
-      v={(a.prix==null?"—":comDec2(a.prix)+" MAD/L")+(a.force?" · forcé":"")+" · "+comMad(a.montant)}/>)}<ComLigne l="Référence" v={comDec2(d.carburant.ref)+" MAD/L"}/></ComCarte>}
+    {comCarbNouveau(d)&&Array.isArray(d.carburant.aeroports)&&<ComCarte><ComLbl>Carburant par aéroport de départ (détail interne)</ComLbl>
+      {d.carburant.aeroports.map(a=><ComLigne key={a.icao} l={a.ville+" ("+a.icao+") · "+(a.zone==="maroc"?"Maroc":"Étranger")+" · "+comGrp3(a.litres)+" L"}
+        v={comDec2(a.prix)+" MAD/L"+(a.force?" · forcé":"")+" · "+(a.supplement?comMadS(a.supplement):"carburant inclus")}/>)}
+      <ComLigne l="Prix du jour du devis" v={"Maroc "+comDec2(d.carburant.maroc)+" · Étranger "+comDec2(d.carburant.etranger)+" MAD/L"}/>
+      {d.carburant.forcePar&&<ComLigne l="Prix forcé par" v={d.carburant.forcePar}/>}</ComCarte>}
+    {d.carburant&&!comCarbNouveau(d)&&d.carburant.aeroports&&<ComCarte><ComLbl>Carburant (détail interne, ancien calcul)</ComLbl>{d.carburant.aeroports.map(a=><ComLigne key={a.icao} l={a.ville+" · "+comGrp3(a.litres)+" L"}
+      v={(a.prix==null?"—":comDec2(a.prix)+" MAD/L")+(a.force?" · forcé":"")+" · "+comMad(a.montant)}/>)}{d.carburant.ref!=null&&<ComLigne l="Référence" v={comDec2(d.carburant.ref)+" MAD/L"}/>}</ComCarte>}
     {d.intro&&<ComCarte><ComLbl>Introduction</ComLbl><div style={{fontSize:12.5,lineHeight:1.5}}>{d.intro}</div></ComCarte>}
   </>);
 }
@@ -8436,12 +8491,17 @@ function ComImport({ com, clients, setClients, canEdit }){
       setFic(r.erreur?{erreur:r.erreur}:{nom:f.name,json,rapport:r.rapport});
     }catch(_e){ setFic({erreur:"Fichier illisible : ce n'est pas un fichier JSON valide."}); }
   };
-  const importer=()=>{
+  const [busy,setBusy]=useState(false);
+  const importer=async()=>{
     const iso=new Date().toISOString();
     // Recalcul sur les données du moment : rien n'est perdu si un autre appareil a écrit entre-temps
     const r=comFusionImport({prospects:com.prospects,devis:com.devis,clients},fic.json,iso,qui);
     if(r.erreur){ uiAlert(r.erreur); return; }
-    com.setProspects(r.prospects); com.setDevis(r.devis); if(r.rapport.contrats) setClients(r.clients);
+    // Les devis sont enregistrés par le serveur d'abord : en cas d'échec, rien n'est importé
+    setBusy(true); const s=await comApi("importer",{devis:fic.json.devis||[]}); setBusy(false);
+    if(s.status!==200||!Array.isArray(s.data.devis)){ uiAlert("⚠️ Import non effectué : "+comErreur(s)); return; }
+    com.remplacerDevis(s.data.devis);
+    com.setProspects(r.prospects); if(r.rapport.contrats) setClients(r.clients);
     const R=r.rapport, entree={date:iso,auteur:qui,fichier:fic.nom,fiches:R.fichesNouvelles,fichesMaj:R.fichesMaj,devis:R.devisNouveaux,doublons:R.doublons.length,contrats:R.contrats};
     com.setImports(L=>[entree,...(L||[])]);
     auditLog("comImports",fic.nom,"import Fiches Airshow",{fiches:[null,String(R.fichesNouvelles)],devis:[null,String(R.devisNouveaux)],misesAJour:[null,String(R.fichesMaj+R.devisMaj)]});
@@ -8470,9 +8530,9 @@ function ComImport({ com, clients, setClients, canEdit }){
         <div style={{fontSize:11.5,color:C.slate,marginTop:4}}>Importés comme prospects. S'ils acceptent un devis, ils rejoindront ce client au lieu d'en créer un second.</div></ComCarte>}
       {(()=>{ const E=(fic.json.devis||[]).filter(d=>d&&d.lignes).map(d=>({n:d.numero+" v"+d.version,e:comRecalcul(d).ecart}));
         return <ComCarte><div style={{fontSize:12.5,fontWeight:700,color:C.navy,marginBottom:3}}>Contrôle des devis</div>
-          <div style={{fontSize:12,color:E.some(x=>x.e!==0)?"#991B1B":"#00936A"}}>{E.length} devis recalculé(s) avec les règles d'Airshow : {E.some(x=>x.e!==0)?E.filter(x=>x.e!==0).map(x=>x.n+" (écart "+comMad(x.e)+")").join(", "):"écart 0 MAD"}.</div></ComCarte>; })()}
+          <div style={{fontSize:12,color:E.some(x=>x.e!==0)?"#991B1B":"#00936A"}}>{E.length} devis recalculé(s) avec les règles d'Airshow (vols et immobilisation ; supplément carburant repris tel quel) : {E.some(x=>x.e!==0)?E.filter(x=>x.e!==0).map(x=>x.n+" (écart "+comMad(x.e)+")").join(", "):"écart 0 MAD"}.</div></ComCarte>; })()}
       {R.dernierTarif&&<ComCarte><div style={{fontSize:12,color:C.slate,lineHeight:1.5}}>Le devis le plus récent ({R.dernierTarif.numero}) a été calculé à <b>{comMad(R.dernierTarif.tarif)} / heure</b>. Vérifiez que la tuile Paramètres porte les mêmes tarifs que l'écran Variables d'Airshow.</div></ComCarte>}
-      <button onClick={importer} style={comBtn(COM_BLEU,"white")}>Importer {R.fichesNouvelles+R.fichesMaj} fiche(s) et {R.devisNouveaux+R.devisMaj} devis</button>
+      <button onClick={importer} disabled={busy} style={{...comBtn(COM_BLEU,"white"),opacity:busy?.5:1}}>{busy?"Import en cours…":"Importer "+(R.fichesNouvelles+R.fichesMaj)+" fiche(s) et "+(R.devisNouveaux+R.devisMaj)+" devis"}</button>
       <button onClick={()=>setFic(null)} style={comBtn("white",C.navy,"#CBD5E1")}>Annuler</button></>}
     {fait&&<ComCarte><div style={{textAlign:"center",padding:"8px 0"}}><div style={{fontSize:30}}>✅</div><div style={{fontSize:15,fontWeight:800,color:C.navy}}>Import terminé</div>
       <div style={{fontSize:12,color:C.slate,marginTop:4}}>{fait.fichesNouvelles} fiche(s) · {fait.devisNouveaux} devis · {fait.doublons.length} doublon(s) à vérifier</div>
@@ -8483,39 +8543,46 @@ function ComImport({ com, clients, setClients, canEdit }){
   </>);
 }
 
-// Tuile Paramètres : variables de calcul des devis (écran Variables d'Airshow). L'Administrateur modifie ; Direction et Commercial consultent.
+const COM_PRIX_L=["fuelMaroc","fuelEtranger"];
+// Paramètres jamais enregistrés, ou enregistrés avant la 2.18 (ils portent encore l'ancienne référence fuelRef)
+const comCarbAConfirmer=P=>!P||!P.modifie||P.fuelRef!=null;   // prix au litre, à deux décimales
+// Tuile Paramètres : variables de calcul des devis. L'Administrateur modifie ; Direction et Commercial consultent.
 function FormParams({ params, setParams, canEdit }){
   const P={...COM_DEFAUTS,...(params||{})};
-  const [e,setE]=useState(P);
+  const aff=x=>{ const o={...x}; COM_PRIX_L.forEach(k=>{ o[k]=comDec2(o[k]); }); return o; };   // prix affichés 12,50
+  const [e,setE]=useState(()=>aff(P));
   const ch=k=>ev=>setE(o=>({...o,[k]:ev.target.value}));
   const ex=2*(Number(String(e.immoMin).replace(/\s/g,""))||0)*(Number(String(e.tarifImmo).replace(/\s/g,""))||0);
   const [busy,setBusy]=useState(false);
-  useEffect(()=>{ setE({...COM_DEFAUTS,...(params||{})}); },[params]);
+  useEffect(()=>{ setE(aff({...COM_DEFAUTS,...(params||{})})); },[params]);
   // Enregistrement par le serveur, qui vérifie que la personne est Administrateur : la page ne peut pas écrire les tarifs
   const save=async()=>{ const v=comParamsValides(e); if(!v){ uiAlert("Valeurs incorrectes : vérifiez les champs."); return; }
     setBusy(true); const r=await comApi("params",{params:v}); setBusy(false);
     if(r.status!==200||!r.data.params){ uiAlert("⚠️ "+comErreur(r)); return; }
     setParams(r.data.params); uiAlert("✅ Paramètres enregistrés. Ils s'appliqueront aux nouveaux devis."); };
   const champ=(k,l,u)=><div><ComLbl>{l}</ComLbl><div style={{display:"flex",alignItems:"center",gap:8}}>
-    {canEdit?<input value={e[k]} onChange={ch(k)} inputMode={k==="fuelRef"?"decimal":"numeric"} style={{...comInp,fontSize:18,fontWeight:700,flex:1}}/>
-      :<div style={{flex:1,fontSize:18,fontWeight:700,color:C.navy,padding:"8px 0"}}>{k==="fuelRef"?Number(P[k]).toFixed(2).replace(".",","):String(P[k]).replace(/\B(?=(\d{3})+(?!\d))/g," ")}</div>}
+    {canEdit?<input value={e[k]} onChange={ch(k)} inputMode={COM_PRIX_L.includes(k)?"decimal":"numeric"} style={{...comInp,fontSize:18,fontWeight:700,flex:1}}/>
+      :<div style={{flex:1,fontSize:18,fontWeight:700,color:C.navy,padding:"8px 0"}}>{COM_PRIX_L.includes(k)?comDec2(P[k]):String(P[k]).replace(/\B(?=(\d{3})+(?!\d))/g," ")}</div>}
     <span style={{fontSize:12.5,color:C.slate,whiteSpace:"nowrap"}}>{u}</span></div></div>;
   const R=COM_REGLES;
   return (<Card accent="#475569"><FHeader icon="⚙️" title="Paramètres" subtitle={canEdit?"Variables de calcul des devis":"Consultation — modifiables par l'Administrateur"} color="#475569"/>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <ComLbl>Tarifs</ComLbl>{champ("tarifVol","Prix de l'heure de vol","MAD / heure")}{champ("tarifImmo","Prix de l'immobilisation","MAD / heure")}{champ("immoMin","Immobilisation minimum","heures par jour")}
+      <ComLbl>Tarifs</ComLbl>{champ("tarifVol","Heure de vol (carburant Maroc inclus)","MAD / heure")}{champ("tarifImmo","Prix de l'immobilisation","MAD / heure")}{champ("immoMin","Immobilisation minimum","heures par jour")}
       <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45}}>1 jour d'immobilisation est inclus. Chaque jour supplémentaire est facturé : immobilisation minimum × prix de l'immobilisation.</div>
       <div style={{background:C.bg,borderRadius:10,padding:"9px 12px",fontSize:12.5}}>Exemple : 2 jours supplémentaires = {comMad(ex)}</div>
-      <ComLbl>Carburant</ComLbl>{champ("fuelRef","Valeur de référence du Jet A-1","MAD / litre")}{champ("conso","Consommation de l'avion","litres / heure")}
-      <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45}}>Surcharge = litres de vol × (prix du jour selon l'indice mondial − valeur de référence), à la hausse comme à la baisse.</div>
+      <ComLbl>Carburant</ComLbl>{champ("fuelMaroc","Carburant Maroc","MAD / litre")}{champ("fuelEtranger","Carburant Étranger","MAD / litre")}{champ("conso","Consommation CN-KTA","litres / heure")}
+      <div style={{fontSize:11.5,color:C.slate,lineHeight:1.45}}>Aéroport « Maroc » : code OACI commençant par GM (Laâyoune, Dakhla, Smara compris). Sinon « Étranger ».<br/>
+        Le carburant au prix Maroc est compris dans l'heure de vol. Au départ de l'étranger : supplément = litres du vol × (Carburant Étranger − Carburant Maroc).</div>
       <ComLbl>Devis</ComLbl>
       <div><ComLbl>Signataire des devis</ComLbl>{canEdit?<input value={e.signataire} onChange={ch("signataire")} style={comInp}/>:<div style={{fontSize:15,fontWeight:700,color:C.navy}}>{P.signataire}</div>}</div>
       <ComLbl>Règles fixes (comme Fiches Airshow)</ComLbl>
       <div style={{background:C.bg,borderRadius:10,padding:"6px 12px"}}>
         <ComLigne l="Base de l'avion" v={R.base}/><ComLigne l="Temps de vol" v={"distance × "+R.routes.toFixed(2).replace(".",",")+" ÷ "+R.vitesse+" kt + "+R.roulage+" min"}/>
         <ComLigne l="Rayon d'action" v={R.rayon+" NM par vol"}/><ComLigne l="Validité d'un devis" v={R.validite+" jours"}/><ComLigne l="TVA" v={R.tva+" % si tous les vols sont au Maroc"}/></div>
-      {canEdit&&<button onClick={save} disabled={busy} style={{...comBtn("#475569","white"),opacity:busy?.5:1}}>{busy?"Enregistrement…":"Enregistrer"}</button>}
+      {comCarbAConfirmer(P)&&<div style={{fontSize:11.5,color:"#991B1B",textAlign:"center",lineHeight:1.45}}>Prix du carburant pas encore enregistrés : les valeurs affichées sont celles par défaut. L'Administrateur les vérifie puis touche Enregistrer.</div>}
       {P.modifie&&<div style={{fontSize:11.5,color:C.slate,textAlign:"center"}}>Modifié le {comDateH(P.modifie.date)} par {P.modifie.auteur}</div>}
+      {canEdit&&<button onClick={save} disabled={busy} style={{...comBtn("#475569","white"),opacity:busy?.5:1}}>{busy?"Enregistrement…":"Enregistrer"}</button>}
+      <div style={{fontSize:11,color:C.slate,textAlign:"center"}}>Réservé à l'Administrateur. Le Commercial et la Direction consultent.</div>
     </div></Card>);
 }
 
@@ -8526,6 +8593,7 @@ const comP2=n=>String(n).padStart(2,"0");
 const comFD=d=>{ d=new Date(d); return comP2(d.getDate())+"/"+comP2(d.getMonth()+1)+"/"+d.getFullYear(); };
 const comGrp3=n=>String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g," ");
 const comMadP=n=>comGrp3(n)+" MAD";
+const comMadS=n=>(n>0?"+ ":n<0?"− ":"")+comGrp3(Math.abs(n))+" MAD";   // supplément signé (prix forcé sous le prix Maroc : négatif)
 const comHm=m=>Math.floor(m/60)+" h "+comP2(m%60);
 const comDec2=n=>(Math.round(Number(n)*100)/100).toFixed(2).replace(".",",");
 function comLoadScript(src){ return new Promise((ok,ko)=>{ const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=ko; document.head.appendChild(s); }); }
@@ -8594,7 +8662,9 @@ async function comPdf(d){
   const RH=d.lignes.length>5?10:d.lignes.length>4?11:12; // hauteur de ligne réduite pour 5 lignes et plus
   d.lignes.forEach(l=>{
     if (l.type==='fuel'){
-      tx('Surcharge carburant',cols[0],y+5,8.2);
+      // 2.18 : « Supplément carburant », montant seul. Devis plus ancien : imprimé comme à l'origine.
+      if (comCarbNouveau(d)){ tx('Supplément carburant',cols[0],y+5,8.2); tx("Écart de prix du carburant au départ de l'étranger",cols[0],y+9,7.2,{c:MUTE}); }
+      else tx('Surcharge carburant',cols[0],y+5,8.2);
       tx('—',cols[1],y+5,8.5,{align:'right'}); tx('—',cols[2],y+5,8.5,{align:'right'}); tx('—',cols[3],y+5,8.5,{align:'right'}); tx(comMadP(l.montant),cols[4],y+5,8.5,{align:'right'});
       y+=RH; line(M,y,R,y,LINE,0.3); return;
     }
@@ -8617,7 +8687,7 @@ async function comPdf(d){
   // Conditions
   y+=31; tx('CONDITIONS',M,y,8,{b:1,c:BDX}); y+=5;
   const conds=[['Inclus : ','taxes (aéroports, passagers, sécurité), catering.'],['Non inclus : ','dégivrage (de-icing) et handling, refacturés au réel.'],["Validité de l'offre : ",COM_DV.VALID+' jours.'],['Paiement : ','100 % à la confirmation.'],['Temps de vol : ','estimés ; la facturation se fait sur les temps de vol réels.']]
-  if (d.carburant) conds.splice(2,0,['Carburant : ','tarif établi sur une base de '+comDec2(d.carburant.ref)+' MAD/litre de Jet A-1 ; surcharge selon l\'indice mondial Jet A-1 au jour du devis, à la hausse comme à la baisse.']);
+  if (d.carburant&&!comCarbNouveau(d)) conds.splice(2,0,['Carburant : ','tarif établi sur une base de '+comDec2(d.carburant.ref)+' MAD/litre de Jet A-1 ; surcharge selon l\'indice mondial Jet A-1 au jour du devis, à la hausse comme à la baisse.']);
   if (d.lignes.filter(l=>l.passagers).length>1) conds.splice(2,0,['Immobilisation : ',"1 jour inclus ; chaque jour supplémentaire est facturé "+(d.immoMin||2)+" h d'immobilisation."]);
   conds.forEach(([k,v])=>{ const w=tx(k,M,y,8.5,{b:1}); wrap(v,8.5,R-M-w).forEach((s,i)=>{ tx(s,M+w,y,8.5); y+=4.4; }); });
   // Conditions Générales et formule de fin (comme Fiches Airshow)
@@ -8671,16 +8741,18 @@ function ComAptPick({ label, value, apts, onChange }){
 // Éditeur de devis : nouveau devis d'une fiche, ou nouvelle version d'un devis (même numéro)
 function ComDevisEdit({ fiche, parent, com, onDone }){
   const [apts,setApts]=useState(null), [etat,setEtat]=useState(null), [e,setE]=useState(null), [busy,setBusy]=useState(false);
+  const [fp,setFp]=useState(null);           // prix forcé en cours de saisie : {icao, val}
   const qui=comQui();
   useEffect(()=>{ let vivant=true; (async()=>{
     const [A,r]=await Promise.all([comAeroports(),comApi("etat")]);
     if(!vivant) return;
-    setApts(A); setEtat(r.status===200?{V:{...COM_DEFAUTS,...r.data.params},F:r.data.carburant||null,ok:true}:{V:{...COM_DEFAUTS,...(com.params||{})},F:null,ok:false,err:comErreur(r)});
+    setApts(A); setEtat(r.status===200?{V:{...COM_DEFAUTS,...r.data.params},ok:true}:{V:{...COM_DEFAUTS,...(com.params||{})},ok:false,err:comErreur(r)});
     const by=i=>comAptBy(A,i), base=by(COM_DV.BASE);
     let st={dep:null,arr:null,ar:true,immo:1,bas:base,ret:base,ovr:{},fuelForce:{},intro:"",introManual:false,ia:"",iaErr:""};
     if(parent){ const l=(parent.lignes||[]).filter(x=>x.passagers); st={...st,dep:by(l[0]&&l[0].de.icao),arr:by(l[0]&&l[0].vers.icao),ar:l.length>1,intro:parent.intro||"",introManual:true,
         immo:Math.max(1,Number(parent.immobilisation)||1),bas:(parent.base&&by(parent.base.icao))||base,ret:(parent.retour&&by(parent.retour.icao))||base};
-      if(parent.carburant&&parent.carburant.aeroports) parent.carburant.aeroports.forEach(a=>{ if(a.force) st.fuelForce[a.icao]=a.prix; }); }
+      // Prix forcés de la version précédente : repris (le serveur les contrôle de nouveau)
+      if(parent.carburant&&parent.carburant.aeroports) parent.carburant.aeroports.forEach(a=>{ if(a.force&&comPrixValide(a.prix)!=null) st.fuelForce[a.icao]=a.prix; }); }
     // Premier devis de la fiche : trajet noté au salon. Devis suivants : aéroports à choisir.
     else if(!(com.devis||[]).some(d=>d.ficheId===fiche.id)){ st.dep=(fiche.devisDeIcao&&by(fiche.devisDeIcao))||comAptGuess(A,fiche.devisDe); st.arr=(fiche.devisVersIcao&&by(fiche.devisVersIcao))||comAptGuess(A,fiche.devisVers); }
     setE(st);
@@ -8692,16 +8764,13 @@ function ComDevisEdit({ fiche, parent, com, onDone }){
     setE(o=>{ const n={...o,ia:""}; if(r.status===200&&r.data.texte){ if(!o.introManual) n.intro=r.data.texte; } else { if(!o.intro) n.intro=comIntroSecours(fiche,o.dep,o.arr); n.iaErr=comErreur(r); } return n; });
   };
   if(!e||!etat) return <ComCarte><div style={{fontSize:12.5,color:C.slate}}>Chargement des aéroports et des tarifs…</div></ComCarte>;
-  const V=etat.V, F=etat.F, L=comDvLegs(e,V,F), T=comTotaux(L,V), hr=L.some(comHorsRange);
+  const V=etat.V, L=comDvLegs(e,V), T=comTotaux(L,V), hr=L.some(comHorsRange);
   const maj=o=>setE(x=>({...x,...o}));
   const changeTrajet=o=>setE(x=>{ const n={...x,...o,ovr:{}}; return n; });
-  const forcer=async a=>{
-    const v=await uiPrompt("Prix du Jet A-1 à "+a.ville+" ("+a.icao+"), en MAD/litre.\nIndice du jour : "+(F&&F.madL>0?comDec2(F.madL):"—")+" · "+comGrp3(a.litres)+" L",comDec2(a.prix!=null?a.prix:(F&&F.madL>0?F.madL:V.fuelRef)));
-    if(v===null||v===undefined) return;
-    const n=Math.round(Number(String(v).replace(",","."))*100)/100;
-    if(!(n>=0.1&&n<=100)){ uiAlert("Prix incorrect : entre 0,10 et 100 MAD/litre."); return; }
-    maj({fuelForce:{...e.fuelForce,[a.icao]:n}});
-  };
+  // Prix forcé pour CE devis : aperçu avant d'appliquer ; « Prix standard » revient au prix des Paramètres
+  const appliquerPrix=a=>{ const n=comPrixValide(fp.val); if(n==null){ uiAlert("Prix incorrect : entre 0,10 et 100 MAD/L."); return; }
+    const f={...e.fuelForce}; if(n===a.prixStandard) delete f[a.icao]; else f[a.icao]=n; maj({fuelForce:f}); setFp(null); };
+  const prixStandard=a=>{ const f={...e.fuelForce}; delete f[a.icao]; maj({fuelForce:f}); setFp(null); };
   const valider=async()=>{
     if(hr){ uiAlert("Devis impossible : un vol est hors rayon d'action (plus de 1 750 NM)."); return; }
     if(!L.length){ uiAlert("Choisissez l'aéroport de départ et d'arrivée."); return; }
@@ -8712,12 +8781,12 @@ function ComDevisEdit({ fiche, parent, com, onDone }){
     setBusy(false);
     if(r.status!==201||!r.data.devis){ uiAlert("⚠️ "+comErreur(r)); return; }
     const d=r.data.devis, iso=new Date().toISOString();
-    com.setDevis(X=>[...(X||[]),d]);
+    com.majDevis(d);                       // déjà enregistré par le serveur
     com.setProspects(X=>(X||[]).map(p=>p.id===fiche.id?{...p,updatedAt:iso,historique:[...(p.historique||[]),{date:iso,auteur:qui,texte:"Devis "+d.numero+" v"+d.version+" créé"}]}:p));
     onDone(d.id);
   };
   const ligne=(l,i)=>{
-    if(l.type==="fuel") return <div key={i} style={{background:"#FFF7E6",borderRadius:10,padding:"8px 10px",fontSize:12.5}}><div style={{display:"flex",justifyContent:"space-between"}}><b>Surcharge carburant</b><b>{comMadP(l.montant)}</b></div></div>;
+    if(l.type==="fuel") return null;   // affiché dans le cadre « Carburant par aéroport de départ »
     if(l.type==="immo") return <div key={i} style={{border:"1px solid "+C.border,borderRadius:10,padding:"8px 10px",fontSize:12.5}}>
       <div style={{display:"flex",justifyContent:"space-between"}}><b>{l.libelle}</b><b>{comMadP(comLineAmt(l,V))}</b></div>
       <div style={{fontSize:11,color:C.slate}}>{l.jours} jour(s) supplémentaire(s) × {V.immoMin} h · 1 jour inclus dans le prix des vols</div></div>;
@@ -8729,7 +8798,8 @@ function ComDevisEdit({ fiche, parent, com, onDone }){
       <div style={{fontSize:11,color:C.slate,marginTop:3}}>{l.national?"Vol national":"Vol international"}{l.passagers?"":" · sans passagers"}{e.ovr[i]?" · durée modifiée":""}</div>
       {comHorsRange(l)&&<div style={{fontSize:11.5,color:"#991B1B",marginTop:4}}>⚠️ Hors rayon : environ {comGrp3(comRouteNM(l))} NM de route (maximum 1 750 NM). Escale carburant nécessaire.</div>}</div>;
   };
-  const A=comFuelAirports(L,F,e.fuelForce,V);
+  const A=comFuelAirports(L,e.fuelForce,V), suppl=A.reduce((s,a)=>s+a.supplement,0);
+  const fa=fp&&A.find(a=>a.icao===fp.icao), fn=fp?comPrixValide(fp.val):null;
   return (<>
     {!etat.ok&&<ComCarte style={{borderLeft:"4px solid #BA7517",borderRadius:"0 12px 12px 0"}}><div style={{fontSize:12,color:"#854F0B"}}>{etat.err} Les montants affichés sont indicatifs : la validation passera par le serveur.</div></ComCarte>}
     <ComCarte><div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -8745,18 +8815,30 @@ function ComDevisEdit({ fiche, parent, com, onDone }){
       <ComAptPick label="L'avion part de" value={e.bas} apts={apts} onChange={a=>changeTrajet({bas:a})}/>
       <ComAptPick label="L'avion rentre à" value={e.ret} apts={apts} onChange={a=>changeTrajet({ret:a})}/>
     </div></ComCarte>
-    <ComLbl>Vols</ComLbl>
+    <ComLbl>Vols · tarif unique {comGrp3(V.tarifVol)} MAD/h</ComLbl>
     {!L.length&&<ComCarte><div style={{fontSize:12.5,color:C.slate}}>Choisissez l'aéroport de départ et d'arrivée.</div></ComCarte>}
     {L.map(ligne)}
-    {A.length>0&&<ComCarte><ComLbl>Carburant par aéroport de départ (MAD/L)</ComLbl>
-      <div style={{fontSize:11.5,color:C.slate,marginBottom:6}}>{F&&!F.erreur?"Indice Jet A-1 du "+comFD(F.indiceDate)+" : "+comDec2(F.madL)+" MAD/L (1 USD = "+String(F.usdMad).replace(".",",")+" MAD) · référence "+comDec2(V.fuelRef)+(F.ancien?" · valeur ancienne":"")
-        :F&&F.erreur==="cle_eia"?"Indice indisponible : clé EIA_API_KEY absente sur le serveur. Forcez un prix si besoin.":"Indice du jour indisponible. Forcez un prix si besoin."}</div>
-      {A.map(a=><div key={a.icao} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"6px 0",borderTop:"1px solid "+C.border,fontSize:12.5}}>
-        <div><b>{a.ville} ({a.icao})</b><div style={{fontSize:11,color:C.slate}}>{a.vols.join(" + ")} · {comGrp3(a.litres)} L</div></div>
-        <div style={{textAlign:"right"}}><b>{a.prix==null?"—":comDec2(a.prix)}</b>{a.force&&<span style={{fontSize:10.5,color:"#854F0B"}}> forcé</span>}<br/>
-          {a.force?<span role="button" onClick={()=>{ const f={...e.fuelForce}; delete f[a.icao]; maj({fuelForce:f}); }} style={{fontSize:11.5,color:COM_BLEU,fontWeight:700,...TAP}}>↩ Indice</span>
-            :<span role="button" onClick={()=>forcer(a)} style={{fontSize:11.5,color:COM_BLEU,fontWeight:700,...TAP}}>✏️ Forcer</span>}</div></div>)}
+    {A.length>0&&<ComCarte><ComLbl>Carburant par aéroport de départ</ComLbl>
+      {comCarbAConfirmer(V)&&<div style={{fontSize:11.5,color:"#854F0B",marginBottom:6}}>Prix du carburant non confirmés par l'Administrateur (Paramètres) : valeurs par défaut.</div>}
+      {A.map(a=><div key={a.icao} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,padding:"7px 0",borderTop:"1px solid "+C.border,fontSize:12.5}}>
+        <div style={{minWidth:0}}><b style={{color:C.navy}}>{a.ville} ({a.icao})</b> <span style={{fontSize:10.5,fontWeight:700,borderRadius:6,padding:"1px 7px",
+            background:a.zone==="maroc"?"#E1F5EE":"#FAEEDA",color:a.zone==="maroc"?"#085041":"#633806"}}>{a.zone==="maroc"?"Maroc":"Étranger"}</span>
+          <div style={{fontSize:11,color:C.slate}}>{a.vols.join(" + ")} · {comGrp3(a.litres)} L</div></div>
+        <div style={{textAlign:"right",whiteSpace:"nowrap"}}><b style={{color:C.navy}}>{comDec2(a.prix)} MAD/L</b>{a.force&&<span style={{fontSize:10.5,color:"#854F0B",fontWeight:700}}> forcé</span>}
+          <div style={{fontSize:11.5,color:a.supplement?C.navy:C.slate}}>{a.supplement?comMadS(a.supplement):"carburant inclus"}</div>
+          <span role="button" onClick={()=>setFp({icao:a.icao,val:comDec2(a.prix)})} style={{fontSize:11.5,color:COM_BLEU,fontWeight:700,...TAP}}>✏️ Forcer</span></div></div>)}
+      <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0 2px",borderTop:"1px solid "+C.border,fontSize:13}}><b style={{color:C.navy}}>Supplément carburant</b><b style={{color:C.navy}}>{comMadP(suppl)}</b></div>
       <div style={{fontSize:11,color:C.slate,marginTop:4}}>Détail interne : n'apparaît pas sur le PDF.</div></ComCarte>}
+    {fa&&<ComCarte style={{border:"2px solid "+COM_BLEU}}><ComLbl>Forcer le prix · {fa.ville} ({fa.icao})</ComLbl>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}><span style={{fontSize:13,color:C.navy}}>Prix pour ce devis</span>
+        <input value={fp.val} onChange={ev=>setFp({...fp,val:ev.target.value})} inputMode="decimal" aria-label="Prix pour ce devis" style={{...comInp,width:120,textAlign:"right",fontWeight:700,fontSize:16}}/></div>
+      <div style={{fontSize:12.5,color:C.navy,marginTop:8,lineHeight:1.45}}>{fn==null?"Prix incorrect : entre 0,10 et 100 MAD/L."
+        :<>Aperçu : {comGrp3(fa.litres)} L × ({comDec2(fn)} − {comDec2(V.fuelMaroc)}) = <b>{comMadS(comSuppl(fa.litres,fn,V.fuelMaroc))||"0 MAD"}</b>{comSuppl(fa.litres,fn,V.fuelMaroc)===0?" (carburant inclus)":""} (au lieu de {comGrp3(fa.supplement)})</>}</div>
+      <div style={{fontSize:11,color:C.slate,marginTop:3}}>Entre 0,10 et 100 MAD/L · valable pour ce devis uniquement · prix standard : {comDec2(fa.prixStandard)} MAD/L</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.4fr",gap:8,marginTop:10}}>
+        <button onClick={()=>prixStandard(fa)} style={{...comBtn("white",C.navy,"#CBD5E1"),height:38}}>Prix standard</button>
+        <button onClick={()=>setFp(null)} style={{...comBtn("white",C.navy,"#CBD5E1"),height:38}}>Annuler</button>
+        <button onClick={()=>appliquerPrix(fa)} disabled={fn==null} style={{...comBtn(COM_BLEU,"white"),height:38,opacity:fn==null?.45:1}}>Appliquer</button></div></ComCarte>}
     {L.length>0&&<ComCarte><ComLigne l="Total HT" v={<b>{comMadP(T.ht)}</b>}/><ComLigne l={T.national?"TVA 20 %":"TVA (vol international)"} v={T.national?comMadP(T.tva):"Exonérée"}/>
       <ComLigne l="Total TTC" v={<b>{comMadP(T.ttc)}</b>}/></ComCarte>}
     <ComCarte><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><ComLbl>Introduction</ComLbl>
@@ -8766,7 +8848,7 @@ function ComDevisEdit({ fiche, parent, com, onDone }){
     {hr&&<ComCarte style={{borderLeft:"4px solid #DC2626",borderRadius:"0 12px 12px 0"}}><div style={{fontSize:12.5,color:"#991B1B"}}><b>Hors rayon d'action : escale carburant nécessaire.</b><br/>Choisissez un autre aéroport, ou faites un devis pour chaque étape via une escale.</div></ComCarte>}
     <button onClick={()=>L.length&&!hr&&comOuvrirPdf({numero:(parent?parent.numero:"DEV-"+new Date().getFullYear()+"-…"),version:0,date:new Date().toISOString(),validite:new Date(Date.now()+COM_DV.VALID*864e5).toISOString(),
       client:{nom:fiche.nom,fonction:fiche.fonction,organisation:fiche.organisation,tel:fiche.tel,email:fiche.email},intro:e.intro||comIntroSecours(fiche,e.dep,e.arr),tarif:V.tarifVol,tarifImmo:V.tarifImmo,immoMin:V.immoMin,
-      carburant:A.some(a=>a.prix!=null)?{ref:V.fuelRef}:null,lignes:L.map(l=>({...l,montant:comLineAmt(l,V)})),totalHT:T.ht,national:T.national,tva:T.tva,ttc:T.ttc,suiviPar:V.signataire,signataire:V.signataire})}
+      carburant:{modele:2},lignes:L.map(l=>({...l,montant:comLineAmt(l,V)})),totalHT:T.ht,national:T.national,tva:T.tva,ttc:T.ttc,suiviPar:V.signataire,signataire:V.signataire})}
       style={{...comBtn("white",COM_BLEU,COM_BLEU),opacity:L.length&&!hr?1:.45}}>Aperçu du PDF</button>
     <button onClick={valider} disabled={busy||!L.length||hr} style={{...comBtn(COM_BLEU,"white"),opacity:busy||!L.length||hr?.45:1}}>{busy?"Validation…":"✓ Valider le devis"}</button>
     <div style={{fontSize:11,color:C.slate,textAlign:"center"}}>Numéro attribué et montants recalculés par le serveur à la validation</div>
@@ -8784,13 +8866,17 @@ function ComAccepter({ d, prospects, clients, setClients, com, onDone }){
     const err=comValiderSaisie(legs,s,aujourdhui); if(err){ uiAlert("⚠️ "+err); return; }
     const nom=(client&&client.nom)||(prospect&&(prospect.organisation||prospect.nom))||"le client";
     if(!(await uiConfirm((d.accepte?"":"Le client accepte le devis "+d.numero+" v"+d.version+".\n")+"Transmettre "+legs.length+" vol(s) aux Opérations pour "+nom+" ?"))) return;
+    if(!client&&!prospect){ uiAlert("⚠️ Client introuvable pour ce devis."); return; }
     setBusy(true);
+    // Acceptation enregistrée par le serveur d'abord : en cas d'échec, ni client ni demande ne sont créés
+    if(!d.accepte){ const r=await comApi("accepte",{id:d.id});
+      if(r.status!==200||!r.data.devis){ setBusy(false); uiAlert("⚠️ Acceptation non enregistrée : "+comErreur(r)); return; }
+      com.majDevis(r.data.devis); }
     const iso=new Date().toISOString(), apts=await comAeroports();
     let cli=client;
     if(!cli&&prospect){ const r=comDevenirClient(prospect,clients,iso,qui,"devis "+d.numero+" v"+d.version+" accepté");
       setClients(r.clients); com.setProspects(L=>(L||[]).map(p=>p.id===prospect.id?r.prospect:p)); cli=r.client; }
     if(!cli){ setBusy(false); uiAlert("⚠️ Client introuvable pour ce devis."); return; }
-    if(!d.accepte) com.setDevis(L=>(L||[]).map(x=>x.id===d.id?{...x,accepte:{date:iso,auteur:qui}}:x));
     const dem=comCreerDemande(d,cli,s,apts,iso,qui,"D"+Date.now().toString(36)+Math.random().toString(36).slice(2,5));
     com.setDemandes(L=>[...(L||[]),dem]);
     if(prospect) com.setProspects(L=>(L||[]).map(p=>p.id===prospect.id?{...p,updatedAt:iso,historique:[...(p.historique||[]),{date:iso,auteur:qui,texte:"Demande de "+legs.length+" vol(s) transmise aux Opérations ("+d.numero+")"}]}:p));
@@ -12829,7 +12915,13 @@ function AppMain({ onLogout, profileId }) {
   const [clients,setClients] = usePersist("clients",INIT_CLIENTS);
   // Module Commercial : prospects, devis, paramètres de calcul, historique des imports d'Airshow
   const [prospects,setProspects] = usePersist("prospects",[]);
-  const [devis,setDevis]         = usePersist("devis",[]);
+  // Devis : écrits seulement par le serveur (api/commercial.js, script s3) ; la page les lit
+  const [devis,setDevis]         = useLectureSeule("devis",[]);
+  const majDevis=d=>setDevis(L=>{ const X=L||[]; return X.some(x=>x.id===d.id)?X.map(x=>x.id===d.id?d:x):[...X,d]; });
+  // Restauration d'une sauvegarde ou effacement : la liste des devis est remplacée par le serveur (Administrateur)
+  const restaurerDevis=async(liste,quoi)=>{ const r=await comApi("restaurer",{devis:liste});
+    if(r.status===200&&Array.isArray(r.data.devis)){ setDevis(r.data.devis); return true; }
+    uiAlert("⚠️ Devis non "+quoi+" : "+comErreur(r)+"\nLes autres données le sont. Réessayez depuis le profil Administrateur."); return false; };
   // Paramètres des devis : lus dans la base, écrits seulement par le serveur (api/commercial.js, script s2)
   const [comParams,setComParams] = useState(COM_DEFAUTS);
   useEffect(()=>{ let vivant=true; const lire=()=>sbGet(PFX+"comParams").then(r=>{ if(vivant&&r) setComParams({...COM_DEFAUTS,...unwrapEnv(r).v}); });
@@ -12953,7 +13045,7 @@ function AppMain({ onLogout, profileId }) {
     if(data.safetyData)setSafety(data.safetyData);
     if(data.clients)   setClients(data.clients);
     if(data.prospects) setProspects(data.prospects);
-    if(data.devis)     setDevis(data.devis);
+    if(Array.isArray(data.devis)) restaurerDevis(data.devis,"restaurés");
     if(data.comImports)setComImports(data.comImports);
     if(data.demandes)  setDemandes(data.demandes);
     if(data.alertHist) setAlertHist(data.alertHist);
@@ -13011,7 +13103,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     setFlights(INIT_FLIGHTS);setKpis(INIT_KPIS);setMaint(INIT_MAINT);setFin(INIT_FIN);setSafety(INIT_SAFETY);
     setCrew(INIT_CREW);setAircraft(INIT_AIRCRAFT);setDism([]);setAlertHist([]);setMelHist([]);
     setClients(INIT_CLIENTS);setNdsArchive([]);   // sinon ces deux-là reviennent depuis le cloud
-    setProspects([]);setDevis([]);setComImports([]);setDemandes([]);   // les Paramètres (tarifs) sont conservés
+    setProspects([]);setComImports([]);setDemandes([]);restaurerDevis([],"effacés");   // les Paramètres (tarifs) sont conservés
     setSgsHazards([]);setSgsActions([]);setSgsEvStatus({});setSgsManual({changes:[],crm:[],bulletins:[]});setSgsMeetings([]);setSgsResponsable(SGS_RESP_DEFAUT);setSgsRevues([]);setSgsChanges([]);setSgsAudits([]);setSgsFormations([]);setSgsFrat([]);setSgsItw([]);setSgsReco([]);setSgsPlan([]);setSgsOsv([]);setSatis([]);
     setReport(null);setReset(false);setTab("forms");
   };
@@ -13095,7 +13187,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 
       {/* CONTENT */}
       <div style={{flex:1,overflowY:"auto",padding:"14px 14px "+(BOT+14)+"px"}}>
-        {tab==="forms"   && <ScreenForms onManuel={()=>setManuelOuvert(true)} com={{prospects,setProspects,devis,setDevis,params:comParams,setParams:setComParams,imports:comImports,setImports:setComImports,demandes,setDemandes}} satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
+        {tab==="forms"   && <ScreenForms onManuel={()=>setManuelOuvert(true)} com={{prospects,setProspects,devis,majDevis,remplacerDevis:setDevis,params:comParams,setParams:setComParams,imports:comImports,setImports:setComImports,demandes,setDemandes}} satis={satis} setSatis={setSatis} onNoteVol={(k,n)=>setFlights(l=>(l||[]).map(f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|")===k?{...f,nps:n}:f))}
           sgs={{hazards:sgsHazards,setHazards:setSgsHazards,actions:sgsActions,setActions:setSgsActions,evStatus:sgsEvStatus,setEvStatus:setSgsEvStatus,manual:sgsManual,setManual:setSgsManual,meetings:sgsMeetings,setMeetings:setSgsMeetings,responsable:sgsResponsable,setResponsable:setSgsResponsable,reg:{revues:sgsRevues,setRevues:setSgsRevues,changes:sgsChanges,setChanges:setSgsChanges,audits:sgsAudits,setAudits:setSgsAudits,formations:sgsFormations,setFormations:setSgsFormations,frat:sgsFrat,setFrat:setSgsFrat,st:sgsSt,setSt:setSgsSt,itw:sgsItw,setItw:setSgsItw,reco:sgsReco,setReco:setSgsReco,plan:sgsPlan,setPlan:setSgsPlan,osv:sgsOsv,setOsv:setSgsOsv},ndsArchive}}
           onSubmitVol={d=>{setFlights(f=>[...f,d]);}}
           onSubmitMaint={d=>{
