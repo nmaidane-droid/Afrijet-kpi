@@ -31,7 +31,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'comDevenirClient','comUnion','comFusionImport','comDueInfo','comADesRelances','comRelance','comEtape','comNote','comProchainNumero',
   'COM_CHOIX','COM_REGLES','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comEstMaroc','comPrixValide','comSuppl','comCarbNouveau','comCarbAConfirmer','comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
-  'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
+  'APP_PASSWORD_HASH','PROFILES','COM_MOTIFS','comPeutVoir','comPeutModifier','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
   'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','sgsHorodate','sgsReceptionAuto','sgsMoisFr','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
@@ -334,6 +334,11 @@ console.log('\nModule Commercial — calcul des devis (formule d\'Airshow, véri
     attendu(T.comRecalcul(d).ecart===0&&T.comRecalcul({...d,lignes:[...REELS[0].lignes,{type:'fuel',montant:1,national:true}],totalHT:REELS[0].totalHT+1}).ecart===9722,String(T.comRecalcul(d).ecart)); });
   T.COM_DV.SPEED=VITESSE_KPI;
   test("vitesse du KPI : 450 kt", ()=>attendu(T.COM_DV.SPEED===450,String(T.COM_DV.SPEED)));
+  { const D=T.PROFILES.find(p=>p.id==='dir');
+    test("Direction (2.19) : accès aux 7 tuiles en consultation, au Commercial et à la décision FRAT", ()=>attendu(['avion','crew','maint','vol','sat','fin','nds','commercial','frat','sgs','regl','params','rapport','journal'].every(f=>D.forms.includes(f)),D.forms.join()));
+    test("Direction : pas de tuile Comptes rendus ; Export, Restore, Effacer, Comptes restent à l'Administrateur", ()=>attendu(!D.forms.includes('secu')&&D.forms!==null,"secu ouvert")); }
+  test("module Commercial : la Direction consulte, sans modifier", ()=>attendu(T.comPeutVoir('dir')&&!T.comPeutModifier('dir'),"droits Direction"));
+  test("module Commercial : Commercial et Administrateur modifient ; autres profils sans accès", ()=>attendu(['comm','rdoa'].every(T.comPeutModifier)&&['ops','eqp','sgs','maint','fin'].every(p=>!T.comPeutVoir(p)),"droits"));
   test("Paramètres, « Règles fixes » : même vitesse que le calcul (450 kt)", ()=>attendu(T.COM_REGLES.vitesse===T.COM_DV.SPEED,String(T.COM_REGLES.vitesse)));
   test("DEV-2026-0003 (Brazzaville, étranger) : supplément ajouté au départ de Brazzaville seulement", ()=>{ const A=T.comFuelAirports(T.comDvLegs({dep:by('GMMN'),arr:by('FCBB'),ar:true,immo:2,bas:by('GMME'),ret:by('GMME'),ovr:{},fuelForce:{}},V),{},V); attendu(A.filter(a=>a.supplement>0).map(a=>a.icao).join()==='FCBB',JSON.stringify(A.map(a=>[a.icao,a.supplement]))); });
   {
