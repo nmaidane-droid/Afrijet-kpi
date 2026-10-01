@@ -31,7 +31,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'comDevenirClient','comUnion','comFusionImport','comDueInfo','comADesRelances','comRelance','comEtape','comNote','comProchainNumero',
   'COM_CHOIX','COM_REGLES','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comEstMaroc','comPrixValide','comSuppl','comCarbNouveau','comCarbAConfirmer','comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
-  'PROFILES','COM_MOTIFS','comPeutVoir','comPeutModifier','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
+  'PROFILES','notamAlertesActives','notamDate','notamIds','notamMotif','COM_MOTIFS','comPeutVoir','comPeutModifier','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
   'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','sgsHorodate','sgsReceptionAuto','sgsMoisFr','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
@@ -537,6 +537,18 @@ test('Aucun profil ne garde de mot de passe partagé', ()=>attendu(T.PROFILES.ev
 test('Aucune empreinte de mot de passe dans la page', ()=>attendu(!/["'][0-9a-f]{64}["']/.test(code), 'empreinte trouvée'));
 test('Les huit départements sont des profils à comptes nominatifs', ()=>{ const m=code.match(/const NOMINATIVE_PROFILES=\[([^\]]*)\]/); attendu(m && T.PROFILES.every(p=>m[1].includes('"'+p.id+'"')), 'profil manquant'); });
 test('La page ne lit ni n\'écrit plus les comptes, les clés ni les verrous', ()=>attendu(!/PFX\+"users"|PFX \+ "totp_secret"|PFX\+"auth_locks"/.test(code), 'accès direct trouvé'));
+
+// ── NOTAM (chantier 2.20) ──
+console.log('\nNOTAM (page)');
+{ const al={alertes:[{volId:'F1',num:'AJS401',date:'2026-10-05',dep:'09:30',statut:'ferme',notams:[{id:'A0457/2026'}]}]};
+  const vol=o=>({id:'F1',num:'AJS401',date:'2026-10-05',dep:'09:30',status:'Planifie',notam:{ids:[]},...o});
+  test('Alerte NOTAM affichée pour un vol planifié', ()=>attendu(T.notamAlertesActives(al,[vol()]).length===1,'absente'));
+  test('Alerte NOTAM masquée une fois le NOTAM vu (vol revérifié)', ()=>attendu(T.notamAlertesActives(al,[vol({notam:{ids:['A0457/2026']}})]).length===0,'présente'));
+  test('Alerte NOTAM masquée si le vol n\'est plus planifié', ()=>attendu(T.notamAlertesActives(al,[vol({status:'Termine'})]).length===0,'présente'));
+  test('Alerte NOTAM : aucune donnée, aucune alerte', ()=>attendu(T.notamAlertesActives(null,[vol()]).length===0,'présente'));
+  test('Date NOTAM lisible', ()=>attendu(T.notamDate('202610050800')==='05/10 0800' && T.notamDate('202611012359EST')==='01/11 2359 (est.)','format'));
+  test('NOTAM vus : identifiants uniques', ()=>attendu(T.notamIds({fenetres:[{notams:[{id:'A1'},{id:'A2'}]},{notams:[{id:'A1'}]}]}).join()==='A1,A2','liste'));
+}
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
