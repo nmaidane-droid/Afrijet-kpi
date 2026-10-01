@@ -29,7 +29,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'ndsRepairIds','ndsDateKey','NDS_MODES','RE_SECTIONS','DGAC_SECTIONS',
   'COM_ETAPES','COM_RELANCES','COM_DEFAUTS','comParamsValides','comMigrFiche','comNorm','comTel9','comDoublon','COM_SECTEUR_TYPE',
   'comDevenirClient','comUnion','comFusionImport','comDueInfo','comADesRelances','comRelance','comEtape','comNote','comProchainNumero',
-  'COM_CHOIX','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
+  'COM_CHOIX','COM_REGLES','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comEstMaroc','comPrixValide','comSuppl','comCarbNouveau','comCarbAConfirmer','comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
   'COM_MOTIFS','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
   'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','sgsHorodate','sgsReceptionAuto','sgsMoisFr','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
@@ -334,6 +334,7 @@ console.log('\nModule Commercial — calcul des devis (formule d\'Airshow, véri
     attendu(T.comRecalcul(d).ecart===0&&T.comRecalcul({...d,lignes:[...REELS[0].lignes,{type:'fuel',montant:1,national:true}],totalHT:REELS[0].totalHT+1}).ecart===9722,String(T.comRecalcul(d).ecart)); });
   T.COM_DV.SPEED=VITESSE_KPI;
   test("vitesse du KPI : 450 kt", ()=>attendu(T.COM_DV.SPEED===450,String(T.COM_DV.SPEED)));
+  test("Paramètres, « Règles fixes » : même vitesse que le calcul (450 kt)", ()=>attendu(T.COM_REGLES.vitesse===T.COM_DV.SPEED,String(T.COM_REGLES.vitesse)));
   test("DEV-2026-0003 (Brazzaville, étranger) : supplément ajouté au départ de Brazzaville seulement", ()=>{ const A=T.comFuelAirports(T.comDvLegs({dep:by('GMMN'),arr:by('FCBB'),ar:true,immo:2,bas:by('GMME'),ret:by('GMME'),ovr:{},fuelForce:{}},V),{},V); attendu(A.filter(a=>a.supplement>0).map(a=>a.icao).join()==='FCBB',JSON.stringify(A.map(a=>[a.icao,a.supplement]))); });
   {
     // Exemple validé le 30/09/2026 : Genève → Tétouan, avion basé et rentrant à Casablanca, 74 000 MAD/h, 12,50 / 16,40 MAD/L, 1 100 L/h
