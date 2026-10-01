@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
 // ── Version ────────────────────────────────────────────────────────────────────
 // Numéro commun à l'application, au Manuel Utilisateur et au Guide du module SGS.
 // À chaque évolution : changer cette seule ligne, et les deux manuels avec le même numéro.
-const APP_VERSION = "2.18";
+const APP_VERSION = "2.19";
 // Mention affichée en bas des écrans de connexion
 const VersionMention = () => <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",marginTop:16}}>Version {APP_VERSION}</div>;
 
@@ -130,7 +130,7 @@ const PROFILES = [
    tabs:["forms"],       readOnly:["live","secu","maint","ops","fin","alertes","perf"] },
   {id:"dir",   label:"Direction",   icon:"🏢",  color:"#A0720A",
    pwdHash:"ed494928275b93b897810bd7b090babaee8d4d92268cd96119eef7948b251184",
-   forms:["rapport","frat","sgs","regl","params"],   // FRAT : décision sur un rouge · SGS, Réglementation, Paramètres : consultation
+   forms:["avion","crew","maint","vol","frat","sgs","regl","sat","commercial","params","nds","rapport","fin","journal"],   // 2.19 : tout en consultation (bandeau), sauf la décision sur un FRAT rouge ; pas de Comptes rendus
    tabs:[],              readOnly:["live","ops","alertes","perf","secu","maint","fin"] },
   {id:"rdoa",  label:"Administrateur", icon:"🛡", color:"#DC2626",
    pwdHash:APP_PASSWORD_HASH,
@@ -556,6 +556,7 @@ function FLabel({ children }) {
 function TimeField({ value, onChange, style, placeholder }) {
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState(null);   // texte en cours de frappe
+  const consult = useConsult();
   const shown = draft!==null ? draft : (value||"");
   const format = raw => {
     const d = String(raw).replace(/\D/g,"").slice(0,4);
@@ -571,6 +572,9 @@ function TimeField({ value, onChange, style, placeholder }) {
     if(isNaN(h)||isNaN(m)||h>23||m>59){ onChange(""); return; }
     onChange(String(h).padStart(2,"0")+":"+String(m).padStart(2,"0"));
   };
+  if(consult) return <input type="text" readOnly value={value||""} placeholder="—"
+      style={{ width:"100%", height:48, boxSizing:"border-box", background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"0 14px",
+               color:C.text, fontSize:14, fontFamily:"inherit", outline:"none", letterSpacing:"0.06em", ...(style||{}) }}/>;
   return (
     <input type="text" inputMode="numeric" pattern="[0-9:]*" autoComplete="off"
       value={shown} placeholder={placeholder||"HH:MM"}
@@ -593,6 +597,7 @@ function DateField({ value, onChange, min, max, style, placeholder }) {
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState(null);
   const [err, setErr] = useState("");
+  const consult = useConsult();
   const iso2fr = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v||"")) ? v.slice(8,10)+"/"+v.slice(5,7)+"/"+v.slice(0,4) : "";
   const shown = draft!==null ? draft : iso2fr(value);
   const format = raw => { const d=String(raw).replace(/\D/g,"").slice(0,8);
@@ -609,6 +614,10 @@ function DateField({ value, onChange, min, max, style, placeholder }) {
     if(min&&iso<min){ setErr("Date antérieure au "+iso2fr(min)); onChange(""); return; }
     setErr(""); onChange(iso);
   };
+  if(consult) return (<div style={{flex:(style||{}).flex,minWidth:0}}>
+    <input type="text" readOnly value={iso2fr(value)} placeholder="—"
+      style={{ width:"100%", height:48, boxSizing:"border-box", background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"0 14px",
+               color:C.text, fontSize:14, fontFamily:"inherit", outline:"none", letterSpacing:"0.04em", ...(style?{height:"auto"}:{}), ...(style||{}), flex:undefined }}/></div>);
   return (<div style={{flex:(style||{}).flex,minWidth:0}}>
     <input type="text" inputMode="numeric" autoComplete="off" aria-invalid={!!err}
       value={shown} placeholder={placeholder||"JJ/MM/AAAA"}
@@ -636,9 +645,20 @@ function AircraftSelect({ aircraft, value, onChange }){
 }
 const SgsRoField=({v,ph})=><div style={{...sgsInput,background:"#EEF2F6",color:v?C.text:C.slateL}}>{v||ph||'Rempli automatiquement'}</div>;
 
+// Consultation seule (profil Direction, 2.19) : les champs de saisie s'affichent verrouillés,
+// les boutons d'enregistrement disparaissent. Les listes de choix restent utilisables : elles
+// servent à naviguer (choisir un avion, un mois), jamais à enregistrer.
+const ConsultCtx=React.createContext(false);
+const useConsult=()=>React.useContext(ConsultCtx);
+function ConsultBandeau({ texte }){
+  return <div style={{background:"#FEF3C7",border:"1px solid #F59E0B",borderRadius:10,padding:"9px 12px",marginBottom:14,fontSize:12,color:"#78350F",lineHeight:1.45}}>
+    👁 <b>Consultation — Direction.</b> {texte||"Aucune modification possible : la saisie revient au service concerné."}</div>;
+}
 function FField({ label, value, onChange, type="text", min, max, placeholder, step, raw, small }) {
   const [focused, setFocused] = useState(false);
+  const consult = useConsult();
   const handleChange = e => {
+    if(consult) return;
     // raw : conserve la casse saisie (noms propres). Sinon, majuscules comme avant.
     const v = (type==="text" && !raw) ? e.target.value.toUpperCase() : e.target.value;
     onChange(v);
@@ -659,7 +679,7 @@ function FField({ label, value, onChange, type="text", min, max, placeholder, st
     <div>
       <FLabel>{label}</FLabel>
       <input type={type} value={value} min={min} max={max} step={step} placeholder={placeholder}
-        onChange={handleChange} autoComplete="off" autoCorrect="off"
+        onChange={handleChange} autoComplete="off" autoCorrect="off" readOnly={consult}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={{ width:"100%", height:48, boxSizing:"border-box",
                  background:focused?"#FFF":C.bg, border:"1.5px solid "+(focused?C.gold:C.border),
@@ -705,6 +725,7 @@ function FSection({ title, color="#64748B" }) {
 }
 
 function FSubmit({ label, color="#0F1F3D", onClick, saved }) {
+  if(useConsult()) return null;   // consultation : pas d'enregistrement
   const bg = saved ? "#00936A" : "#DC2626";
   const lbl = saved ? "✅ Enregistré" : label;
   return (
@@ -1792,6 +1813,7 @@ const INIT_FIN = [
 
 // ── Forms ────────────────────────────────────────────────────────────────────
 function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aPlanifier }) {
+  const consult=useConsult();
   const today=new Date().toISOString().slice(0,10);
   const [acId,setAcId]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"");
 
@@ -1884,6 +1906,14 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
     setNum("");setFrom("");setTo("");setDep("");setArr("");setPax("");setFlightType("Ferry");
     setCm1("");setCm2("");setCc("");
   };
+  if(consult) return (
+    <Card accent="#0F1F3D">
+      <FHeader icon="🛫" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0369A1"/>
+      <ConsultBandeau texte="La planification revient aux Opérations. Les vols planifiés et réalisés se consultent dans l'onglet Ops."/>
+      <ComVolsAPlanifierListe liste={aPlanifier} lien={null} onChoisir={null}/>
+      {!(aPlanifier||[]).length&&<div style={{textAlign:"center",color:C.slateL,fontSize:12.5,padding:"10px 0"}}>Aucun vol transmis par le Commercial en attente de planification.</div>}
+      <button onClick={onBack} style={{width:"100%",height:46,marginTop:6,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,...TAP}}>← Retour</button>
+    </Card>);
   return (
     <Card accent="#0F1F3D">
       <FHeader icon="🛫" title="Preparation du vol" subtitle="Donnees planifiees avant depart" color="#0369A1"/>
@@ -1968,6 +1998,7 @@ function FormVol({ onSubmit, crew, aircraft, saved, clients, onBack, flights, aP
 
 // ── Registre Equipage ────────────────────────────────────────────────────────
 function FormEquipage({ crew, setCrew, saved: parentSaved }) {
+  const consult=useConsult();   // consultation : fiche d'un membre en lecture, ni ajout, ni modification, ni suppression
   const [localSaved, setLocalSaved] = useState(false);
   const saved = localSaved;
   const triggerSaved = () => { setLocalSaved(true); setTimeout(()=>setLocalSaved(false),2500); };
@@ -2015,8 +2046,11 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div ref={ficheRef} style={{scrollMarginTop:70}}/>
-      <Card accent="#0369A1">
-        <FHeader icon="👨‍✈️" title={editing!==null?"Modifier membre":"Ajouter membre"} subtitle="Registre equipage CN-KTA" color="#0369A1"/>
+      {consult&&editing===null&&<Card accent="#0369A1"><FHeader icon="👨‍✈️" title="Registre équipage" subtitle="Registre equipage CN-KTA" color="#0369A1"/>
+        <ConsultBandeau texte="Touchez 👁 sur un membre pour voir sa fiche et ses échéances."/></Card>}
+      {(!consult||editing!==null)&&<Card accent="#0369A1">
+        <FHeader icon="👨‍✈️" title={consult?"Fiche membre":editing!==null?"Modifier membre":"Ajouter membre"} subtitle="Registre equipage CN-KTA" color="#0369A1"/>
+        {consult&&<ConsultBandeau texte="Le registre équipage est tenu par les Opérations."/>}
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <FGrid>
             <FField label="Nom *" value={nom} onChange={setNom}/>
@@ -2072,7 +2106,9 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
             </div>
           )}
 
-          <div style={{display:"flex",gap:10}}>
+          {consult?<button onClick={cancel}
+                style={{height:46,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,...TAP}}>Fermer la fiche</button>
+          :<div style={{display:"flex",gap:10}}>
             {editing!==null && (
               <button onClick={cancel}
                 style={{flex:1,height:48,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:14,fontWeight:700,...TAP}}>
@@ -2083,9 +2119,9 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
               style={{flex:2,height:48,background:saved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,...TAP,transition:"background 0.3s"}}>
               {saved?"✅ Enregistré":editing!==null?"Enregistrer modifications":"+ Ajouter"}
             </button>
-          </div>
+          </div>}
         </div>
-      </Card>
+      </Card>}
 
       <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,overflow:"hidden"}}>
         <div style={{padding:"9px 14px",background:C.bg,borderBottom:"1px solid "+C.border,fontSize:10,fontWeight:700,color:C.slate,textTransform:"uppercase"}}>
@@ -2137,14 +2173,14 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
                     <div style={{fontSize:10,color:C.slate}}>{m.licence||"—"}</div>
                   </div>
                   <div style={{display:"flex",gap:6}}>
-                    <button onClick={()=>startEdit(m)}
+                    <button onClick={()=>startEdit(m)} aria-label={consult?"Voir la fiche":"Modifier"}
                       style={{background:C.bg,border:"1px solid "+C.border,borderRadius:7,padding:"5px 10px",fontSize:11,color:C.slate,...TAP}}>
-                      ✏
+                      {consult?"👁":"✏"}
                     </button>
-                    <button onClick={()=>remove(m.id)}
+                    {!consult&&<button onClick={()=>remove(m.id)}
                       style={{background:"#FEE2E2",border:"1px solid #DC2626",borderRadius:7,padding:"5px 10px",fontSize:11,color:"#DC2626",...TAP}}>
                       ✕
-                    </button>
+                    </button>}
                   </div>
                 </div>
               ))}
@@ -2157,6 +2193,7 @@ function FormEquipage({ crew, setCrew, saved: parentSaved }) {
 }
 
 function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
+  const consult=useConsult();
   const md=maintData||{};
   const initAc=aircraft&&aircraft.length>0?aircraft[0]:{};
   const [acId,setAcId]=useState(initAc.id||"");
@@ -2266,6 +2303,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
   return (
     <Card accent="#00936A">
       <FHeader icon="🔧" title="Maintenance CAMO" subtitle="Rapport hebdomadaire CAMO" color="#00936A"/>
+      {consult&&<ConsultBandeau texte="Les données de maintenance et les MEL sont tenues par la Maintenance."/>}
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         {aircraft&&aircraft.length>0&&(
           <div>
@@ -2311,7 +2349,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
         </FGrid>
         <FSection title={"MEL actifs ("+mels.length+")"} color="#00936A"/>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12,padding:"8px 0"}}>Aucun MEL — appuyez sur + pour ajouter</div>}
+          {mels.length===0&&<div style={{textAlign:"center",color:C.slateL,fontSize:12,padding:"8px 0"}}>{consult?"Aucun MEL actif":"Aucun MEL — appuyez sur + pour ajouter"}</div>}
           {mels.map((m,i)=>(
             <div key={i} style={{background:isMelExpired(m)?"#DC2626":C.bg,border:isMelExpired(m)?"1.5px solid #DC2626":"1.5px solid transparent",borderRadius:10,padding:"10px 12px",display:"flex",gap:10,alignItems:"center"}}>
               <span style={{background:sevBg(m.sev),color:sevColor(m.sev),padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,flexShrink:0}}>Cat.{m.sev}</span>
@@ -2319,7 +2357,7 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                 <div style={{fontSize:12,fontWeight:600,color:isMelExpired(m)?"white":C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sys}</div>
                 <div style={{fontSize:10,color:isMelExpired(m)?"rgba(255,255,255,0.8)":C.slate}}>{m.mel}{m.exp?" · Exp: "+m.exp:""}{isMelExpired(m)&&<span style={{fontWeight:700}}> ⚠️ EXPIRÉ</span>}</div>
               </div>
-              <div style={{display:"flex",gap:6,flexShrink:0}}>
+              {!consult&&<div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>openEdit(m,i)}
                   style={{width:36,height:36,background:"white",border:"1.5px solid "+C.border,borderRadius:8,fontSize:16,cursor:"pointer",color:C.slate,...NOTAP,display:"flex",alignItems:"center",justifyContent:"center"}}>
                   ✏
@@ -2328,13 +2366,13 @@ function FormMaint({ onSubmit, onResolveMel, maintData, aircraft, saved }) {
                   style={{width:36,height:36,background:"#00936A",border:"none",borderRadius:8,fontSize:16,fontWeight:700,color:"white",...TAP,display:"flex",alignItems:"center",justifyContent:"center"}}>
                   ✓
                 </button>
-              </div>
+              </div>}
             </div>
           ))}
-          <button onClick={openAdd}
+          {!consult&&<button onClick={openAdd}
             style={{height:42,background:"white",border:"1.5px dashed #00936A",borderRadius:10,color:"#00936A",fontSize:13,fontWeight:700,...TAP}}>
             + Ajouter un MEL
-          </button>
+          </button>}
         </div>
 
         <FSubmit label="Enregistrer Maintenance" onClick={submit} saved={saved}/>
@@ -5391,13 +5429,18 @@ function sgsDemoSgs(evs, H0, A0){
   return { hazards:outH, actions:outA, ev };
 }
 
-function FormFin({ onSubmit, saved }) {
+function FormFin({ onSubmit, saved, finData }) {
   const MOIS=["Janvier","Fevrier","Mars","Avril","Mai","Juin","Juillet","Aout","Septembre","Octobre","Novembre","Decembre"];
+  const consult=useConsult();
   const [mois,setMois]=useState("Juin");
   const [rev,setRev]=useState("");
   const [cout,setCout]=useState("");
   const [cCarbu,setCCarbu]=useState("");
 
+  // Consultation : valeurs du dernier enregistrement du mois choisi (rien n'est saisi)
+  const enr=consult?[...(finData||[])].reverse().find(f=>f&&f.mois===mois)||null:null;
+  if(consult){ const e=enr||{}; const r=String(e.revenus??""), c=String(e.couts??""), k=String(e.coutCarbu??e.cCarbu??"");
+    if(rev!==r) setRev(r); if(cout!==c) setCout(c); if(cCarbu!==k) setCCarbu(k); }
   const revN=Number(rev)||0;const coutN=Number(cout)||0;
   const marge=revN>0?Math.round((1-coutN/revN)*100):null;
 
@@ -5409,6 +5452,7 @@ function FormFin({ onSubmit, saved }) {
   return (
     <Card accent="#7C3AED">
       <FHeader icon="💰" title="Finances" subtitle="Rapport mensuel Comptabilite" color="#7C3AED"/>
+      {consult&&<ConsultBandeau texte={"Valeurs enregistrées par les Finances pour le mois choisi"+(enr?".":" : aucune pour ce mois.")+" Les graphiques sont dans l'onglet Finances."}/>}
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <FSelect label="Mois" value={mois} onChange={setMois} options={MOIS.map(m=>({value:m,label:m}))}/>
         <FSection title="Revenus et couts (MAD)" color="#7C3AED"/>
@@ -6200,6 +6244,7 @@ function NdsEditable({ html, field, live, onCommit, style, tag }){
 // Fiche d'un document archivé : référence, objet, catégorie, date et actions.
 // Extraite de FormNDS ; l'export PDF se fait ici, sans passer par le parent.
 function ArchiveCard({ r, onOpen, onDelete }){
+  // Sans onOpen ni onDelete (consultation) : seul le PDF reste
   const pdf=()=>{ try{ ndsExportPDF({...r,closing:r.closingText||r.closing||''}); }catch(e){ uiAlert("Erreur PDF : "+e.message); } };
   const b={height:36,background:"white",border:"1.5px solid "+C.border,borderRadius:8,color:C.navy,fontSize:11.5,fontWeight:600,cursor:"pointer"};
   return (
@@ -6207,10 +6252,10 @@ function ArchiveCard({ r, onOpen, onDelete }){
             <div style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#DC2626",marginBottom:5}}>{r.ref}</div>
             <div style={{fontSize:13,fontWeight:500,color:C.text,lineHeight:1.4}}>{r.objet||'(sans objet)'}</div>
             <div style={{fontSize:11,color:C.slate,marginTop:5,marginBottom:10}}>{r.category} · {r.date}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-              <button onClick={()=>onOpen(r)} style={b}>Ouvrir</button>
-              <button onClick={pdf} style={b}>PDF</button>
-              <button onClick={()=>onDelete(r.id)} style={{...b,border:"1.5px solid #FCA5A5",color:"#DC2626"}}>Supprimer</button>
+            <div style={{display:"grid",gridTemplateColumns:onOpen?"1fr 1fr 1fr":"1fr",gap:8}}>
+              {onOpen&&<button onClick={()=>onOpen(r)} style={b}>Ouvrir</button>}
+              <button onClick={pdf} style={b}>{onOpen?"PDF":"📄 Ouvrir le PDF"}</button>
+              {onDelete&&<button onClick={()=>onDelete(r.id)} style={{...b,border:"1.5px solid #FCA5A5",color:"#DC2626"}}>Supprimer</button>}
             </div>
           </div>
   );
@@ -6219,7 +6264,8 @@ function ArchiveCard({ r, onOpen, onDelete }){
 function FormNDS({ onBack, safetyData, flights, aircraft, archive, setArchive, modesOK, respSgs }){
   // Le responsable SGS rédige les documents de sécurité ; les notes de service restent à l Administrateur
   const MODES = modesOK ? NDS_MODES.filter(m=>modesOK.includes(m.id)) : NDS_MODES;
-  const [tab,setTab]=useState("editor");           // editor | archive
+  const consult=useConsult();   // consultation : archives et PDF seulement, ni rédaction ni import
+  const [tab,setTab]=useState(consult?"archive":"editor");           // editor | archive
   const [cat,setCat]=useState(NDS_CATEGORIES[2]);
   const [ref,setRef]=useState(ndsNextRef('NS-OPS'));
   const [subject,setSubject]=useState("");
@@ -6723,14 +6769,14 @@ Diffusion prévue : ${to||'Non précisée'}`;
       <Card accent="#0F1F3D">
         {Toast}
         <FHeader icon="📋" title="Archives" subtitle="Documents du générateur IA" color="#0F1F3D"/>
-        {TabBar}
+        {consult?<ConsultBandeau texte="Documents archivés, en PDF. La rédaction est réservée aux profils concernés."/>:TabBar}
         <div style={{display:"flex",gap:8,marginBottom:14}}>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher par référence, sujet ou catégorie…"
             style={{flex:1,height:42,boxSizing:"border-box",background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,padding:"0 12px",fontSize:12.5,outline:"none"}}/>
-          <button onClick={importNotes}
+          {!consult&&<button onClick={importNotes}
             style={{height:42,padding:"0 14px",background:"white",border:"1.5px solid "+C.border,borderRadius:10,color:C.navy,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
             Importer
-          </button>
+          </button>}
         </div>
         <div style={{display:"flex",gap:6,marginBottom:12}}>
           {FAMS.map(x=>{
@@ -6750,7 +6796,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
           </div>
         )}
         {filtered.map(r=>(
-          <ArchiveCard key={r.id} r={r} onOpen={openFromArchive} onDelete={deleteFromArchive}/>
+          <ArchiveCard key={r.id} r={r} onOpen={consult?null:openFromArchive} onDelete={consult?null:deleteFromArchive}/>
         ))}
         <button onClick={onBack}
           style={{width:"100%",height:46,marginTop:6,background:C.bg,border:"1.5px solid "+C.border,borderRadius:10,color:C.slate,fontSize:13,fontWeight:600,cursor:"pointer"}}>← Retour</button>
@@ -7218,6 +7264,7 @@ function FormReglementation({ readOnly }) { return <FormDocStore storeKey="regl"
 
 
 function FormAircraft({ aircraft, onUpdate, saved }) {
+  const consult=useConsult();
   const [sel,setSel]=useState(aircraft&&aircraft.length>0?aircraft[0].id:"new");
   const [immat,setImmat]=useState("");
   const [type,setType]=useState("");
@@ -7263,12 +7310,13 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
 
   return (
     <Card accent="#0369A1">
-      <FHeader icon="🛩" title="Gestion de la flotte" subtitle="Ajouter ou modifier un avion" color="#0369A1"/>
+      <FHeader icon="🛩" title="Gestion de la flotte" subtitle={consult?"Consultation de la flotte":"Ajouter ou modifier un avion"} color="#0369A1"/>
+      {consult&&<ConsultBandeau texte="La flotte est tenue par les Opérations et l'Administrateur."/>}
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div>
           <FLabel>Sélectionner un avion</FLabel>
           <CustomSelect value={sel} onChange={setSel} placeholder='-- Choisir --' icon='🛩'
-            options={[...(aircraft||[]).map(a=>({value:a.id,label:a.immat+" · "+a.type,sub:"TTAF "+(a.ttaf||0).toFixed(1)+"h"})),{value:"new",label:"➕ Nouvel avion",sub:"Créer une nouvelle fiche"}]}/>
+            options={[...(aircraft||[]).map(a=>({value:a.id,label:a.immat+" · "+a.type,sub:"TTAF "+(a.ttaf||0).toFixed(1)+"h"})),...(consult?[]:[{value:"new",label:"➕ Nouvel avion",sub:"Créer une nouvelle fiche"}])]}/>
         </div>
         <FGrid>
           <FField label="Immatriculation *" value={immat} onChange={v=>setImmat(v.toUpperCase())}/>
@@ -7296,14 +7344,14 @@ function FormAircraft({ aircraft, onUpdate, saved }) {
           </Card>
         )}
         {msg&&<div style={{background:"#D1FAE5",border:"1px solid #00936A",borderRadius:10,padding:"10px 14px",color:"#065F46",fontWeight:700,fontSize:13}}>{msg}</div>}
-        <div style={{display:"flex",gap:10}}>
+        {!consult&&<div style={{display:"flex",gap:10}}>
           {sel!=="new"&&aircraft.length>1&&(
             <button onClick={del} style={{flex:1,height:48,background:"#FEE2E2",border:"1.5px solid #DC2626",borderRadius:10,color:"#DC2626",fontSize:13,fontWeight:700,cursor:"pointer"}}>🗑 Supprimer</button>
           )}
           <button onClick={save} style={{flex:2,height:48,background:localSaved?"#00936A":"#DC2626",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",transition:"background 0.3s"}}>
             {localSaved?"✅ Enregistré":sel==="new"?"➕ Ajouter":"💾 Enregistrer"}
           </button>
-        </div>
+        </div>}
       </div>
     </Card>
   );
@@ -7457,6 +7505,10 @@ function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitV
   // Tant qu'un département n'a pas de comptes nominatifs, le rôle est inconnu : la saisie reste ouverte au profil Équipage.
   const satUser=typeof sgsCurrentUser==="function"?sgsCurrentUser():null;
   const satPeutRemplir=profileId==="rdoa"||(profileId==="eqp"&&(!satUser||!satUser.role||satUser.role==="CC"));
+  // Direction (2.19) : toutes les tuiles en consultation, sauf la décision sur un FRAT rouge.
+  // Les boutons d'écriture sont retirés des écrans ; en plus, toute écriture qui passerait est refusée ici.
+  const consultDir=profileId==="dir";
+  const garde=fn=>consultDir?(()=>uiAlert("👁 Consultation seule — la Direction ne modifie pas ces données.")):fn;
   const ok=fn=>d=>{fn(d);setSaved(true);setTimeout(()=>setSaved(false),2500);};
 
   const [progress,setProgress]=useState(null); // {title,icon,steps,currentStep,pct}
@@ -7539,7 +7591,7 @@ function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitV
   const pastille = (id)=>{
     if(id==="frat") return ((sgs&&sgs.reg&&sgs.reg.frat)||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&!f.decision2).length;
     if(id==="vol") return comVolsAPlanifier(com&&com.demandes,flights).length;   // vols transmis par le Commercial
-    if(id==="commercial") return ((com&&com.prospects)||[]).filter(p=>comADesRelances(p,new Date())).length;   // relances du jour
+    if(id==="commercial") return comPeutModifier(profileId)?((com&&com.prospects)||[]).filter(p=>comADesRelances(p,new Date())).length:0;   // relances du jour (pas pour la Direction, qui consulte)
     if(id==="sgs"){ const ES=(sgs&&sgs.evStatus)||{};
       return (safetyData||[]).filter(e=>!((ES[sgsEventKey(e)]||{}).statut)||((ES[sgsEventKey(e)]||{}).statut)==='recu').length; }
     return 0;
@@ -7616,6 +7668,7 @@ function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitV
                 Fermer
               </button>
             </div>
+              {consultDir&&<div style={{padding:"10px 16px 0",background:"#0A1628"}}><ConsultBandeau texte="Les enquêtes sont remplies par le personnel de cabine. Le questionnaire vierge se télécharge ; les résultats sont dans l'onglet Perf."/></div>}
               {/* Saisie réservée au personnel de cabine (rôle CC) et à l'Administrateur ; les autres profils téléchargent seulement */}
               <div style={{padding:"10px 16px",background:"#0A1628",borderBottom:"1px solid rgba(255,255,255,.1)",flexShrink:0,display:"grid",gridTemplateColumns:satPeutRemplir?"1fr 1fr":"1fr",gap:8}}>
                 {satPeutRemplir&&<button onClick={()=>setSatSaisie(s=>!s)}
@@ -7777,23 +7830,25 @@ function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitV
             </div>
         )}
       </div>
+      <ConsultCtx.Provider value={consultDir}>
       {effectiveActive==="vol"   && <FormVol  onSubmit={ok(onSubmitVol)} crew={crew} aircraft={aircraft} saved={saved} clients={clients} onBack={()=>setActive(null)} flights={flights}
         aPlanifier={comVolsAPlanifier(com&&com.demandes,flights)}/>}
-      {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={setCrew} saved={saved}/>}
-      {effectiveActive==="maint" && <FormMaint onSubmit={ok(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length}))} onResolveMel={resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);}} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
+      {effectiveActive==="crew"  && <FormEquipage crew={crew} setCrew={garde(setCrew)} saved={saved}/>}
+      {effectiveActive==="maint" && <FormMaint onSubmit={ok(garde(d=>onSubmitMaint({...d,volsDone:flights.filter(f=>f.status==="Termine").length})))} onResolveMel={garde(resolved=>{setMelHist(prev=>[{...resolved,id:Date.now()},...prev]);})} maintData={{...maintData,volsDone:flights.filter(f=>f.status==="Termine").length}} aircraft={aircraft} saved={saved}/>}
       {effectiveActive==="secu"  && <FormSafety onSubmit={ok(onSubmitSafety)} flights={flights} aircraft={aircraft} crew={crew} saved={saved} profil={profileId}/>}
       {effectiveActive==="journal" && <JournalView/>}
-      {effectiveActive==="frat" && sgs && <Card accent="#0F766E"><FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="Manuel SGS 02-04 · à remplir par le CM1 avant chaque étape" color="#0F766E"/>
-        <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} crew={crew} standalone prof={profileId}/></Card>}
+      <ConsultCtx.Provider value={false}>{effectiveActive==="frat" && sgs && <Card accent="#0F766E"><FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="Manuel SGS 02-04 · à remplir par le CM1 avant chaque étape" color="#0F766E"/>
+        <SgsFratView items={sgs.reg.frat} setItems={sgs.reg.setFrat} flights={flights} crew={crew} standalone prof={profileId}/></Card>}</ConsultCtx.Provider>
       {effectiveActive==="sgs" && sgs && <SgsTile prof={profileId} safety={safetyData} flights={flights} aircraft={aircraft} crew={crew} {...sgs} onBack={()=>setActive(null)} onSecu={code=>{ try{ sessionStorage.setItem("sgs_cr_preset",code); }catch(_e){ logSilent(_e); } setActive("secu"); }}/>}
-      {effectiveActive==="fin"   && <FormFin  onSubmit={ok(onSubmitFin)} saved={saved}/>}
+      {effectiveActive==="fin"   && <FormFin  onSubmit={ok(garde(onSubmitFin))} saved={saved} finData={finData}/>}
       {/* Opérations : consultation seule des documents */}
       {effectiveActive==="regl"     && <FormReglementation readOnly={profileId==="ops"||profileId==="eqp"||profileId==="dir"}/>}
-      {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={setNdsArchive}
+      {effectiveActive==="nds"      && <FormNDS onBack={()=>setActive(null)} safetyData={safetyData} flights={flights} aircraft={aircraft} archive={ndsArchive} setArchive={consultDir?()=>{}:setNdsArchive}
         modesOK={profileId==="sgs"?["re","dgac","as"]:null} respSgs={sgs?sgs.responsable:null}/>}
       {effectiveActive==="commercial" && com && <CommercialModule com={com} clients={clients} setClients={setClients} flights={flights} satis={satis} profileId={profileId} onBack={()=>setActive(null)}/>}
       {effectiveActive==="params" && com && <FormParams params={com.params} setParams={com.setParams} canEdit={profileId==="rdoa"}/>}
-      {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={onUpdateAircraft} saved={saved}/>}
+      {effectiveActive==="avion"    && <FormAircraft aircraft={aircraft} onUpdate={garde(onUpdateAircraft)} saved={saved}/>}
+      </ConsultCtx.Provider>
     </div>
   );
 }
@@ -8233,6 +8288,9 @@ function comTableau(prospects,devis,demandes,flights,code,now){
 
 // ══ Module Commercial — écrans (lot A) ═══════════════════════════════════════
 const COM_BLEU="#0891B2";
+// Droits du module Commercial : le Commercial et l'Administrateur modifient ; la Direction consulte (2.19)
+const comPeutVoir=profil=>["comm","rdoa","dir"].includes(profil);
+const comPeutModifier=profil=>["comm","rdoa"].includes(profil);
 const comQui=()=>userLabel(sgsCurrentUser())||"Commercial";
 const comDate=s=>{ if(!s) return ""; const d=new Date(s); return isNaN(d)?"":d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"}); };
 const comDateH=s=>{ if(!s) return ""; const d=new Date(s); return isNaN(d)?"":comDate(s)+" "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}); };
@@ -8254,7 +8312,7 @@ const ComLigne=({l,v,c})=><div style={{display:"flex",justifyContent:"space-betw
 const comChoix=(k,v)=>Array.isArray(v)?v.map(x=>COM_CHOIX[k][x]).filter(Boolean).join(", "):(COM_CHOIX[k][v]||"");
 
 function CommercialModule({ com, clients, setClients, flights, satis, profileId, onBack }){
-  const canEdit=["comm","rdoa"].includes(profileId);
+  const canEdit=comPeutModifier(profileId);   // Direction : consultation seule
   const [tab,setTab]=useState("pros");
   const [vue,setVue]=useState(null);           // {k:"fiche"|"devis"|"edit"|"accepter"|"nouvelle", id}
   const now=new Date();
@@ -8450,9 +8508,9 @@ function ComDevisDetail({ d, canEdit, com, fiche, nouvelleVersion, flights, dema
       <div style={{fontSize:12}}>{[d.client&&d.client.nom,d.client&&d.client.fonction,d.client&&d.client.organisation].filter(Boolean).join(" · ")}</div>
       <div style={{fontSize:11.5,color:C.slate,marginTop:4}}>Créé le {comDate(d.date)} par {d.creePar||"—"} · valable jusqu'au {comDate(d.validite)}{d.source==="airshow"?" · importé de Fiches Airshow":""}</div>
       <div style={{fontSize:11.5,marginTop:4,color:d.accepte?"#00936A":d.envoye?"#00936A":"#BA7517",fontWeight:700}}>{d.accepte?"Accepté le "+comDate(d.accepte.date)+" · "+d.accepte.auteur:d.envoye?"Envoyé le "+comDate(d.envoye.date)+" · "+d.envoye.auteur:"Non envoyé"}</div></ComCarte>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+    <div style={{display:"grid",gridTemplateColumns:canEdit?"1fr 1fr":"1fr",gap:8}}>
       <button onClick={()=>comOuvrirPdf(d)} style={comBtn("white",C.navy,"#CBD5E1")}>📄 Ouvrir le PDF</button>
-      <button onClick={envoyer} style={comBtn("#25D366","white")}>📤 Envoyer</button></div>
+      {canEdit&&<button onClick={envoyer} style={comBtn("#25D366","white")}>📤 Envoyer</button>}</div>
     {canEdit&&!d.envoye&&!d.accepte&&<button onClick={()=>envoye()} style={comBtn(COM_BLEU,"white")}>✓ Marquer comme envoyé</button>}
     {canEdit&&fiche&&!d.accepte&&<button onClick={()=>nouvelleVersion(d)} style={comBtn("white",COM_BLEU,COM_BLEU)}>Modifier · créera la v{d.version+1}</button>}
     {canEdit&&!d.accepte&&fiche&&fiche.statut!=="archive"&&<button onClick={()=>accepter(d)} style={comBtn("#00936A","white")}>Le client accepte ce devis</button>}
@@ -8925,7 +8983,7 @@ function ComDemandeCarte({ dem, flights, canEdit, com }){
       <span style={{color:l.vol?"#00936A":C.slate,fontWeight:l.vol?700:400}}>{l.vol?comDate(l.vol.date)+" · "+(l.vol.dep||"—")+"–"+(l.vol.arr||"—"):"souhaité "+comDate(l.date)+(l.heure?" "+l.heure:"")}</span></div>)}
     {dem.note&&<div style={{fontSize:11.5,color:C.slate,marginTop:4}}>Note : {dem.note}</div>}
     {dem.statut==="annulee"&&<div style={{fontSize:11.5,color:"#991B1B",marginTop:4}}>Annulée le {comDate(dem.annuleLe)} par {dem.annulePar} : {dem.motifAnnulation}</div>}
-    {e.planifies>0&&dem.statut!=="annulee"&&<button onClick={envoyerHoraires} style={{...comBtn("#25D366","white"),marginTop:8,height:38}}>📤 Envoyer les horaires au client</button>}
+    {canEdit&&e.planifies>0&&dem.statut!=="annulee"&&<button onClick={envoyerHoraires} style={{...comBtn("#25D366","white"),marginTop:8,height:38}}>📤 Envoyer les horaires au client</button>}
     {canEdit&&dem.statut==="active"&&e.planifies===0&&<button onClick={annuler} style={{...comBtn("white","#991B1B","#FCA5A5"),marginTop:8,height:36,fontSize:12.5}}>Annuler la demande</button>}
   </ComCarte>);
 }
@@ -8968,9 +9026,9 @@ function ComVolsAPlanifierListe({ liste, lien, onChoisir }){
           <div style={{fontSize:11.5,color:"#475569",marginBottom:4}}>{g.dem.pax} passager(s) · transmis par {g.dem.transmisPar}</div>
           {g.dem.note&&<div style={{fontSize:11.5,marginBottom:4}}>Note : {g.dem.note}</div>}
           {g.legs.map(l=>{ const on=enCours&&lien.demandeVol===l.i;
-            return <div key={l.i} role="button" onClick={()=>onChoisir(g.dem,l)} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 0",borderTop:"1px solid "+C.border,fontSize:12,...TAP,background:on?"#E6F1FB":"transparent"}}>
+            return <div key={l.i} role={onChoisir?"button":undefined} onClick={()=>onChoisir&&onChoisir(g.dem,l)} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 0",borderTop:"1px solid "+C.border,fontSize:12,...(onChoisir?TAP:{}),background:on?"#E6F1FB":"transparent"}}>
               <span><b>{l.type==="vol"?"COM":"POS"}</b> {l.de.iata||l.de.icao} → {l.vers.iata||l.vers.icao} · {fmt(l.date)}{l.heure?" "+l.heure:""}</span>
-              <b style={{color:on?"#0C447C":"#0369A1",whiteSpace:"nowrap"}}>{on?"en cours ✓":"Planifier ›"}</b></div>; })}
+              {onChoisir?<b style={{color:on?"#0C447C":"#0369A1",whiteSpace:"nowrap"}}>{on?"en cours ✓":"Planifier ›"}</b>:<span style={{color:"#854F0B",whiteSpace:"nowrap"}}>à planifier</span>}</div>; })}
         </div>}
       </div>; })}
   </div>);
@@ -12867,9 +12925,9 @@ function AppMain({ onLogout, profileId }) {
   useEffect(()=>{ const f=()=>setShowAccounts(true); window.addEventListener("open-accounts",f); return ()=>window.removeEventListener("open-accounts",f); },[]);
   const profile = PROFILES.find(p=>p.id===profileId)||PROFILES[4];
   // Tuile Finances : profil Finances seul. Tuile SGS : profil SGS et Administrateur.
-  const canForm = (id) => id==="commercial" ? ["comm","rdoa"].includes(profile.id)   // prospects, devis, clients : Commercial et Administrateur
+  const canForm = (id) => id==="commercial" ? comPeutVoir(profile.id)   // prospects, devis, clients : Commercial et Administrateur modifient, Direction consulte
                         : id==="params" ? ["comm","dir","rdoa"].includes(profile.id)       // l'Administrateur modifie, Direction et Commercial consultent
-                        : id==="fin" ? profile.id==="fin"
+                        : id==="fin" ? ["fin","dir"].includes(profile.id)   // la Direction consulte
                         : id==="sgs" ? ["sgs","rdoa","dir"].includes(profile.id)   // la Direction consulte, sans modifier
                         : id==="journal" ? ["dir","sgs","rdoa"].includes(profile.id)
                         // FRAT : rôle CM1 seulement, dès que la personne est identifiée (compte nominatif)

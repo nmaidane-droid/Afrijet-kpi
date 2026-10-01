@@ -11,7 +11,7 @@
 //
 // VERSION à incrémenter à chaque livraison : elle déclenche le ménage des anciennes copies.
 
-const VERSION = 'afrijet-2.18';
+const VERSION = 'afrijet-2.19';
 const CACHE   = VERSION;
 
 // Ce qui doit rester lisible sans réseau
@@ -19,7 +19,7 @@ const HORS_LIGNE = [
   '/',
   '/index.html',
   '/manuel.html',
-  '/Manuel_Utilisateur_Afrijet_v2.18.pdf',
+  '/Manuel_Utilisateur_Afrijet_v2.19.pdf',
 ];
 
 self.addEventListener('install', e => {
