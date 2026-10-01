@@ -31,7 +31,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'comDevenirClient','comUnion','comFusionImport','comDueInfo','comADesRelances','comRelance','comEtape','comNote','comProchainNumero',
   'COM_CHOIX','COM_REGLES','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comEstMaroc','comPrixValide','comSuppl','comCarbNouveau','comCarbAConfirmer','comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
-  'APP_PASSWORD_HASH','PROFILES','COM_MOTIFS','comPeutVoir','comPeutModifier','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
+  'PROFILES','COM_MOTIFS','comPeutVoir','comPeutModifier','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
   'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','sgsHorodate','sgsReceptionAuto','sgsMoisFr','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
@@ -530,6 +530,13 @@ console.log('\nFiche d\'analyse — date de réception automatique');
   test("mois en clair", ()=>attendu(T.sgsMoisFr('2026-10')==='octobre 2026'&&T.sgsMoisFr('')==='',T.sgsMoisFr('2026-10')));
 }
 
+
+// ── 2.20 : comptes nominatifs obligatoires pour tous ──
+console.log('\nConnexion (2.20)');
+test('Aucun profil ne garde de mot de passe partagé', ()=>attendu(T.PROFILES.every(p=>!('pwdHash' in p)), 'pwdHash présent'));
+test('Aucune empreinte de mot de passe dans la page', ()=>attendu(!/["'][0-9a-f]{64}["']/.test(code), 'empreinte trouvée'));
+test('Les huit départements sont des profils à comptes nominatifs', ()=>{ const m=code.match(/const NOMINATIVE_PROFILES=\[([^\]]*)\]/); attendu(m && T.PROFILES.every(p=>m[1].includes('"'+p.id+'"')), 'profil manquant'); });
+test('La page ne lit ni n\'écrit plus les comptes, les clés ni les verrous', ()=>attendu(!/PFX\+"users"|PFX \+ "totp_secret"|PFX\+"auth_locks"/.test(code), 'accès direct trouvé'));
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
