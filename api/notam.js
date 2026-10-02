@@ -19,6 +19,8 @@ export const MARGE_MIN = 60;          // ± 60 min autour du départ et de l'arr
 export const HORIZON_H = 72;          // vérification quotidienne : vols des 72 prochaines heures
 export const CACHE_MIN = 30;          // une requête par aéroport au plus toutes les 30 min
 export const QUOTA = 1000;            // offre gratuite SkyLink : 1 000 requêtes par mois
+export const DELAI_SOURCE_MS = 4000;  // la source doit répondre en 4 s ; les aéroports sont lus EN MÊME TEMPS,
+                                      // pour rester sous la coupure de la fonction (10 s)
 const URL_DEFAUT = "https://skylink-api.p.rapidapi.com/v3/notams/{icao}";
 
 // Pistes connues : une fermeture de piste n'est une fermeture certaine que si TOUTES les pistes sont fermées.
@@ -196,7 +198,7 @@ async function notamsDe(oaci, etat) {
   if (etat.quota.n >= QUOTA) throw new Error("quota mensuel de " + QUOTA + " requêtes atteint");
   if (!process.env.NOTAM_API_KEY) throw new Error("clé NOTAM absente (NOTAM_API_KEY)");
   const url = (process.env.NOTAM_API_URL || URL_DEFAUT).replace("{icao}", encodeURIComponent(oaci));
-  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 6000);
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), DELAI_SOURCE_MS);
   etat.quota.n++; etat.modifie = true;
   try {
     const r = await fetch(url, { signal: ctl.signal, headers: { "x-rapidapi-key": process.env.NOTAM_API_KEY, "x-rapidapi-host": new URL(url).host, "x-api-key": process.env.NOTAM_API_KEY } });
@@ -220,19 +222,24 @@ async function sauverEtat(etat) {
   await Promise.all([kvSet("notamCache", etat.cache), kvSet("notamQuota", etat.quota)]).catch(() => {});
 }
 
+// Lecture simultanée des aéroports (une seule requête par aéroport) ; une erreur est gardée par aéroport
+export async function precharger(oacis, etat) {
+  etat.lus = etat.lus || {};
+  const manquants = [...new Set((oacis || []).filter(Boolean))].filter(o => !(o in etat.lus));
+  await Promise.all(manquants.map(async o => {
+    try { etat.lus[o] = { ok: true, ...(await notamsDe(o, etat)) }; }
+    catch (e) { etat.lus[o] = { ok: false, erreur: e && e.name === "AbortError" ? "la source NOTAM n'a pas répondu à temps" : String(e.message || e) }; }
+  }));
+}
 // Vérification d'une liste de fenêtres
 export async function verifierFenetres(fenetres, etat) {
-  const out = [];
-  for (const f of fenetres) {
-    if (!f.oaci) { out.push({ ...f, statut: "doute", motif: "aéroport " + (f.iata || "?") + " inconnu de la liste des aéroports", notams: [], lu: null }); continue; }
-    try {
-      const { notams, lu } = await notamsDe(f.oaci, etat);
-      out.push({ ...f, ...evaluer(notams, f), lu });
-    } catch (e) {
-      out.push({ ...f, statut: "doute", motif: "vérification impossible : " + String(e.message || e), notams: [], lu: null });
-    }
-  }
-  return out;
+  await precharger(fenetres.map(f => f.oaci), etat);
+  return fenetres.map(f => {
+    if (!f.oaci) return { ...f, statut: "doute", motif: "aéroport " + (f.iata || "?") + " inconnu de la liste des aéroports", notams: [], lu: null };
+    const l = etat.lus[f.oaci];
+    if (!l || !l.ok) return { ...f, statut: "doute", motif: "vérification impossible : " + (l ? l.erreur : "lecture absente"), notams: [], lu: null };
+    return { ...f, ...evaluer(l.notams, f), lu: l.lu };
+  });
 }
 
 // ── Vérification quotidienne : vols planifiés des 72 prochaines heures (fenêtres enregistrées avec le vol)
@@ -260,8 +267,9 @@ export default async function handler(req, res) {
     try {
       const maintenant = Date.now(), etat = await chargerEtat();
       const flights = (await kvGet("flights")) || [];
-      const alertes = [];
-      for (const v of volsAVerifier(flights, maintenant)) {
+      const alertes = [], aVerifier = volsAVerifier(flights, maintenant);
+      await precharger(aVerifier.flatMap(v => v.notam.fenetres.map(w => w.oaci)), etat);   // tous les aéroports d'un coup
+      for (const v of aVerifier) {
         const r = await verifierFenetres(v.notam.fenetres, etat);
         const a = alerteDe(v, r, maintenant); if (a) alertes.push(a);
       }

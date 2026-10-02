@@ -24,13 +24,16 @@ export default async function handler(req, res) {
   if (!key) { res.status(500).json({ error: "CHECKWX_KEY manquante" }); return; }
   const url = buildUrl(req.query || {});
   if (!url) { res.status(400).json({ error: "code OACI à 4 lettres requis" }); return; }
+  // Délai de garde : CheckWX doit répondre en 8 s, avant la coupure de la fonction (10 s)
+  const ctl = new AbortController(), minuterie = setTimeout(() => ctl.abort(), 8000);
   try {
-    const r = await fetch(url, { headers: { "X-API-Key": key, Accept: "application/json" } });
+    const r = await fetch(url, { signal: ctl.signal, headers: { "X-API-Key": key, Accept: "application/json" } });
     const body = await r.text();
     res.status(r.status).setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "s-maxage=300");   // la météo change lentement : 5 min de cache
     res.send(body);
   } catch (e) {
+    if (e && e.name === "AbortError") { res.status(504).json({ error: "CheckWX n'a pas répondu à temps : météo indisponible pour le moment." }); return; }
     res.status(502).json({ error: String(e.message || e) });
-  }
+  } finally { clearTimeout(minuterie); }
 }

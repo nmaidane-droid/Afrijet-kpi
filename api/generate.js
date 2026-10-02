@@ -5,7 +5,12 @@ export const config = {
   maxDuration: 60,
 };
 
+// Délai de garde : la génération est abandonnée proprement à 55 s, avant la coupure de la fonction (60 s).
+export const DELAI_MS = 55000;
+const TROP_LONG = { type: 'timeout', message: 'Génération trop longue : réessayez, ou raccourcissez la demande.' };
+
 export default async function handler(req, res) {
+  const ctl = new AbortController(), minuterie = setTimeout(() => ctl.abort(), DELAI_MS);
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -23,6 +28,7 @@ export default async function handler(req, res) {
 
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: ctl.signal,
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': process.env.ANTHROPIC_API_KEY,
@@ -71,11 +77,14 @@ export default async function handler(req, res) {
     res.end();
 
   } catch (err) {
-    // Si l'en-tête est déjà parti, on ne peut plus renvoyer de JSON.
+    const delai = err && err.name === 'AbortError';
+    // Si l'en-tête est déjà parti, on ne peut plus renvoyer de JSON : on termine le flux par un événement d'erreur,
+    // que la page sait afficher.
     if (res.headersSent) {
-      try { res.end(); } catch (_e) {}
+      try { if (delai) res.write('event: error\ndata: ' + JSON.stringify({ type: 'error', error: TROP_LONG }) + '\n\n'); res.end(); } catch (_e) {}
       return;
     }
+    if (delai) { res.status(504).json({ error: TROP_LONG }); return; }
     res.status(500).json({ error: err.message || 'Erreur serveur' });
-  }
+  } finally { clearTimeout(minuterie); }
 }
