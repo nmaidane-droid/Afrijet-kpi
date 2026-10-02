@@ -1370,11 +1370,11 @@ function computeAlerts(kpis, flights, maintData, aircraft, crew, sgsRed, frats, 
     a.push({id:"notam-"+(x.volId||x.num+x.date)+"-"+(x.notams||[]).map(n=>n.id).join("."), sev:x.statut==="ferme"?"danger":"warn", icon:x.statut==="ferme"?"⛔":"⚠️",
       msg:(x.statut==="ferme"?"NOTAM — nouvelle fermeture sur le vol ":"NOTAM à confirmer par les Opérations — vol ")+x.num+" du "+fr(x.date)+" ("+x.from+" → "+x.to+") — "+(x.motif||(x.notams||[]).map(n=>n.id).join(", "))});
   });
-  // FRAT rouge : le vol attend des barrières, puis la décision du Dirigeant ou du SGS
+  // FRAT rouge : le vol attend des barrières, puis la décision du Dirigeant Responsable
   (frats||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&!f.decision2).forEach(f=>{
     const barres=(f.barrieresTxt||'').trim();
     a.push({id:"frat-"+f.id, sev:"danger", icon:"🧭",
-      msg:"FRAT rouge — "+(f.vol||'')+" · "+(barres?"décision attendue du Dirigeant Responsable ou du responsable SGS":"barrières à établir par les Opérations")});
+      msg:"FRAT rouge — "+(f.vol||'')+" · "+(barres?"décision attendue du Dirigeant Responsable":"barrières à établir par les Opérations")});
   });
   // SGS 02-02 : risque intolérable → Dirigeant Responsable avisé immédiatement.
   // Seuls l'intitulé et le niveau sont diffusés, jamais le détail.
@@ -4172,9 +4172,9 @@ function fratPdf(f){
     if(f.barr) bloc("Barrières mises en place par le CM1", f.barr);
     if(f.barrieresTxt) bloc("Barrières retenues par les Opérations", f.barrieresTxt,
       (f.barrieresPar||"")+(f.barrieresLe?" · "+sgsFr(String(f.barrieresLe).slice(0,10)):""));
-    if(f.decision2) bloc(f.decision2==='autorise'?"Vol autorisé":"Vol reporté", f.motifDecision,
+    if(f.decision2) bloc(f.decision2==='autorise'?"Vol autorisé":"Vol reporté", f.motifDecision+(f.decision2==='autorise'?"\nLe commandant de bord conserve la décision finale d'effectuer le vol.":""),
       (f.decisionPar||"")+(f.decisionLe?" · "+sgsFr(String(f.decisionLe).slice(0,10)):""));
-    else if(coul==='rouge') bloc("Décision", "En attente — "+((f.barrieresTxt||'').trim()?"décision du Dirigeant Responsable ou du responsable SGS":"barrières à établir par les Opérations"));
+    else if(coul==='rouge') bloc("Décision", "En attente — "+((f.barrieresTxt||'').trim()?"décision du Dirigeant Responsable":"barrières à établir par les Opérations"));
     if(y>H-28){ doc.addPage(); y=entete(); }
     y+=4;
     const wS=(W-2*M-4)/2;
@@ -4248,7 +4248,9 @@ const SGS_FRAT_DEC={go:'GO — vol possible',nogo:'NO GO — vol impossible',cdb
 // Conduite à tenir sur un FRAT rouge (règle Afrijet Sahara) :
 //   1. le commandant remplit le FRAT ; rouge → en attente de barrières
 //   2. les Opérations saisissent les barrières retenues → en attente de décision
-//   3. le Dirigeant Responsable OU le responsable SGS autorise, ou reporte le vol
+//   3. le Dirigeant Responsable SEUL autorise, ou reporte le vol (règle du 01/10/2026 : accepter un risque
+//      élevé relève du Dirigeant Responsable ; le responsable SGS et l'Administrateur consultent).
+//      Le commandant de bord conserve la décision finale d'effectuer le vol.
 // Un vol reporté reste « Planifié » : les Opérations le replanifient elles-mêmes.
 // FRAT rattaché à un vol : par identifiant, sinon par numéro et date
 const fratDuVol=(frats,f)=>(frats||[]).filter(x=>x.flightId?(x.flightId===String(f.id||'')||x.flightId===String((f.num||'')+(f.date||''))):(String(x.vol||'').includes(f.num)&&x.date===f.date))
@@ -4316,7 +4318,7 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
     <div style={sgsCard}>{list.length?list.slice(0,60).map(f=>{ const C2=SGS_FRAT_C[f.couleur2||f.couleur]||SGS_FRAT_C.vert;
       const et=fratEtat(f), EL=et?FRAT_ETAT_L[et]:null;
       const peutBarrieres=prof==='ops'||prof==='rdoa';
-      const peutDecider=prof==='dir'||prof==='sgs'||prof==='rdoa';
+      const peutDecider=prof==='dir';                  // Dirigeant Responsable seul (01/10/2026)
       const maj=(p)=>setItems(l=>(l||[]).map(x=>x.id===f.id?{...x,...p,updatedAt:new Date().toISOString()}:x));
       return <div key={f.id} style={{borderBottom:"1px solid "+C.border,padding:"9px 0"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -4328,7 +4330,7 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
           <b style={{color:"#92400E"}}>Barrières du CM1</b> — {f.barr}</div>}
         {et==='barrieres'&&<div style={{marginTop:8,background:"#FDF7EC",border:"1px solid #D97706",borderRadius:10,padding:"9px 10px"}}>
           <div style={{fontSize:11.5,color:"#92400E",lineHeight:1.45,marginBottom:peutBarrieres?7:0}}>
-            <b>Risque élevé.</b> Les Opérations établissent les barrières retenues, puis le Dirigeant Responsable ou le responsable SGS décide.</div>
+            <b>Risque élevé.</b> Les Opérations établissent les barrières retenues, puis le Dirigeant Responsable décide.</div>
           {peutBarrieres&&<>
             <textarea aria-label="Barrières retenues" rows={2} placeholder="Barrières retenues : équipage renforcé, carburant supplémentaire, dégagement plus proche…"
               value={f.brouillon||''} onChange={e=>maj({brouillon:e.target.value})} style={{...sgsInput,height:"auto",padding:"8px 10px",fontSize:12}}/>
@@ -4346,18 +4348,19 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:7}}>
               <SgsBtn l="🚫 Reporter le vol" full onClick={()=>{ const m=(f.brouillon||'').trim();
                 if(m.length<5){ uiAlert("⚠️ Indiquez le motif de la décision."); return; }
-                maj({decision2:'reporte',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||(prof==='dir'?'Dirigeant Responsable':'Responsable SGS'),decisionLe:new Date().toISOString()});
+                maj({decision2:'reporte',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||'Dirigeant Responsable',decisionLe:new Date().toISOString()});
                 sgsToast("Vol reporté — les Opérations replanifient"); }}/>
               <SgsBtn l="✓ Autoriser le vol" prim full onClick={()=>{ const m=(f.brouillon||'').trim();
                 if(m.length<5){ uiAlert("⚠️ Indiquez le motif de l'autorisation."); return; }
-                maj({decision2:'autorise',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||(prof==='dir'?'Dirigeant Responsable':'Responsable SGS'),decisionLe:new Date().toISOString()});
+                maj({decision2:'autorise',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||'Dirigeant Responsable',decisionLe:new Date().toISOString()});
                 sgsToast("Vol autorisé"); }}/></div></>
-          :<div style={{fontSize:11,color:C.slate,marginTop:6}}>Décision réservée au Dirigeant Responsable ou au responsable SGS.</div>}
+          :<div style={{fontSize:11,color:C.slate,marginTop:6}}>Décision réservée au Dirigeant Responsable.</div>}
         </div>}
         {(et==='autorise'||et==='reporte')&&<div style={{marginTop:8,background:et==='autorise'?"#E7F6F0":"#F1F5F9",border:"1px solid "+(et==='autorise'?"#00936A":C.border),borderRadius:10,padding:"9px 10px",fontSize:11.5,lineHeight:1.45,color:et==='autorise'?"#065F46":C.text}}>
           <b>{et==='autorise'?'Vol autorisé':'Vol reporté'} par {f.decisionPar}</b> · {sgsFr(String(f.decisionLe||'').slice(0,10))}
           <div style={{color:C.slate,marginTop:2}}>Motif : {f.motifDecision}</div>
           {f.barrieresTxt&&<div style={{color:C.slate}}>Barrières : {f.barrieresTxt}</div>}
+          {et==='autorise'&&<div style={{marginTop:4,fontWeight:700}}>Le commandant de bord conserve la décision finale d'effectuer le vol.</div>}
         </div>}
       </div>; })
       :<div style={{fontSize:12.5,color:C.slate,padding:"6px 0"}}>Aucun FRAT enregistré.</div>}</div>
