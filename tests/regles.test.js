@@ -550,5 +550,11 @@ console.log('\nNOTAM (page)');
   test('NOTAM vus : identifiants uniques', ()=>attendu(T.notamIds({fenetres:[{notams:[{id:'A1'},{id:'A2'}]},{notams:[{id:'A1'}]}]}).join()==='A1,A2','liste'));
 }
 
+// ── FRAT rouge : décision réservée au Dirigeant Responsable (01/10/2026) ──
+console.log('\nFRAT rouge');
+test('Seul le profil Direction peut décider (autoriser ou reporter)', ()=>attendu(/const peutDecider=prof==='dir';/.test(code) && !/peutDecider=[^;]*'sgs'/.test(code), 'règle modifiée'));
+test('Aucun texte n\'annonce une décision du SGS sur un FRAT rouge', ()=>attendu(!/Dirigeant Responsable ou (du|le|au) responsable SGS/.test(code), 'texte trouvé'));
+test('Après autorisation : le commandant conserve la décision finale', ()=>attendu((code.match(/Le commandant de bord conserve la décision finale d'effectuer le vol\./g)||[]).length>=2, 'mention absente'));
+
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
