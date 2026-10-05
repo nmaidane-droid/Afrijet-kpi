@@ -13371,7 +13371,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
     setReport(null);setReset(false);setTab("forms");
   };
 
-  const allAlerts  = computeAlerts(kpis,flights,maintData,aircraft,crew,sgsRed,undefined,notamAl);
+  const allAlerts  = computeAlerts(kpis,flights,maintData,aircraft,crew,sgsRed,sgsFrat,notamAl);   // mêmes alertes que la liste, FRAT compris (05/10/2026)
   const critCount  = allAlerts.filter(a=>!dismissed.includes(a.id)).length;
 
   // Record new alerts in history
