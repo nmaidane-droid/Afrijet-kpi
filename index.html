@@ -741,162 +741,43 @@ function FHeader({ icon, title, subtitle, color }) {
   );
 }
 // World airports (500+ major airports, all regions)
-const WORLD_AIRPORTS = [
-  // MAROC
-  {c:"CMN",n:"Casablanca Mohammed V"},{c:"RAK",n:"Marrakech Menara"},{c:"AGA",n:"Agadir Al Massira"},
-  {c:"TNG",n:"Tanger Ibn Batouta"},{c:"FEZ",n:"Fes Saiss"},{c:"OUD",n:"Oujda Angads"},
-  {c:"RBA",n:"Rabat Sale"},{c:"NDR",n:"Nador El Aroui"},{c:"AHU",n:"Al Hoceima Cherif Al Idrissi"},
-  {c:"TTU",n:"Tetouan Saniat Rmel"},{c:"ESU",n:"Essaouira"},{c:"OZZ",n:"Ouarzazate"},
-  {c:"ERH",n:"Er Rachidia"},{c:"ZGR",n:"Zagora"},{c:"TTA",n:"Tan Tan"},
-  {c:"EUN",n:"Laayoune Hassan I"},{c:"VIL",n:"Dakhla"},{c:"SMW",n:"Smara"},
-  {c:"GLN",n:"Guelmim"},{c:"SII",n:"Sidi Ifni"},
-  // AFRIQUE
-  {c:"ALG",n:"Alger Houari Boumediene"},{c:"ORN",n:"Oran Ahmed Ben Bella"},{c:"CZL",n:"Constantine Mohamed Boudiaf"},
-  {c:"TUN",n:"Tunis Carthage"},{c:"SFA",n:"Sfax Thyna"},{c:"DJE",n:"Djerba Zarzis"},
-  {c:"TIP",n:"Tripoli Mitiga"},{c:"CAI",n:"Cairo International"},{c:"HRG",n:"Hurghada"},
-  {c:"SSH",n:"Sharm El Sheikh"},{c:"LXR",n:"Luxor"},{c:"ABV",n:"Abuja Nnamdi Azikiwe"},
-  {c:"LOS",n:"Lagos Murtala Muhammed"},{c:"ACC",n:"Accra Kotoka"},{c:"ABJ",n:"Abidjan Felix Houphouet-Boigny"},
-  {c:"DKR",n:"Dakar Blaise Diagne"},{c:"NBO",n:"Nairobi Jomo Kenyatta"},
-  {c:"MBA",n:"Mombasa Moi"},{c:"DAR",n:"Dar es Salaam Julius Nyerere"},
-  {c:"JNB",n:"Johannesburg O.R. Tambo"},{c:"CPT",n:"Cape Town"},{c:"DUR",n:"Durban King Shaka"},
-  {c:"ADD",n:"Addis Abeba Bole"},{c:"CMN",n:"Casablanca"},{c:"HRE",n:"Harare"},
-  {c:"LUN",n:"Lusaka Kenneth Kaunda"},{c:"NIM",n:"Niamey Diori Hamani"},
-  {c:"BKO",n:"Bamako Senou"},{c:"OUA",n:"Ouagadougou"},{c:"COO",n:"Cotonou Cadjehoun"},
-  {c:"MLW",n:"Monrovia Spriggs Payne"},{c:"FNA",n:"Freetown Lungi"},{c:"CKY",n:"Conakry Gbessia"},
-  {c:"BJL",n:"Banjul Yundum"},{c:"ASM",n:"Asmara"},{c:"JIB",n:"Djibouti Ambouli"},
-  {c:"MGQ",n:"Mogadiscio Adan Abdulle"},{c:"KIS",n:"Kisumu"},{c:"EBB",n:"Entebbe"},
-  {c:"KGL",n:"Kigali"},{c:"BZV",n:"Brazzaville Maya-Maya"},{c:"FIH",n:"Kinshasa N Djili"},
-  {c:"LBV",n:"Libreville Leon Mba"},{c:"DLA",n:"Douala"},{c:"NSI",n:"Yaounde Nsimalen"},
-  {c:"ANR",n:"Antananarivo Ivato"},{c:"TNR",n:"Antananarivo"},{c:"SEZ",n:"Mahe Seychelles"},
-  {c:"MRU",n:"Maurice Sir Seewoosagur Ramgoolam"},{c:"RUN",n:"La Reunion Roland Garros"},
-  // EUROPE
-  {c:"CDG",n:"Paris Charles de Gaulle"},{c:"ORY",n:"Paris Orly"},{c:"LYS",n:"Lyon Saint Exupery"},
-  {c:"NCE",n:"Nice Cote d Azur"},{c:"MRS",n:"Marseille Provence"},{c:"TLS",n:"Toulouse Blagnac"},
-  {c:"BOD",n:"Bordeaux Merignac"},{c:"NTE",n:"Nantes Atlantique"},{c:"SXB",n:"Strasbourg Entzheim"},
-  {c:"LHR",n:"London Heathrow"},{c:"LGW",n:"London Gatwick"},{c:"STN",n:"London Stansted"},
-  {c:"MAN",n:"Manchester"},{c:"BHX",n:"Birmingham"},{c:"EDI",n:"Edinburgh"},
-  {c:"GLA",n:"Glasgow"},{c:"BRS",n:"Bristol"},{c:"LTN",n:"London Luton"},
-  {c:"AMS",n:"Amsterdam Schiphol"},{c:"BRU",n:"Bruxelles Zaventem"},{c:"LGG",n:"Liege"},
-  {c:"FRA",n:"Frankfurt"},{c:"MUC",n:"Munich"},{c:"DUS",n:"Dusseldorf"},
-  {c:"HAM",n:"Hamburg"},{c:"BER",n:"Berlin Brandenburg"},{c:"CGN",n:"Cologne Bonn"},
-  {c:"STR",n:"Stuttgart"},{c:"HAJ",n:"Hanovre"},{c:"NUE",n:"Nuremberg"},
-  {c:"VIE",n:"Vienne Schwechat"},{c:"ZRH",n:"Zurich"},{c:"GVA",n:"Geneve Cointrin"},
-  {c:"FCO",n:"Rome Fiumicino"},{c:"MXP",n:"Milan Malpensa"},{c:"LIN",n:"Milan Linate"},
-  {c:"VCE",n:"Venise Marco Polo"},{c:"NAP",n:"Naples"},{c:"PMO",n:"Palerme Punta Raisi"},
-  {c:"MAD",n:"Madrid Barajas"},{c:"BCN",n:"Barcelone El Prat"},{c:"AGP",n:"Malaga"},
-  {c:"PMI",n:"Palma de Majorque"},{c:"VLC",n:"Valence"},{c:"BIO",n:"Bilbao"},
-  {c:"SVQ",n:"Seville"},{c:"ACE",n:"Lanzarote"},{c:"TFN",n:"Tenerife Nord"},
-  {c:"TFS",n:"Tenerife Sud"},{c:"LPA",n:"Gran Canaria"},{c:"FUE",n:"Fuerteventura"},
-  {c:"LIS",n:"Lisbonne Humberto Delgado"},{c:"OPO",n:"Porto"},{c:"FAO",n:"Faro"},
-  {c:"ATH",n:"Athenes Eleftherios Venizelos"},{c:"SKG",n:"Thessalonique"},
-  {c:"HER",n:"Heraklion Crete"},{c:"RHO",n:"Rhodes"},{c:"CFU",n:"Corfou"},
-  {c:"IST",n:"Istanbul"},{c:"SAW",n:"Istanbul Sabiha Gokcen"},{c:"ESB",n:"Ankara Esenboga"},
-  {c:"AYT",n:"Antalya"},{c:"DLM",n:"Dalaman"},{c:"BJV",n:"Bodrum"},
-  {c:"CPH",n:"Copenhague Kastrup"},{c:"ARN",n:"Stockholm Arlanda"},{c:"GOT",n:"Gothenburg"},
-  {c:"OSL",n:"Oslo Gardermoen"},{c:"BGO",n:"Bergen"},{c:"HEL",n:"Helsinki Vantaa"},
-  {c:"WAW",n:"Varsovie Chopin"},{c:"KRK",n:"Cracovie"},{c:"PRG",n:"Prague Vaclav Havel"},
-  {c:"BTS",n:"Bratislava"},{c:"BUD",n:"Budapest"},{c:"OTP",n:"Bucarest Otopeni"},
-  {c:"SOF",n:"Sofia"},{c:"BEG",n:"Belgrade"},{c:"LJU",n:"Ljubljana"},
-  {c:"DBV",n:"Dubrovnik"},{c:"SPU",n:"Split"},{c:"ZAG",n:"Zagreb"},
-  {c:"SVO",n:"Moscou Sheremetyevo"},{c:"DME",n:"Moscou Domodedovo"},{c:"LED",n:"Saint-Petersbourg"},
-  {c:"KBP",n:"Kiev Boryspil"},{c:"RIX",n:"Riga"},{c:"TLL",n:"Tallinn"},
-  {c:"VNO",n:"Vilnius"},{c:"HKT",n:"Phuket"},
-  // MOYEN-ORIENT
-  {c:"DXB",n:"Dubai International"},{c:"AUH",n:"Abu Dhabi"},{c:"SHJ",n:"Sharjah"},
-  {c:"DOH",n:"Doha Hamad"},{c:"KWI",n:"Koweit"},{c:"BAH",n:"Bahrein"},
-  {c:"MCT",n:"Mascate Muscat"},{c:"AMM",n:"Amman Queen Alia"},{c:"BEY",n:"Beyrouth"},
-  {c:"TLV",n:"Tel Aviv Ben Gourion"},{c:"BGW",n:"Bagdad"},{c:"IKA",n:"Teheran Imam Khomeyni"},
-  {c:"THR",n:"Teheran Mehrabad"},{c:"JED",n:"Djeddah King Abdulaziz"},
-  {c:"RUH",n:"Riyad King Khalid"},{c:"MED",n:"Medine"},{c:"DMM",n:"Dammam"},
-  {c:"SAH",n:"Sanaa"},{c:"MHD",n:"Mashhad"},
-  // ASIE
-  {c:"DEL",n:"Delhi Indira Gandhi"},{c:"BOM",n:"Mumbai Chhatrapati Shivaji"},
-  {c:"MAA",n:"Chennai"},{c:"CCU",n:"Calcutta"},{c:"BLR",n:"Bangalore"},
-  {c:"HYD",n:"Hyderabad Rajiv Gandhi"},{c:"PNQ",n:"Pune"},{c:"GOI",n:"Goa Dabolim"},
-  {c:"CMB",n:"Colombo Bandaranaike"},{c:"DAC",n:"Dacca Shahjalal"},
-  {c:"KTM",n:"Katmandou Tribhuvan"},{c:"KHI",n:"Karachi Jinnah"},
-  {c:"ISB",n:"Islamabad"},{c:"LHE",n:"Lahore Allama Iqbal"},
-  {c:"PEK",n:"Pekin Capital"},{c:"PKX",n:"Pekin Daxing"},{c:"PVG",n:"Shanghai Pudong"},
-  {c:"SHA",n:"Shanghai Hongqiao"},{c:"CAN",n:"Guangzhou Baiyun"},{c:"SZX",n:"Shenzhen"},
-  {c:"CTU",n:"Chengdu Shuangliu"},{c:"HGH",n:"Hangzhou"},{c:"NKG",n:"Nanjing"},
-  {c:"XIY",n:"Xian Xianyang"},{c:"KMG",n:"Kunming"},{c:"CKG",n:"Chongqing"},
-  {c:"HKG",n:"Hong Kong"},{c:"TPE",n:"Taipei Taoyuan"},{c:"KHH",n:"Kaohsiung"},
-  {c:"ICN",n:"Seoul Incheon"},{c:"GMP",n:"Seoul Gimpo"},{c:"PUS",n:"Busan"},
-  {c:"NRT",n:"Tokyo Narita"},{c:"HND",n:"Tokyo Haneda"},{c:"KIX",n:"Osaka Kansai"},
-  {c:"ITM",n:"Osaka Itami"},{c:"NGO",n:"Nagoya"},{c:"CTS",n:"Sapporo"},
-  {c:"SIN",n:"Singapour Changi"},{c:"KUL",n:"Kuala Lumpur"},{c:"BKK",n:"Bangkok Suvarnabhumi"},
-  {c:"DMK",n:"Bangkok Don Mueang"},{c:"HKT",n:"Phuket"},{c:"CNX",n:"Chiang Mai"},
-  {c:"CGK",n:"Jakarta Soekarno Hatta"},{c:"DPS",n:"Bali Ngurah Rai"},{c:"SUB",n:"Surabaya"},
-  {c:"MNL",n:"Manille Ninoy Aquino"},{c:"CEB",n:"Cebu"},{c:"SGN",n:"Ho Chi Minh Tan Son Nhat"},
-  {c:"HAN",n:"Hanoi Noi Bai"},{c:"DAD",n:"Da Nang"},{c:"REP",n:"Siem Reap"},
-  {c:"PNH",n:"Phnom Penh"},{c:"RGN",n:"Rangoun Yangon"},{c:"ULN",n:"Oulan-Bator"},
-  // AMERIQUE DU NORD
-  {c:"JFK",n:"New York Kennedy"},{c:"LGA",n:"New York La Guardia"},{c:"EWR",n:"Newark Liberty"},
-  {c:"BOS",n:"Boston Logan"},{c:"PHL",n:"Philadelphia"},{c:"DCA",n:"Washington Reagan"},
-  {c:"IAD",n:"Washington Dulles"},{c:"BWI",n:"Baltimore Washington"},
-  {c:"ATL",n:"Atlanta Hartsfield Jackson"},{c:"MIA",n:"Miami"},{c:"FLL",n:"Fort Lauderdale"},
-  {c:"MCO",n:"Orlando"},{c:"TPA",n:"Tampa"},{c:"CLT",n:"Charlotte Douglas"},
-  {c:"ORD",n:"Chicago O Hare"},{c:"MDW",n:"Chicago Midway"},{c:"DTW",n:"Detroit Metropolitan"},
-  {c:"MSP",n:"Minneapolis Saint Paul"},{c:"STL",n:"Saint Louis Lambert"},
-  {c:"DFW",n:"Dallas Fort Worth"},{c:"IAH",n:"Houston George Bush"},
-  {c:"HOU",n:"Houston Hobby"},{c:"PHX",n:"Phoenix Sky Harbor"},
-  {c:"LAX",n:"Los Angeles International"},{c:"SFO",n:"San Francisco"},
-  {c:"SJC",n:"San Jose"},{c:"OAK",n:"Oakland"},{c:"SEA",n:"Seattle Tacoma"},
-  {c:"PDX",n:"Portland"},{c:"LAS",n:"Las Vegas McCarran"},{c:"DEN",n:"Denver"},
-  {c:"SLC",n:"Salt Lake City"},{c:"SAN",n:"San Diego"},
-  {c:"YYZ",n:"Toronto Pearson"},{c:"YUL",n:"Montreal Trudeau"},{c:"YVR",n:"Vancouver"},
-  {c:"YYC",n:"Calgary"},{c:"YEG",n:"Edmonton"},{c:"YOW",n:"Ottawa"},
-  {c:"MEX",n:"Mexico Benito Juarez"},{c:"CUN",n:"Cancun"},{c:"GDL",n:"Guadalajara"},
-  {c:"MTY",n:"Monterrey"},{c:"PTY",n:"Panama City Tocumen"},
-  {c:"BOG",n:"Bogota El Dorado"},{c:"MDE",n:"Medellin"},{c:"LIM",n:"Lima Jorge Chavez"},
-  {c:"GRU",n:"Sao Paulo Guarulhos"},{c:"CGH",n:"Sao Paulo Congonhas"},
-  {c:"GIG",n:"Rio de Janeiro Galeao"},{c:"SDU",n:"Rio de Janeiro Santos Dumont"},
-  {c:"BSB",n:"Brasilia"},{c:"SSA",n:"Salvador Bahia"},{c:"REC",n:"Recife"},
-  {c:"FOR",n:"Fortaleza"},{c:"CWB",n:"Curitiba"},{c:"EZE",n:"Buenos Aires Ezeiza"},
-  {c:"AEP",n:"Buenos Aires Aeroparque"},{c:"SCL",n:"Santiago de Chili"},
-  {c:"GYE",n:"Guayaquil"},{c:"UIO",n:"Quito"},{c:"CCS",n:"Caracas"},
-  {c:"HAV",n:"La Havane Jose Marti"},
-  // OCEANIE
-  {c:"SYD",n:"Sydney Kingsford Smith"},{c:"MEL",n:"Melbourne"},{c:"BNE",n:"Brisbane"},
-  {c:"PER",n:"Perth"},{c:"ADL",n:"Adelaide"},{c:"CNS",n:"Cairns"},
-  {c:"AKL",n:"Auckland"},{c:"CHC",n:"Christchurch"},{c:"WLG",n:"Wellington"},
-  {c:"NAN",n:"Nadi Fidji"},{c:"PPT",n:"Papeete Tahiti"}
-];
+// L'ancienne liste WORLD_AIRPORTS (310 codes IATA) est remplacée par aeroports.json (liste unique, 05/10/2026).
 
 
+// Champ aéroport du formulaire Vol (05/10/2026) : même liste et même comportement que le module Commercial.
+// Liste unique : aeroports.json (fusion du 05/10/2026). Choix OBLIGATOIRE dans la liste (aucune saisie libre),
+// affichage en majuscules. La valeur enregistrée reste le code IATA (champs from / to des vols).
+function useAeroports(){
+  const [apts,setApts]=useState(COM_APTS);
+  useEffect(()=>{ let vivant=true; if(!apts) comAeroports().then(a=>{ if(vivant) setApts(a); }); return ()=>{ vivant=false; }; },[]);
+  return apts;
+}
 function FAirport({ label, value, onChange }) {
-  const [q, setQ]   = useState(value||"");
-  const [open,setO] = useState(false);
-  // Valeur changée de l'extérieur (pré-remplissage, remise à zéro après enregistrement) : le champ suit.
-  // Pendant la frappe, la valeur reçue est la saisie en majuscules : rien ne bouge.
-  useEffect(()=>{ if(String(value||"")!==String(q||"").toUpperCase()) setQ(value||""); },[value]);
-  const res = q.length>=2
-    ? WORLD_AIRPORTS.filter(a=>a.c.toUpperCase().startsWith(q.toUpperCase())||a.n.toLowerCase().includes(q.toLowerCase())).slice(0,8)
-    : [];
-  const pick = c => { onChange(c); setQ(c); setO(false); };
-  const icaoKnown = q.length >= 3;
+  const apts=useAeroports();
+  const [q,setQ]=useState(null);           // null : champ fermé ; texte : recherche en cours
+  const cur=(apts||[]).find(a=>a.iata===String(value||"").toUpperCase())||null;
+  const lib=cur?(cur.ville+" ("+cur.iata+" / "+cur.icao+")").toUpperCase():String(value||"").toUpperCase();
+  const R=q===null?[]:(q.trim()?comAptSearch(apts,q):(apts||[]).filter(a=>a.pays==="Maroc").sort((a,b)=>a.ville.localeCompare(b.ville)));
+  const pick=a=>{ onChange(a.iata); setQ(null); };
   return (
     <div style={{ position:"relative" }}>
       <FLabel>{label}</FLabel>
-      <input value={q}
-        onChange={e=>{setQ(e.target.value);setO(true);onChange(e.target.value.toUpperCase());}}
-        onFocus={()=>setO(true)} onBlur={()=>setTimeout(()=>setO(false),150)}
-        style={{ width:"100%", height:48, boxSizing:"border-box", background:C.bg,
-                 border:"1.5px solid "+C.border, borderRadius:10, padding:"0 14px",
-                 color:C.text, fontSize:14, outline:"none" }}/>
-      {icaoKnown && <FlightCatBadge iata={q.toUpperCase()}/>}
-      {open&&res.length>0&&(
-        <div style={{ position:"absolute", top:76, left:0, right:0, zIndex:999,
-                      background:"white", border:"1.5px solid "+C.gold, borderRadius:10,
-                      boxShadow:"0 4px 20px rgba(0,0,0,.15)", maxHeight:220, overflowY:"auto" }}>
-          {res.map(a=>(
-            <button key={a.c} onMouseDown={()=>pick(a.c)}
-              style={{ width:"100%", background:"none", border:"none", padding:"10px 14px",
-                       cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center",
-                       gap:10, borderBottom:"1px solid "+C.bg, ...NOTAP }}>
-              <span style={{ fontWeight:800, fontSize:14, color:C.navy, fontFamily:"monospace", minWidth:36 }}>{a.c}</span>
-              <span style={{ fontSize:12, color:C.slate }}>{a.n}</span>
-            </button>
+      <input value={q===null?lib:q} placeholder="Ville, code IATA ou OACI" autoCapitalize="characters"
+        onFocus={()=>setQ("")} onChange={e=>setQ(e.target.value)}
+        onBlur={()=>setTimeout(()=>setQ(null),200)}      // sans choix dans la liste, la valeur précédente est gardée
+        style={{ width:"100%", height:48, boxSizing:"border-box", background:C.bg, border:"1.5px solid "+C.border, borderRadius:10,
+                 padding:"0 14px", color:C.navy, fontSize:14, fontWeight:700, textTransform:"uppercase", outline:"none" }}/>
+      {cur&&<FlightCatBadge iata={cur.iata}/>}
+      {q!==null&&q.trim().length>=2&&!R.length&&<div style={{fontSize:11.5,color:"#B91C1C",marginTop:4}}>Aucun aéroport de la liste ne correspond.</div>}
+      {q!==null&&R.length>0&&(
+        <div style={{ position:"absolute", top:76, left:0, right:0, zIndex:999, background:"white", border:"1.5px solid "+C.gold, borderRadius:10,
+                      boxShadow:"0 4px 20px rgba(0,0,0,.15)", maxHeight:260, overflowY:"auto" }}>
+          {R.map(a=>(
+            <div key={a.icao} role="button" onMouseDown={e=>{ e.preventDefault(); pick(a); }}
+              style={{ padding:"9px 12px", borderBottom:"1px solid "+C.bg, fontSize:12.5, cursor:"pointer", ...NOTAP,
+                       background:cur&&cur.icao===a.icao?"#E0F4F8":"white" }}>
+              <b style={{color:C.navy}}>{(a.ville+" — "+a.nom).toUpperCase()}</b> <span style={{ fontSize:11, color:C.slate }}>{a.iata} / {a.icao} · {a.pays}</span>
+            </div>
           ))}
         </div>
       )}
