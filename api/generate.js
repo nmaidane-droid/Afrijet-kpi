@@ -1,9 +1,13 @@
 // Relais vers l'API Anthropic pour le générateur de notes de service.
 // Le streaming évite la coupure des plans limités en durée : la réponse
 // commence à arriver immédiatement au lieu d'attendre la génération complète.
+// 05/10/2026 : origine et session vérifiées, comme les autres fonctions (avant, n'importe qui connaissant
+// l'adresse pouvait utiliser la clé Anthropic) ; longueur de réponse plafonnée.
+import { lire, originOk } from './auth.js';
 export const config = {
   maxDuration: 60,
 };
+export const MAX_TOKENS = 8000;
 
 // Délai de garde : la génération est abandonnée proprement à 55 s, avant la coupure de la fonction (60 s).
 export const DELAI_MS = 55000;
@@ -12,9 +16,14 @@ const TROP_LONG = { type: 'timeout', message: 'Génération trop longue : réess
 export default async function handler(req, res) {
   const ctl = new AbortController(), minuterie = setTimeout(() => ctl.abort(), DELAI_MS);
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
+    clearTimeout(minuterie); res.status(405).json({ error: 'Method not allowed' });
     return;
   }
+  if (!originOk(req)) { clearTimeout(minuterie); res.status(403).json({ error: { type: 'origine', message: 'Origine non autorisée.' } }); return; }
+  { const b = typeof req.body === 'string' ? (() => { try { return JSON.parse(req.body); } catch { return {}; } })() : (req.body || {});
+    const p = process.env.SESSION_SECRET ? lire(b.token, process.env.SESSION_SECRET) : null;
+    if (!p || p.etape) { clearTimeout(minuterie); res.status(401).json({ error: { type: 'session', message: 'Session expirée : reconnectez-vous.' } }); return; }
+    req.body = b; }
 
   try {
     const { system, messages, max_tokens, stream } = req.body || {};
@@ -36,7 +45,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: max_tokens || 1000,
+        max_tokens: Math.min(Number(max_tokens) || 1000, MAX_TOKENS),
         system,
         messages,
         ...(wantStream ? { stream: true } : {})

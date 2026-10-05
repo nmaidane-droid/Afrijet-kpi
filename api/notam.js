@@ -15,7 +15,8 @@ import { lire, originOk } from "./auth.js";
 export const config = { maxDuration: 10 };
 
 const PFX = "ajs135v1_";
-export const MARGE_MIN = 60;          // ± 60 min autour du départ et de l'arrivée (décision du 01/10/2026)
+// Marge de ± 60 min autour du départ et de l'arrivée (décision du 01/10/2026) : appliquée par la page
+// (NOTAM_MARGE, index.html), qui calcule les fenêtres envoyées ici.
 export const HORIZON_H = 72;          // vérification quotidienne : vols des 72 prochaines heures
 export const CACHE_MIN = 30;          // une requête par aéroport au plus toutes les 30 min
 export const QUOTA = 1000;            // offre gratuite SkyLink : 1 000 requêtes par mois
