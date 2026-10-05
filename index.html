@@ -9324,10 +9324,18 @@ function ComTableau({ com, flights }){
 }
 
 // ── Screens ──────────────────────────────────────────────────────────────────
-function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading, flights, aircraft }) {
+function ScreenLive({ ac, moroccoTraffic, icao24, setIcao24, onRefresh, loading, flights, aircraft, liveMaj }) {
   const selAc = aircraft?.find(a=>a.icao24===icao24)||aircraft?.[0];
+  const hms=t=>t?new Date(t).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"";
+  const lm=liveMaj||{};
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* Position simulée : Flightradar24 n'a rien renvoyé pour cet avion */}
+      {ac&&ac.simulated&&<div role="status" style={{background:"#FEF3C7",border:"1.5px solid #D97706",borderRadius:12,padding:"10px 12px",fontSize:12.5,lineHeight:1.45,color:"#78350F"}}>
+        <b>Position simulée</b> : {selAc?.immat||icao24} non trouvé sur Flightradar24 (avion au sol, ou jeton Flightradar24 à vérifier). Le trafic affiché est aussi simulé.
+        <div style={{marginTop:4,fontSize:11.5}}>{lm.reel?"Dernière position réelle : "+hms(lm.reel):"Aucune position réelle depuis l'ouverture de l'application."}</div>
+      </div>}
+      {lm.lu&&<div style={{fontSize:11,color:C.slate,textAlign:"center"}}>Actualisé à {hms(lm.lu)} · automatiquement toutes les 30 s</div>}
       {/* Aircraft selector */}
       {aircraft&&aircraft.length>0&&(
         <div>
@@ -13311,10 +13319,16 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
 
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),30000);return()=>clearInterval(t);},[]);
 
+  // Onglet Live : heure de la dernière lecture, et de la dernière position réelle (Flightradar24)
+  const [liveMaj,setLiveMaj] = useState({lu:null,reel:null});
+  const liveEnCours = useRef(false);
   const refresh = async () => {
+    if(liveEnCours.current) return;      // pas deux lectures en même temps
+    liveEnCours.current=true;
     setLoading(true);
     try {
       const st = await fetchByIcao24(icao24);
+      setLiveMaj(m=>({lu:Date.now(),reel:st?Date.now():m.reel}));
       let posLat = 32.0, posLon = -6.0; // fallback default (Morocco) if no position known yet
       if(st){
         const p=parseState(st);
@@ -13331,9 +13345,20 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
       setMTraff(tr);
     } catch(_e){setAc(simulateFlightState(icao24));}
     setLoading(false);
+    liveEnCours.current=false;
   };
 
   useEffect(()=>{refresh();},[icao24]);
+  // Actualisation automatique toutes les 30 s, seulement onglet Live affiché et application au premier plan
+  // (chaque lecture fait deux appels à Flightradar24, facturés à la requête)
+  useEffect(()=>{
+    if(tab!=="live") return;
+    const tick=()=>{ if(document.visibilityState==="visible") refresh(); };
+    const t=setInterval(tick,30000);
+    const vis=()=>{ if(document.visibilityState==="visible") tick(); };   // retour au premier plan : lecture immédiate
+    document.addEventListener("visibilitychange",vis);
+    return ()=>{ clearInterval(t); document.removeEventListener("visibilitychange",vis); };
+  },[tab,icao24]);
 
   const doReset = () => {
     auditLog("effacement","toutes les données","effacement des données",{motif:[null,"Bouton Effacer (Administrateur)"]});
@@ -13451,7 +13476,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           ndsArchive={ndsArchive} setNdsArchive={setNdsArchive}
           onImport={onImport}
         />}
-        {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
+        {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft} liveMaj={liveMaj}/>}
         {tab==="alertes" && <ScreenAlertes frats={sgsFrat} sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew} notamAl={notamAl} setFrats={setSgsFrat} profileId={profileId}/>}
         {tab==="ops"     && <ScreenOps frats={sgsFrat} canClose={profileId==="eqp"&&["TRI","CM1","CM2"].includes((sgsCurrentUser()||{}).role||"CM1")} flights={flights} satis={satis} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>(x.id&&u.id)?(x.id===u.id?u:x):((x.num===u.num&&x.date===u.date&&x.dep===u.dep)?u:x)))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>(x.id&&f.id)?x.id!==f.id:!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
