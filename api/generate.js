@@ -4,13 +4,15 @@
 // 05/10/2026 : origine et session vérifiées, comme les autres fonctions (avant, n'importe qui connaissant
 // l'adresse pouvait utiliser la clé Anthropic) ; longueur de réponse plafonnée.
 import { lire, originOk } from './auth.js';
+// 300 s : maximum autorisé par Vercel avec Fluid compute, y compris sur l'offre Hobby (60 s auparavant :
+// les notes longues, plus d'une minute de génération, étaient coupées — journaux du 05/10/2026).
 export const config = {
-  maxDuration: 60,
+  maxDuration: 300,
 };
 export const MAX_TOKENS = 8000;
 
-// Délai de garde : la génération est abandonnée proprement à 55 s, avant la coupure de la fonction (60 s).
-export const DELAI_MS = 55000;
+// Délai de garde : la génération est abandonnée proprement à 290 s, avant la coupure de la fonction (300 s).
+export const DELAI_MS = 290000;
 const TROP_LONG = { type: 'timeout', message: 'Génération trop longue : réessayez, ou raccourcissez la demande.' };
 
 export default async function handler(req, res) {
