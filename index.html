@@ -1736,7 +1736,10 @@ const INIT_FLIGHTS = (()=>{ const d=n=>{ const x=new Date(); x.setDate(x.getDate
   {id:"F161",num:"CN-KTA",from:"CMN",to:"TNG",dep:"15:00",arr:"15:50",clientId:"C002",status:"Planifie",date:d(-3),acId:"AC001",sieges:18,type:"COM",cm1:"BENALI OMAR",cm2:"IDRISSI OMAR",cc:"BENNANI SARA",pax:4,load:22,depReal:"",arrReal:"",takeOff:"",landing:"",carbDep:0,carbArr:0,consomme:0,consoH:0,fuelPct:0,delayMin:0,causeRetard:"",dureeMin:null,flightMin:null,nps:null},
   {id:"F162",num:"CN-KTA",from:"CMN",to:"NDR",dep:"15:00",arr:"16:25",clientId:"C003",status:"Planifie",date:d(-4),acId:"AC001",sieges:18,type:"COM",cm1:"CHERKAOUI SAID",cm2:"FASSI AMINE",cc:"CHRAIBI NADIA",pax:18,load:100,depReal:"",arrReal:"",takeOff:"",landing:"",carbDep:0,carbArr:0,consomme:0,consoH:0,fuelPct:0,delayMin:0,causeRetard:"",dureeMin:null,flightMin:null,nps:null},
   {id:"F163",num:"CN-KTA",from:"CMN",to:"FEZ",dep:"09:00",arr:"09:55",clientId:"C001",status:"Planifie",date:d(-6),acId:"AC001",sieges:18,type:"COM",cm1:"CHERKAOUI SAID",cm2:"TAZI YOUSSEF",cc:"CHRAIBI NADIA",pax:10,load:56,depReal:"",arrReal:"",takeOff:"",landing:"",carbDep:0,carbArr:0,consomme:0,consoH:0,fuelPct:0,delayMin:0,causeRetard:"",dureeMin:null,flightMin:null,nps:null}
-];})();
+].map(({type,...f})=>({...f,flightType:f.flightType||{COM:"Commercial",FRY:"Ferry",POS:"Positioning"}[type]||"Commercial"}));
+  // Type de vol dans flightType (Commercial, Ferry, Positioning), comme le formulaire Vol : ces données portaient
+  // « type » (COM, FRY, POS) et tout comptait en commercial dans Perf. (corrigé le 05/10/2026)
+})();
 // Enquêtes de satisfaction de démonstration : calculées sur les vols terminés récents
 const INIT_SAT = (()=>{
   const items=["Accueil au sol","Rapidité de l'enregistrement","Information sur le vol","Processus d'embarquement",
