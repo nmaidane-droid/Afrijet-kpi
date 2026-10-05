@@ -4,6 +4,7 @@ import fr24 from "../api/fr24.js";
 import wx from "../api/wx.js";
 import generate, { DELAI_MS } from "../api/generate.js";
 import { verifierFenetres, DELAI_SOURCE_MS } from "../api/notam.js";
+import { signer } from "../api/auth.js";
 let ok = 0, ko = 0;
 const test = (n, f) => { try { const r = f(); if (r === false) throw new Error("faux"); console.log("  ✓", n); ok++; } catch (e) { console.log("  ✗", n, "\n     ", e.message); ko++; } };
 const att = (c, m) => { if (!c) throw new Error(m || "faux"); };
@@ -19,7 +20,8 @@ const abandon = () => Object.assign(new Error("This operation was aborted"), { n
 // Service qui ne répond jamais, mais respecte l'abandon
 const muet = (url, opt) => new Promise((_, rej) => { if (opt && opt.signal) opt.signal.addEventListener("abort", () => rej(abandon())); });
 
-process.env.FR24_TOKEN = "j"; process.env.CHECKWX_KEY = "k"; process.env.ANTHROPIC_API_KEY = "a"; delete process.env.ALLOWED_ORIGIN;
+process.env.FR24_TOKEN = "j"; process.env.CHECKWX_KEY = "k"; process.env.ANTHROPIC_API_KEY = "a"; process.env.SESSION_SECRET = "s"; delete process.env.ALLOWED_ORIGIN;
+const JETON = signer({ uid: "U1", profil: "sgs", exp: Math.floor(Date.now() / 1e3) + 600 }, "s");
 
 console.log("\nDélais de garde");
 global.fetch = muet;
@@ -29,7 +31,7 @@ t0 = Date.now(); r = mkRes(); await wx({ headers: {}, query: { icao: "GMMN" } },
 test("CheckWX muet : réponse 504 avec message", () => att(r.code === 504 && /pas répondu à temps/.test(r.body.error) && Date.now() - t0 < 1000));
 test("Délais choisis sous les limites des fonctions (8 s < 10 s, 55 s < 60 s, 4 s en parallèle < 10 s)", () => att(DELAI_MS === 55000 && DELAI_SOURCE_MS === 4000));
 
-r = mkRes(); await generate({ method: "POST", body: { messages: [{ role: "user", content: "x" }] } }, r);
+r = mkRes(); await generate({ method: "POST", body: { messages: [{ role: "user", content: "x" }], token: JETON } }, r);
 test("IA muette (sans flux) : 504, message clair lisible par la page", () => att(r.code === 504 && /trop longue/.test(r.body.error.message)));
 
 // Flux commencé puis bloqué : la génération s'arrête par un événement d'erreur
@@ -38,7 +40,7 @@ global.fetch = async (url, opt) => ({ ok: true, status: 200, body: { getReader: 
   return { read: () => premier ? (premier = false, Promise.resolve({ done: false, value: new TextEncoder().encode('data: {"type":"content_block_delta","delta":{"text":"Début"}}\n\n') }))
     : new Promise((_, rej) => opt.signal.addEventListener("abort", () => rej(abandon()))) };
 } } });
-r = mkRes(); await generate({ method: "POST", body: { stream: true, messages: [{ role: "user", content: "x" }] } }, r);
+r = mkRes(); await generate({ method: "POST", body: { stream: true, messages: [{ role: "user", content: "x" }], token: JETON } }, r);
 test("IA bloquée en cours de flux : le flux se termine par un événement d'erreur", () => att(r.ecrit.includes("Début") && /event: error\ndata: .*"type":"error".*trop longue/.test(r.ecrit) && r.fini));
 
 // NOTAM : deux aéroports lus en même temps ; l'un muet → doute pour lui seul
@@ -59,6 +61,15 @@ appels = [];
 await verifierFenetres([{ oaci: "GMMH", debut: T - 3.6e6, fin: T + 3.6e6, role: "depart" }, { oaci: "GMMH", debut: T, fin: T + 7.2e6, role: "arrivee" }], { cache: {}, quota: {}, modifie: false });
 test("NOTAM : un même aéroport n'est demandé qu'une fois", () => att(appels.length === 1));
 
+// Générateur IA : session obligatoire (05/10/2026)
+global.fetch = async () => { throw new Error("ne doit pas être appelé"); };
+r = mkRes(); await generate({ method: "POST", headers: {}, body: { messages: [{ role: "user", content: "x" }] } }, r);
+test("Générateur IA sans session : refusé (401), Anthropic jamais appelé", () => att(r.code === 401 && /Session expirée/.test(r.body.error.message)));
+r = mkRes(); await generate({ method: "POST", headers: {}, body: { messages: [], token: "faux" } }, r);
+test("Générateur IA avec un faux jeton : refusé", () => att(r.code === 401));
+let envoye = null; global.fetch = async (u, o) => { envoye = JSON.parse(o.body); return { ok: true, status: 200, json: async () => ({ content: [{ text: "ok" }] }) }; };
+r = mkRes(); await generate({ method: "POST", headers: {}, body: { max_tokens: 999999, messages: [{ role: "user", content: "x" }], token: JETON } }, r);
+test("Générateur IA avec session : accepté, longueur plafonnée, jeton non transmis à Anthropic", () => att(r.code === 200 && envoye.max_tokens === 8000 && !("token" in envoye)));
 global.setTimeout = vraiSetTimeout;
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 if (ko) process.exit(1);

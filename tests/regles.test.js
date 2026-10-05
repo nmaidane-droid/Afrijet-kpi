@@ -589,5 +589,13 @@ test("Formulaire Vol : plus d'ancienne liste d'aéroports, choix dans la liste u
 test("Météo : plus de table IATA → OACI, code OACI tiré de la liste unique", ()=>attendu(!/const IATA_TO_ICAO\s*=/.test(code) && /function useMetar\([\s\S]{0,600}comAeroports\(\)/.test(code), 'table météo'));
 test("Cadre NOTAM : réponse vide de la source signalée", ()=>attendu(/Aucun NOTAM fourni par la source pour/.test(code), 'mention absente'));
 
+// ── Audit du 05/10/2026 ──
+console.log('\nAudit (05/10/2026)');
+test("Export complet : flotte, MEL résolues, historique des alertes, avion Live, sous-traitants", ()=>{ const m=code.match(/const doExport=async\(\)=>\{[\s\S]{0,2500}?\n    \};/); attendu(m && ['aircraft','melHist','alertHist','icao24','sgsSt:sgs.reg.st'].every(k=>m[0].includes(k)), 'clé absente de l\'export'); });
+test("Export : toutes les données exportées sont bien reçues par l'écran Formulaires", ()=>{ const sig=(code.match(/function ScreenForms\(\{([^}]*)\}/)||[])[1]||""; attendu(['aircraft','melHist','alertHist','icao24'].every(k=>new RegExp('\\b'+k+'\\b').test(sig)), 'paramètre manquant'); });
+test("Restore : avion suivi dans Live rechargé", ()=>attendu(/if\(data\.icao24\) setIcao24\(data\.icao24\)/.test(code), 'icao24'));
+test("Code mort retiré (randomToken, satNote10)", ()=>attendu(!/function randomToken\(/.test(code) && !/const satNote10=/.test(code), 'code mort'));
+test("Générateur IA : le jeton de session est envoyé par les 4 appels", ()=>attendu((code.match(/fetch\("\/api\/generate"[\s\S]{0,160}?token:sessionToken\(\)/g)||[]).length===4, 'jeton absent'));
+
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
