@@ -202,7 +202,11 @@ async function notamsDe(oaci, etat) {
   etat.quota.n++; etat.modifie = true;
   try {
     const r = await fetch(url, { signal: ctl.signal, headers: { "x-rapidapi-key": process.env.NOTAM_API_KEY, "x-rapidapi-host": new URL(url).host, "x-api-key": process.env.NOTAM_API_KEY } });
-    if (!r.ok) throw new Error("source NOTAM : " + r.status);
+    if (!r.ok) {
+      const e = new Error(r.status === 429 ? "la source NOTAM est momentanément saturée (trop de demandes) : réessayez dans une minute" : "source NOTAM : " + r.status);
+      e.status = r.status; e.attente = Math.min(2000, Math.max(800, (+(r.headers && r.headers.get && r.headers.get("retry-after")) || 1) * 1000));
+      throw e;
+    }
     const j = await r.json();
     if (!j || !Array.isArray(j.notams)) throw new Error("réponse NOTAM inattendue");
     etat.cache[oaci] = { lu: Date.now(), notams: j.notams };
@@ -223,13 +227,22 @@ async function sauverEtat(etat) {
 }
 
 // Lecture simultanée des aéroports (une seule requête par aéroport) ; une erreur est gardée par aéroport
-export async function precharger(oacis, etat) {
+export async function precharger(oacis, etat, pause = ms => new Promise(r => setTimeout(r, ms))) {
   etat.lus = etat.lus || {};
+  const limite = Date.now() + 8000;                         // rester sous la coupure de la fonction (10 s)
   const manquants = [...new Set((oacis || []).filter(Boolean))].filter(o => !(o in etat.lus));
-  await Promise.all(manquants.map(async o => {
+  const lire = async o => {
     try { etat.lus[o] = { ok: true, ...(await notamsDe(o, etat)) }; }
-    catch (e) { etat.lus[o] = { ok: false, erreur: e && e.name === "AbortError" ? "la source NOTAM n'a pas répondu à temps" : String(e.message || e) }; }
-  }));
+    catch (e) { etat.lus[o] = { ok: false, status: e && e.status, attente: e && e.attente,
+      erreur: e && e.name === "AbortError" ? "la source NOTAM n'a pas répondu à temps" : String(e.message || e) }; }
+  };
+  await Promise.all(manquants.map(lire));
+  // Refus « trop de demandes » (429) : on attend le délai demandé, puis on réessaie UNE fois, un aéroport après l'autre
+  for (const o of manquants.filter(o => etat.lus[o].status === 429)) {
+    const w = etat.lus[o].attente || 1000;
+    if (Date.now() + w + DELAI_SOURCE_MS > limite) break;
+    await pause(w); await lire(o);
+  }
 }
 // Vérification d'une liste de fenêtres
 export async function verifierFenetres(fenetres, etat) {
@@ -238,7 +251,8 @@ export async function verifierFenetres(fenetres, etat) {
     if (!f.oaci) return { ...f, statut: "doute", motif: "aéroport " + (f.iata || "?") + " inconnu de la liste des aéroports", notams: [], lu: null };
     const l = etat.lus[f.oaci];
     if (!l || !l.ok) return { ...f, statut: "doute", motif: "vérification impossible : " + (l ? l.erreur : "lecture absente"), notams: [], lu: null };
-    return { ...f, ...evaluer(l.notams, f), lu: l.lu };
+    // Réponse vide de la source (aucun NOTAM, même de FIR) : feu vert possible, mais signalé à l'écran
+    return { ...f, ...evaluer(l.notams, f), lu: l.lu, vide: !(l.notams && l.notams.length) };
   });
 }
 
