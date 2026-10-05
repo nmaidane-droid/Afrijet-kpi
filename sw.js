@@ -95,3 +95,30 @@ self.addEventListener('fetch', e => {
 self.addEventListener('message', e => {
   if (e.data === 'skip-waiting') self.skipWaiting();
 });
+
+// ── Notifications (2.20, 05/10/2026) : chaîne du FRAT rouge ─────────────────────────────────────────
+// Le serveur réveille le téléphone sans contenu ; le service worker vient chercher ses messages
+// (api/push.js, op « boite ») puis les affiche. Toucher une notification ouvre l'onglet Alertes.
+self.addEventListener('push', e => {
+  e.waitUntil((async () => {
+    let messages = [];
+    try {
+      const sub = await self.registration.pushManager.getSubscription();
+      const r = await fetch('/api/push', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'boite', endpoint: sub ? sub.endpoint : '' }) });
+      messages = (await r.json()).messages || [];
+    } catch (_e) { /* réseau absent : notification générique ci-dessous */ }
+    if (!messages.length) messages = [{ titre: 'Afrijet KPI', corps: 'Nouvelle alerte FRAT : ouvrez l\'application.', tag: 'frat', url: '/?tab=alertes' }];
+    await Promise.all(messages.map(m => self.registration.showNotification(m.titre, {
+      body: m.corps, tag: m.tag || 'frat', renotify: true, data: { url: m.url || '/?tab=alertes' } })));
+  })());
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/?tab=alertes';
+  e.waitUntil((async () => {
+    const fen = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of fen) { if ('focus' in c) { c.postMessage({ type: 'ouvrir', url }); return c.focus(); } }
+    return self.clients.openWindow(url);
+  })());
+});

@@ -1370,6 +1370,10 @@ function computeAlerts(kpis, flights, maintData, aircraft, crew, sgsRed, frats, 
     a.push({id:"notam-"+(x.volId||x.num+x.date)+"-"+(x.notams||[]).map(n=>n.id).join("."), sev:x.statut==="ferme"?"danger":"warn", icon:x.statut==="ferme"?"⛔":"⚠️",
       msg:(x.statut==="ferme"?"NOTAM — nouvelle fermeture sur le vol ":"NOTAM à confirmer par les Opérations — vol ")+x.num+" du "+fr(x.date)+" ("+x.from+" → "+x.to+") — "+(x.motif||(x.notams||[]).map(n=>n.id).join(", "))});
   });
+  // Vol refusé par le commandant après un FRAT rouge : à replanifier (jusqu'à la date du vol)
+  (frats||[]).filter(f=>f.cdbDecision==='refus'&&String(f.date||'')>=new Date().toISOString().slice(0,10)).forEach(f=>{
+    a.push({id:"cdbrefus-"+f.id, sev:"danger", icon:"✋", msg:"Vol refusé par le commandant — "+(f.vol||'')+" ("+(f.cdbPar||'CM1')+") : à replanifier. Motif : "+(f.cdbMotif||'')});
+  });
   // FRAT rouge : le vol attend des barrières, puis la décision du Dirigeant Responsable
   (frats||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&!f.decision2).forEach(f=>{
     const barres=(f.barrieresTxt||'').trim();
@@ -4174,6 +4178,8 @@ function fratPdf(f){
       (f.barrieresPar||"")+(f.barrieresLe?" · "+sgsFr(String(f.barrieresLe).slice(0,10)):""));
     if(f.decision2) bloc(f.decision2==='autorise'?"Vol autorisé":"Vol reporté", f.motifDecision+(f.decision2==='autorise'?"\nLe commandant de bord conserve la décision finale d'effectuer le vol.":""),
       (f.decisionPar||"")+(f.decisionLe?" · "+sgsFr(String(f.decisionLe).slice(0,10)):""));
+    if(f.cdbDecision) bloc(f.cdbDecision==='depart'?"Départ confirmé par le commandant":f.cdbDecision==='refus'?"Vol refusé par le commandant":"Prise de connaissance du commandant",
+      f.cdbDecision==='refus'?f.cdbMotif:"-", (f.cdbPar||"")+(f.cdbLe?" · "+sgsFr(String(f.cdbLe).slice(0,10))+" "+String(f.cdbLe).slice(11,16):""));
     else if(coul==='rouge') bloc("Décision", "En attente — "+((f.barrieresTxt||'').trim()?"décision du Dirigeant Responsable ou de l'Administrateur":"barrières à établir par les Opérations"));
     if(y>H-28){ doc.addPage(); y=entete(); }
     y+=4;
@@ -4263,6 +4269,60 @@ const FRAT_ETAT_L={barrieres:['En attente de barrières','#FAEEDA','#92400E'],
   autorise:['Vol autorisé','#E7F6F0','#047857'],
   reporte:['Vol reporté','#F1F5F9','#475569']};
 
+// Réponse du commandant après la décision sur un FRAT rouge (05/10/2026)
+// Encadré « Recevoir les alertes FRAT sur ce téléphone » (une fois par téléphone)
+function PushCarte({ profileId }){
+  const lu=k=>{ try{ return localStorage.getItem(PFX+k); }catch(_e){ return null; } };
+  const [cache,setCache]=useState(()=>lu("push_actif")==="1"||lu("push_plus_tard")===new Date().toISOString().slice(0,10));
+  const [enCours,setEnCours]=useState(false);
+  if(cache||!PUSH_PROFILS.includes(profileId)) return null;
+  if(typeof Notification!=="undefined"&&Notification.permission==="granted"&&lu("push_actif")==="1") return null;
+  return (
+    <div style={{border:"2px solid #0369A1",background:"#F0F9FF",borderRadius:14,padding:"13px 14px",fontSize:12.5,lineHeight:1.45,color:"#0C4A6E"}}>
+      <div style={{fontWeight:800,fontSize:14}}>🔔 Recevoir les alertes FRAT sur ce téléphone</div>
+      <div style={{marginTop:4}}>{profileId==="eqp"?"Vous serez prévenu de la décision sur vos FRAT rouges, même application fermée.":profileId==="ops"?"Vous serez prévenu de chaque FRAT rouge à traiter, même application fermée.":profileId==="sgs"?"Vous serez prévenu de chaque FRAT rouge et de chaque refus de vol.":"Vous serez prévenu quand une décision sur un FRAT rouge est attendue."}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1.6fr",gap:8,marginTop:10}}>
+        <button onClick={()=>{ try{ localStorage.setItem(PFX+"push_plus_tard",new Date().toISOString().slice(0,10)); }catch(_e){ logSilent(_e); } setCache(true); }}
+          style={{background:"white",border:"1.5px solid #0369A1",color:"#0369A1",borderRadius:10,padding:11,fontWeight:700,fontSize:12.5,...TAP}}>Plus tard</button>
+        <button disabled={enCours} onClick={async()=>{ setEnCours(true); const r=await pushActiver(); setEnCours(false);
+            if(r.ok){ sgsToast("Notifications activées sur ce téléphone"); setCache(true); } else uiAlert("⚠️ "+r.erreur); }}
+          style={{background:"#0369A1",border:"none",color:"white",borderRadius:10,padding:11,fontWeight:800,fontSize:12.5,opacity:enCours?.6:1,...TAP}}>{enCours?"Activation…":"Activer les notifications"}</button>
+      </div>
+    </div>);
+}
+
+function FratCdb({ f, maj }){
+  const [refus,setRefus]=useState(false), [motif,setMotif]=useState("");
+  const u=sgsCurrentUser(), qui=userLabel(u)||"le CM1", le=new Date().toISOString();
+  if(f.decision2==='reporte') return (
+    <SgsBtn l="✓ J'ai pris connaissance" prim full onClick={()=>{ maj({cdbDecision:'vu',cdbPar:qui,cdbLe:le}); sgsToast("Prise de connaissance enregistrée"); }}/>);
+  if(refus) return (
+    <div style={{marginTop:8,background:"#FEF2F2",border:"1.5px solid #DC2626",borderRadius:10,padding:10,color:"#7F1D1D"}}>
+      <div style={{fontWeight:800,fontSize:12.5}}>✋ Refus du vol</div>
+      <textarea aria-label="Motif du refus" rows={3} placeholder="Motif du refus (obligatoire)" value={motif} onChange={e=>setMotif(e.target.value)}
+        style={{...sgsInput,height:"auto",padding:"8px 10px",fontSize:12,marginTop:7}}/>
+      <div style={{fontSize:11,marginTop:6,lineHeight:1.4}}>Les Opérations, le Dirigeant Responsable, l'Administrateur et le SGS seront prévenus. Le vol sera à replanifier.</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:8,marginTop:8}}>
+        <SgsBtn l="Annuler" full onClick={()=>{ setRefus(false); setMotif(""); }}/>
+        <SgsBtn l="Confirmer le refus" prim full onClick={()=>{ const m=motif.trim(); if(m.length<5){ uiAlert("⚠️ Indiquez le motif du refus."); return; }
+          const maj2={cdbDecision:'refus',cdbMotif:m,cdbPar:qui,cdbLe:le}; maj(maj2); notifierFrat("refus",{...f,...maj2}); sgsToast("Refus enregistré — Opérations, Direction et SGS prévenus"); }}/>
+      </div>
+    </div>);
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}}>
+      <SgsBtn l="✋ Je refuse le vol" full onClick={()=>setRefus(true)}/>
+      <SgsBtn l="✓ Je confirme le départ" prim full onClick={()=>{ maj({cdbDecision:'depart',cdbPar:qui,cdbLe:le}); sgsToast("Départ confirmé"); }}/>
+    </div>);
+}
+// Trace de la réponse du commandant, sous la décision
+function FratCdbTrace({ f }){
+  if(!f.cdbDecision) return null;
+  const quand=(f.cdbLe?sgsFr(String(f.cdbLe).slice(0,10))+" "+String(f.cdbLe).slice(11,16):"");
+  const t=f.cdbDecision==='depart'?"✓ Départ confirmé par le CM1 "+f.cdbPar:f.cdbDecision==='refus'?"✋ Vol refusé par le CM1 "+f.cdbPar:"✓ Pris connaissance par le CM1 "+f.cdbPar;
+  return (<div style={{marginTop:8,background:"white",border:"1px solid "+(f.cdbDecision==='refus'?"#FCA5A5":"#86EFAC"),borderRadius:8,padding:"7px 9px",fontSize:11.5,fontWeight:700,color:f.cdbDecision==='refus'?"#7F1D1D":"#14532D"}}>
+    {t} · {quand}{f.cdbDecision==='refus'&&<div style={{fontWeight:400,marginTop:3}}>Motif : {f.cdbMotif}</div>}</div>);
+}
+
 function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
   const [ed,setEd]=useState(null);
   const today=sgsToday(), list=[...(items||[])].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -4273,7 +4333,10 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
     const setRep=(k)=>up(phase===2?{rep2:{...ed.rep2,[k]:!ed.rep2[k]}}:{rep:{...ed.rep,[k]:!ed.rep[k]}});
     const finish=(decision)=>{ if(!ed.vol){ uiAlert("⚠️ Indiquez le vol concerné."); return; }
       const s1=sgsFratScore(ed.rep), it={...ed,score:s1,couleur:sgsFratCouleur(s1),score2:ed.barr!=null?sgsFratScore(ed.rep2):null,couleur2:ed.barr!=null?sgsFratCouleur(sgsFratScore(ed.rep2)):null,decision,createdAt:new Date().toISOString()};
-      setItems(l=>[...(l||[]),{...it,id:'FR'+Date.now(),ref:'FRAT-'+String(ed.date||today).replace(/-/g,'')+'-'+String(1+(items||[]).filter(x=>x.date===ed.date).length).padStart(2,'0')}]);
+      const u0=sgsCurrentUser();
+      const nv={...it,...(u0&&prof==='eqp'?{cm1Uid:u0.id}:{}),id:'FR'+Date.now(),ref:'FRAT-'+String(ed.date||today).replace(/-/g,'')+'-'+String(1+(items||[]).filter(x=>x.date===ed.date).length).padStart(2,'0')};
+      setItems(l=>[...(l||[]),nv]);
+      if((nv.couleur2||nv.couleur)==='rouge') notifierFrat("frat_rouge",nv);      // Opérations et SGS prévenus
       setEd(null); sgsToast("FRAT enregistré · "+SGS_FRAT_DEC[decision]); };
     let g0='';
     return (<Card accent="#0F766E">{!standalone&&<FHeader icon="🧭" title="FRAT — évaluation du risque du vol" subtitle="SGS 02-04 · à remplir par le CM1 avant chaque étape" color="#0F766E"/>}
@@ -4336,7 +4399,8 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
               value={f.brouillon||''} onChange={e=>maj({brouillon:e.target.value})} style={{...sgsInput,height:"auto",padding:"8px 10px",fontSize:12}}/>
             <SgsBtn l="Enregistrer les barrières" full onClick={()=>{ const t=(f.brouillon||'').trim();
               if(t.length<8){ uiAlert("⚠️ Décrivez les barrières retenues."); return; }
-              maj({barrieresTxt:t,brouillon:'',barrieresPar:userLabel(sgsCurrentUser())||'Opérations',barrieresLe:new Date().toISOString()});
+              const mb={barrieresTxt:t,brouillon:'',barrieresPar:userLabel(sgsCurrentUser())||'Opérations',barrieresLe:new Date().toISOString()};
+              maj(mb); notifierFrat("barrieres",{...f,...mb});      // Direction et Administrateur prévenus
               sgsToast("Barrières enregistrées — décision attendue"); }}/></>}
         </div>}
         {et==='decision'&&<div style={{marginTop:8,background:"#FCEBEB",border:"1px solid #DC2626",borderRadius:10,padding:"9px 10px"}}>
@@ -4348,11 +4412,13 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:7}}>
               <SgsBtn l="🚫 Reporter le vol" full onClick={()=>{ const m=(f.brouillon||'').trim();
                 if(m.length<5){ uiAlert("⚠️ Indiquez le motif de la décision."); return; }
-                maj({decision2:'reporte',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||(prof==='rdoa'?'Administrateur':'Dirigeant Responsable'),decisionLe:new Date().toISOString()});
+                { const md={decision2:'reporte',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||(prof==='rdoa'?'Administrateur':'Dirigeant Responsable'),decisionLe:new Date().toISOString()};
+                  maj(md); notifierFrat("decision",{...f,...md}); }      // le commandant est prévenu
                 sgsToast("Vol reporté — les Opérations replanifient"); }}/>
               <SgsBtn l="✓ Autoriser le vol" prim full onClick={()=>{ const m=(f.brouillon||'').trim();
                 if(m.length<5){ uiAlert("⚠️ Indiquez le motif de l'autorisation."); return; }
-                maj({decision2:'autorise',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||(prof==='rdoa'?'Administrateur':'Dirigeant Responsable'),decisionLe:new Date().toISOString()});
+                { const md={decision2:'autorise',motifDecision:m,brouillon:'',decisionPar:userLabel(sgsCurrentUser())||(prof==='rdoa'?'Administrateur':'Dirigeant Responsable'),decisionLe:new Date().toISOString()};
+                  maj(md); notifierFrat("decision",{...f,...md}); }      // le commandant est prévenu
                 sgsToast("Vol autorisé"); }}/></div></>
           :<div style={{fontSize:11,color:C.slate,marginTop:6}}>Décision réservée au Dirigeant Responsable (ou à l'Administrateur).</div>}
         </div>}
@@ -4361,6 +4427,8 @@ function SgsFratView({ items, setItems, flights, crew, standalone, prof }){
           <div style={{color:C.slate,marginTop:2}}>Motif : {f.motifDecision}</div>
           {f.barrieresTxt&&<div style={{color:C.slate}}>Barrières : {f.barrieresTxt}</div>}
           {et==='autorise'&&<div style={{marginTop:4,fontWeight:700}}>Le commandant de bord conserve la décision finale d'effectuer le vol.</div>}
+          <FratCdbTrace f={f}/>
+          {!f.cdbDecision&&fratEstCm1(f,sgsCurrentUser(),prof)&&<FratCdb f={f} maj={maj}/>}
         </div>}
       </div>; })
       :<div style={{fontSize:12.5,color:C.slate,padding:"6px 0"}}>Aucun FRAT enregistré.</div>}</div>
@@ -7690,6 +7758,7 @@ function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitV
         </div>
         <ActionBar isAdmin={isAdmin} doExport={doExport} onRestore={onRestore} onReset={onReset} onLogout={onLogout}/>
       </Card>
+      <PushCarte profileId={profileId}/>
       {saved&&(
         <div style={{padding:"12px 16px",borderRadius:10,fontSize:13,fontWeight:700,textAlign:"center",background:"#D1FAE5",color:"#00936A",border:"1px solid #00936A"}}>
           ✅ Données enregistrées
@@ -8148,6 +8217,40 @@ function notamResume(res,fenetres,conf){
 }
 const notamDate=v=>{ const m=String(v||"").match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(EST)?$/); return m?m[3]+"/"+m[2]+" "+m[4]+m[5]+(m[6]?" (est.)":""):String(v||""); };
 const notamHeure=iso=>{ try{ return new Date(iso).toISOString().slice(11,16)+" UTC"; }catch(_e){ return ""; } };
+// ── Notifications sur le téléphone (05/10/2026) : chaîne du FRAT rouge, voir api/push.js ─────────────
+const PUSH_PROFILS=["ops","sgs","dir","rdoa","eqp"];
+const pushPossible=()=>{ try{ return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }catch(_e){ return false; } };
+async function pushActiver(){
+  if(!pushPossible()) return {ok:false,erreur:"Ce téléphone ne permet pas les notifications. Sur iPhone : installez d'abord l'application sur l'écran d'accueil (iOS 16.4 ou plus récent)."};
+  const perm=await Notification.requestPermission();
+  if(perm!=="granted") return {ok:false,erreur:"Notifications refusées. Pour les autoriser : réglages du téléphone → Notifications → navigateur ou application Afrijet."};
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    const c=await (await fetch("/api/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op:"cle",token:sessionToken()})})).json();
+    if(!c.publique) return {ok:false,erreur:"Serveur de notifications indisponible : réessayez plus tard."};
+    const cle=Uint8Array.from(atob(c.publique.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((c.publique.length+3)%4)),ch=>ch.charCodeAt(0));
+    const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:cle});
+    const r=await fetch("/api/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op:"abonner",token:sessionToken(),abonnement:sub.toJSON()})});
+    if(!r.ok) return {ok:false,erreur:"Enregistrement impossible : réessayez plus tard."};
+    try{ localStorage.setItem(PFX+"push_actif","1"); }catch(_e){ logSilent(_e); }
+    return {ok:true};
+  }catch(e){ logSilent(e); return {ok:false,erreur:"Activation impossible sur ce téléphone ("+String(e&&e.message||e)+")."}; }
+}
+// Envoi d'une notification de la chaîne FRAT (sans attendre : l'action est déjà enregistrée)
+function notifierFrat(evenement,f){
+  const frat={id:f.id,vol:f.vol,decision2:f.decision2,decisionPar:f.decisionPar,barrieresPar:f.barrieresPar,cdb:f.cdb,cm1Uid:f.cm1Uid,cdbPar:f.cdbPar};
+  try{ fetch("/api/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op:"envoyer",token:sessionToken(),evenement,frat})}).catch(logSilent); }catch(e){ logSilent(e); }
+}
+// Le FRAT a-t-il été rempli par la personne connectée (le commandant) ?
+const fratNorm=t=>String(t||"").trim().toUpperCase().replace(/\s+/g," ");
+function fratEstCm1(f,u,prof){
+  if(prof!=="eqp"||!u||!f) return false;
+  if(f.cm1Uid) return f.cm1Uid===u.id;
+  const n=fratNorm(f.cdb); return !!n&&[(u.prenom||"")+" "+(u.nom||""),(u.nom||"")+" "+(u.prenom||"")].some(t=>fratNorm(t)===n);
+}
+// FRAT décidés qui attendent la réponse du commandant connecté
+const fratsAttenteCdb=(frats,u,prof)=>(frats||[]).filter(f=>(f.couleur2||f.couleur)==='rouge'&&f.decision2&&!f.cdbDecision&&fratEstCm1(f,u,prof));
+
 // Alertes de la vérification quotidienne encore valables : vol toujours planifié, NOTAM pas encore vus
 function notamAlertesActives(al,flights){
   return ((al&&al.alertes)||[]).filter(a=>{
@@ -9777,7 +9880,10 @@ function ScreenOps({ flights, satis, safetyData, aircraft, frats, onUpdateFlight
 }
 
 
-function ScreenAlertes({ sgsRed, kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist, crew, frats, notamAl }) {
+function ScreenAlertes({ sgsRed, kpis, flights, dismissed, setDismissed, maintData, alertHist, setAlertHist, aircraft, melHist, crew, frats, notamAl, setFrats, profileId }) {
+  // Décisions sur les FRAT du commandant connecté, en attente de sa réponse
+  const cdbAttente=fratsAttenteCdb(frats,sgsCurrentUser(),profileId);
+  const majFrat=id=>p=>setFrats&&setFrats(l=>(l||[]).map(x=>x.id===id?{...x,...p,updatedAt:new Date().toISOString()}:x));
   const all=computeAlerts(kpis,flights,maintData,aircraft,crew,sgsRed,frats,notamAl);
   const active=all.filter(a=>!dismissed.includes(a.id));
   const colors={danger:{bg:"#FEE2E2",border:"#DC2626",text:"#DC2626"},warn:{bg:"#FEF3C7",border:"#D97706",text:"#D97706"}};
@@ -9792,6 +9898,16 @@ function ScreenAlertes({ sgsRed, kpis, flights, dismissed, setDismissed, maintDa
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {cdbAttente.map(f=>{ const aut=f.decision2==='autorise';
+        return (<div key={"cdb"+f.id} role="alert" style={{border:"2px solid "+(aut?"#00936A":"#B45309"),background:aut?"#ECFDF5":"#FFFBEB",borderRadius:12,padding:"12px 13px",fontSize:12.5,lineHeight:1.45,color:aut?"#14532D":"#78350F"}}>
+          <div style={{fontWeight:800,fontSize:13.5,color:aut?"#00936A":"#B45309"}}>🧭 Décision sur votre FRAT : {aut?"vol autorisé":"vol reporté"}</div>
+          <div style={{marginTop:4}}>{f.vol} · {f.ref}{f.score!=null?" (score "+(f.score2!=null?f.score2:f.score)+")":""}</div>
+          <div style={{marginTop:6}}><b>{f.decisionPar}</b> · {sgsFr(String(f.decisionLe||'').slice(0,10))} {String(f.decisionLe||'').slice(11,16)}</div>
+          <div style={{marginTop:3,color:"#334155"}}>Motif : {f.motifDecision}</div>
+          {f.barrieresTxt&&<div style={{marginTop:3,color:"#334155"}}>Barrières : {f.barrieresTxt}</div>}
+          {aut&&<div style={{marginTop:6,fontWeight:700}}>Vous conservez la décision finale d'effectuer le vol.</div>}
+          <FratCdb f={f} maj={majFrat(f.id)}/>
+        </div>); })}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div style={{background:"white",borderRadius:12,border:"1px solid "+C.border,padding:14,textAlign:"center"}}>
           <div style={{fontSize:28,fontWeight:800,color:active.length>0?C.danger:C.emerald}}>{active.length}</div>
@@ -12995,8 +13111,13 @@ function AppMain({ onLogout, profileId }) {
   const readOnly = (id) => (profile.readOnly||[]).includes(id);
   const [now,setNow]         = useState(new Date());
   const [tab,setTab]         = useState(() => {
-    try { const t=sessionStorage.getItem(PFX+"tab")||"forms"; return canTab(t)?t:"forms"; } catch(_e) { return "forms"; }
+    try { const q=new URLSearchParams(location.search).get("tab"); if(q&&canTab(q)) return q;
+      const t=sessionStorage.getItem(PFX+"tab")||"forms"; return canTab(t)?t:"forms"; } catch(_e) { return "forms"; }
   });
+  // Toucher une notification avec l'application déjà ouverte : le service worker demande l'onglet Alertes
+  useEffect(()=>{ if(!("serviceWorker" in navigator)) return;
+    const h=e=>{ if(e.data&&e.data.type==="ouvrir"&&canTab("alertes")) setTab("alertes"); };
+    navigator.serviceWorker.addEventListener("message",h); return ()=>navigator.serviceWorker.removeEventListener("message",h); },[]);
   useEffect(() => {
     try { sessionStorage.setItem(PFX+"tab", tab); } catch(_e){ logSilent(_e); }
   }, [tab]);
@@ -13328,7 +13449,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           onImport={onImport}
         />}
         {tab==="live"    && <ScreenLive ac={ac} moroccoTraffic={mTraffic} icao24={icao24} setIcao24={setIcao24} onRefresh={refresh} loading={loading} flights={flights} aircraft={aircraft}/>}
-        {tab==="alertes" && <ScreenAlertes frats={sgsFrat} sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew} notamAl={notamAl}/>}
+        {tab==="alertes" && <ScreenAlertes frats={sgsFrat} sgsRed={sgsRed} kpis={kpis} flights={flights} dismissed={dismissed} setDismissed={handleDismiss} maintData={maintData} alertHist={alertHist} setAlertHist={setAlertHist} aircraft={aircraft} melHist={melHist} crew={crew} notamAl={notamAl} setFrats={setSgsFrat} profileId={profileId}/>}
         {tab==="ops"     && <ScreenOps frats={sgsFrat} canClose={profileId==="eqp"&&["TRI","CM1","CM2"].includes((sgsCurrentUser()||{}).role||"CM1")} flights={flights} satis={satis} safetyData={safetyData} aircraft={aircraft} onUpdateFlight={u=>setFlights(f=>f.map(x=>(x.id&&u.id)?(x.id===u.id?u:x):((x.num===u.num&&x.date===u.date&&x.dep===u.dep)?u:x)))} onUpdateAircraft={setAircraft} canEdit={profileId==="rdoa"||profileId==="ops"} clients={clients} crew={crew} isAdmin={profileId==="rdoa"} onDeleteFlight={f=>setFlights(prev=>prev.filter(x=>(x.id&&f.id)?x.id!==f.id:!(x.num===f.num&&x.date===f.date&&x.dep===f.dep)))}/>}
         {tab==="perf"    && <ScreenPerf kpis={kpis} flights={flights} finData={finData}/>}
         {tab==="secu"    && <ScreenSecu safetyData={safetyData} flights={flights}/>}
