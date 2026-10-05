@@ -551,8 +551,9 @@ console.log('\nNOTAM (page)');
 }
 
 // ── FRAT rouge : décision réservée au Dirigeant Responsable (01/10/2026) ──
-console.log('\nFRAT rouge');
-test('Seul le profil Direction peut décider (autoriser ou reporter)', ()=>attendu(/const peutDecider=prof==='dir';/.test(code) && !/peutDecider=[^;]*'sgs'/.test(code), 'règle modifiée'));
+console.log('\nFRAT rouge et Finances');
+test('Direction et Administrateur décident (autoriser ou reporter), jamais le SGS', ()=>attendu(/const peutDecider=prof==='dir'\|\|prof==='rdoa';/.test(code) && !/peutDecider=[^;]*'sgs'/.test(code), 'règle modifiée'));
+test('Finances : l\'Administrateur ouvre la tuile en consultation', ()=>attendu(/id==="fin" \? \["fin","dir","rdoa"\]/.test(code) && /ConsultCtx.Provider value=\{consultDir\|\|profileId==="rdoa"\}/.test(code), 'accès absent'));
 test('Aucun texte n\'annonce une décision du SGS sur un FRAT rouge', ()=>attendu(!/Dirigeant Responsable ou (du|le|au) responsable SGS/.test(code), 'texte trouvé'));
 test('Après autorisation : le commandant conserve la décision finale', ()=>attendu((code.match(/Le commandant de bord conserve la décision finale d'effectuer le vol\./g)||[]).length>=2, 'mention absente'));
 
