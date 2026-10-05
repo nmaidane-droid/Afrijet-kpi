@@ -586,5 +586,8 @@ test('Pastille des Alertes : même calcul que la liste (FRAT compris)', ()=>atte
 
 test("Formulaire Vol : plus d'ancienne liste d'aéroports, choix dans la liste unique", ()=>attendu(!/const WORLD_AIRPORTS\s*=/.test(code) && /function FAirport\([\s\S]{0,1200}comAptSearch\(apts,q\)/.test(code), 'ancienne liste'));
 
+test("Météo : plus de table IATA → OACI, code OACI tiré de la liste unique", ()=>attendu(!/const IATA_TO_ICAO\s*=/.test(code) && /function useMetar\([\s\S]{0,600}comAeroports\(\)/.test(code), 'table météo'));
+test("Cadre NOTAM : réponse vide de la source signalée", ()=>attendu(/Aucun NOTAM fourni par la source pour/.test(code), 'mention absente'));
+
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);

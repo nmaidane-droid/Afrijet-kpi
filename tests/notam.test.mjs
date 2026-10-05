@@ -1,6 +1,6 @@
 // Tests du chantier NOTAM (api/notam.js) — exécutés sous Node : node tests/notam.test.mjs
 // Échantillons réels : NOTAM de Casablanca (GMMN) reçus de SkyLink le 01/10/2026.
-import notam, { lireDate, lireHoraire, horaireCouvre, classer, evaluer, statutVol, fenetresValides,
+import notam, { precharger, lireDate, lireHoraire, horaireCouvre, classer, evaluer, statutVol, fenetresValides,
   volsAVerifier, alerteDe, verifierFenetres, normPiste, PISTES, QUOTA } from "../api/notam.js";
 import { signer } from "../api/auth.js";
 let ok = 0, ko = 0;
@@ -107,6 +107,25 @@ r = rep(); await notam({ method: "GET", headers: {} }, r);
 test("Tâche planifiée sans secret : refusée", () => att(r.code === 401));
 r = rep(); await notam({ method: "POST", headers: {}, body: { token: signer({ uid: "U1", profil: "ops", exp: Math.floor(Date.now() / 1e3) + 600 }, "s"), op: "autre" } }, r);
 test("Opération inconnue : refusée", () => att(r.code === 400));
+
+console.log("\nRefus 429 et réponse vide (05/10/2026)");
+{ const vieux = global.fetch; process.env.NOTAM_API_KEY = "k"; delete process.env.NOTAM_API_URL;
+  let n = 0;
+  global.fetch = async () => (++n === 1 ? { ok: false, status: 429, headers: { get: () => "1" } } : { ok: true, status: 200, json: async () => ({ notams: [] }) });
+  const e1 = { cache: {}, quota: {}, modifie: false }; let pauses = 0;
+  await precharger(["GMFB"], e1, async () => { pauses++; });
+  test("429 puis succès : réessai unique après la pause demandée", () => att(e1.lus.GMFB.ok && n === 2 && pauses === 1));
+  n = 0; global.fetch = async () => { n++; return { ok: false, status: 429, headers: { get: () => null } }; };
+  const e2 = { cache: {}, quota: {}, modifie: false };
+  await precharger(["GMFB"], e2, async () => {});
+  const r2 = await verifierFenetres([{ oaci: "GMFB", debut: 0, fin: 1, role: "depart" }], e2);
+  test("429 persistant : un seul réessai, puis doute avec message clair", () => att(n === 2 && r2[0].statut === "doute" && /momentanément saturée/.test(r2[0].motif)));
+  global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ notams: [] }) });
+  const r3 = await verifierFenetres([{ oaci: "GMFB", debut: 0, fin: 1, role: "depart" }], { cache: {}, quota: {}, modifie: false });
+  test("Réponse vide : feu vert, mais signalée (vide)", () => att(r3[0].statut === "rien" && r3[0].vide === true));
+  const r4 = await verifierFenetres([fH], { cache: { GMMH: { lu: Date.now(), notams: [ferme()] } }, quota: {}, modifie: false });
+  test("Réponse avec NOTAM : pas signalée vide", () => att(r4[0].vide === false));
+  global.fetch = vieux; }
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 if (ko) process.exit(1);
