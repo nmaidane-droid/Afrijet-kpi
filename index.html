@@ -2901,7 +2901,10 @@ async function sgsCallAI(system, user, onProgress){
     const d=await r.json(); if(!r.ok) throw new Error((d.error&&d.error.message)||d.error||'Erreur API');
     return (d.content||[]).map(b=>b.text||'').join('\n');
   };
-  let raw; try{ raw=await stream(); }catch(e){ if(e&&e.fatal) throw e; raw=await plain(); }
+  // Voie de secours seulement si le flux échoue dès le départ (moins de 15 s) : après une génération longue
+  // interrompue, une seconde tentative subirait la même limite (05/10/2026)
+  const t0=Date.now();
+  let raw; try{ raw=await stream(); }catch(e){ if(e&&e.fatal) throw e; if(Date.now()-t0>15000) throw e; raw=await plain(); }
   const s=raw.indexOf('{'), t=raw.lastIndexOf('}');
   if(s<0||t<s) throw new Error('Réponse illisible');
   return JSON.parse(raw.slice(s,t+1));
@@ -6709,10 +6712,14 @@ Diffusion prévue : ${to||'Non précisée'}`;
 
     try{
       let raw;
+      const t0=Date.now();
       try{
         raw=await readStream();
       }catch(se){
         if(se && se.fatal) throw se;      // inutile de réessayer
+        // Voie de secours seulement si le flux échoue dès le départ (moins de 15 s) : après une génération
+        // longue interrompue, une seconde tentative subirait la même limite (05/10/2026)
+        if(Date.now()-t0>15000) throw se;
         setProgress(null);                 // flux indisponible ou vide : repli
         raw=await readPlain();
       }
@@ -6740,7 +6747,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
       });
     }catch(e){
       const net=e instanceof TypeError&&/fetch/i.test(e.message||'');
-      setErr(net?'Connexion interrompue pendant la génération (délai serveur dépassé sur les notes longues). Réessayez.':'Erreur de génération : '+(e.message||'réessayez.'));
+      setErr(net?'Connexion interrompue pendant la génération (réseau, ou note très longue). Réessayez.':'Erreur de génération : '+(e.message||'réessayez.'));
     }
     setLoading(false);
     setProgress(null);
