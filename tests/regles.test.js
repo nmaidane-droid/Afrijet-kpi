@@ -31,7 +31,7 @@ const names=['AUDIT_MAXV','AUDIT_CALCULES','memeValeur','itemId','fusionner','au
   'comDevenirClient','comUnion','comFusionImport','comDueInfo','comADesRelances','comRelance','comEtape','comNote','comProchainNumero',
   'COM_CHOIX','COM_REGLES','COM_DV','comNrm','comAptListe','comAptBy','comAptGuess','comAptSearch','comRhumbNM','comLegMin','comRouteNM','comHorsRange','comBuildLegs',
   'comEstMaroc','comPrixValide','comSuppl','comCarbNouveau','comCarbAConfirmer','comFuelAirports','comDvLegs','comLineAmt','comTotaux','comRecalcul','comDevisEnvoye','comContexteIA','comIntroSecours',
-  'PROFILES','notamAlertesActives','notamDate','notamIds','notamMotif','COM_MOTIFS','comPeutVoir','comPeutModifier','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
+  'PROFILES','INIT_FLIGHTS','fratNorm','fratEstCm1','fratsAttenteCdb','notamAlertesActives','notamDate','notamIds','notamMotif','COM_MOTIFS','comPeutVoir','comPeutModifier','comEstActif','comArchiver','comReactiver','comLegsDevis','comHeurePlus','comValiderSaisie','comCreerDemande','comEtatDemande',
   'comVolsAPlanifier','comGroupesAPlanifier','comTypesVol','comControleType','comEquipageSuivant','comFinDossier','comControleDossier','COM_MOIS','comPeriode','comTableau','restoreResume','sgsHorodate','sgsReceptionAuto','sgsMoisFr','comPrefillVol','comOptionsClients','comTexteHoraires','comClientDuDevis','comFicheClient'];
 const ctx={console}; vm.createContext(ctx);
 vm.runInContext(names.map(extract).join('\n')+'\n'+names.map(n=>`this.${n}=${n};`).join(''), ctx);
@@ -556,6 +556,24 @@ test('Direction et Administrateur décident (autoriser ou reporter), jamais le S
 test('Finances : l\'Administrateur ouvre la tuile en consultation', ()=>attendu(/id==="fin" \? \["fin","dir","rdoa"\]/.test(code) && /ConsultCtx.Provider value=\{consultDir\|\|profileId==="rdoa"\}/.test(code), 'accès absent'));
 test('Aucun texte n\'annonce une décision du SGS sur un FRAT rouge', ()=>attendu(!/Dirigeant Responsable ou (du|le|au) responsable SGS/.test(code), 'texte trouvé'));
 test('Après autorisation : le commandant conserve la décision finale', ()=>attendu((code.match(/Le commandant de bord conserve la décision finale d'effectuer le vol\./g)||[]).length>=2, 'mention absente'));
+
+// ── Réponse du commandant après un FRAT rouge (05/10/2026) ──
+console.log('\nFRAT rouge : réponse du commandant');
+{ const u={id:'U7',prenom:'Hicham',nom:'QADRI'};
+  const F={couleur:'rouge',decision2:'autorise',cm1Uid:'U7',cdb:'Hicham QADRI'};
+  test('Le CM1 du FRAT (par son compte) doit répondre', ()=>attendu(T.fratEstCm1(F,u,'eqp') && T.fratsAttenteCdb([F],u,'eqp').length===1, 'non reconnu'));
+  test('Un autre pilote ne voit pas la demande', ()=>attendu(!T.fratEstCm1(F,{id:'U8',prenom:'Ali',nom:'X'},'eqp'), 'reconnu à tort'));
+  test('FRAT ancien sans compte : CM1 retrouvé par son nom', ()=>attendu(T.fratEstCm1({...F,cm1Uid:undefined},u,'eqp') && T.fratEstCm1({...F,cm1Uid:undefined,cdb:'qadri  hicham'},u,'eqp'), 'nom non reconnu'));
+  test('Seul le profil Équipage répond (pas la Direction ni l\'Administrateur)', ()=>attendu(!T.fratEstCm1(F,u,'dir') && !T.fratEstCm1(F,u,'rdoa'), 'autre profil'));
+  test('FRAT rouge enregistré : notification aux Opérations et au SGS, compte du CM1 gardé', ()=>attendu(/if\(\(nv\.couleur2\|\|nv\.couleur\)==='rouge'\) notifierFrat\("frat_rouge",nv\)/.test(code) && /cm1Uid:u0\.id/.test(code), 'appel absent'));
+  test('Barrières et décision : notifications envoyées', ()=>attendu(/notifierFrat\("barrieres"/.test(code) && (code.match(/notifierFrat\("decision"/g)||[]).length===2, 'appel absent'));
+  test('Plus de demande une fois la réponse donnée, ni avant la décision', ()=>attendu(T.fratsAttenteCdb([{...F,cdbDecision:'depart'},{...F,decision2:undefined},{...F,couleur:'jaune'}],u,'eqp').length===0, 'demande restante'));
+}
+
+// ── Démonstration intégrée : type de vol dans flightType (05/10/2026) ──
+console.log('\nDonnées de démonstration intégrées');
+test('Tous les vols de démonstration portent flightType (Commercial, Ferry, Positioning), plus « type »', ()=>attendu(
+  T.INIT_FLIGHTS.length>0 && T.INIT_FLIGHTS.every(f=>["Commercial","Ferry","Positioning"].includes(f.flightType) && !('type' in f)), 'champ manquant'));
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
