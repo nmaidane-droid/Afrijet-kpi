@@ -2880,7 +2880,7 @@ const SGS_MOIS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Aoû
 async function sgsCallAI(system, user, onProgress){
   const body={max_tokens:5000,system,messages:[{role:"user",content:user}]};
   const stream=async()=>{
-    const r=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,stream:true})});
+    const r=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,token:sessionToken(),stream:true})});
     if(!r.ok){ let d={}; try{ d=await r.json(); }catch(e){ logSilent(e); } const e=new Error((d.error&&d.error.message)||d.error||'Erreur API'); e.fatal=true; throw e; }
     if(!r.body||!r.body.getReader) throw new Error('STREAM_UNSUPPORTED');
     const rd=r.body.getReader(), dec=new TextDecoder(); let buf='', text='';
@@ -2897,7 +2897,7 @@ async function sgsCallAI(system, user, onProgress){
     if(!text.trim()) throw new Error('Réponse vide'); return text;
   };
   const plain=async()=>{
-    const r=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const r=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,token:sessionToken()})});
     const d=await r.json(); if(!r.ok) throw new Error((d.error&&d.error.message)||d.error||'Erreur API');
     return (d.content||[]).map(b=>b.text||'').join('\n');
   };
@@ -6661,7 +6661,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
     const readStream=async()=>{
       const r=await fetch("/api/generate",{
         method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...body,stream:true})
+        body:JSON.stringify({...body,token:sessionToken(),stream:true})
       });
       if(!r.ok){
         let d={}; try{ d=await r.json(); }catch(_e){ logSilent(_e); }
@@ -6700,7 +6700,7 @@ Diffusion prévue : ${to||'Non précisée'}`;
     const readPlain=async()=>{
       const r=await fetch("/api/generate",{
         method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(body)
+        body:JSON.stringify({...body,token:sessionToken()})
       });
       const d=await r.json();
       if(!r.ok) throw new Error((d.error&&d.error.message)||d.error||'Erreur API');
@@ -7437,7 +7437,6 @@ function satVols(flights, tous){
 const satKey=f=>[f.num,f.date,f.dep,f.from,f.to].map(x=>String(x||"")).join("|");   // numéro, date, heure et route : deux rotations du même jour restent distinctes
 // L'enquête d'un vol, et la note sur 10 qui en découle (moyenne /5 × 2)
 const satDuVol=(satis,f)=>(satis||[]).find(s=>s.flightKey===satKey(f));
-const satNote10=s=>s&&s.moyenne!=null?Math.round(s.moyenne*2*10)/10:null;
 const satMoyListe=L=>{ const v=(L||[]).map(s=>s.moyenne).filter(x=>x!=null); return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null; };
 function FormSatisfactionSaisie({ flights, items, setItems, onClose, onNoteVol }){
   // Fenêtre de 36 h en arrière et 12 h en avant ; si elle est vide, on élargit d'emblée à tous les vols
@@ -7511,7 +7510,7 @@ function FormSatisfactionSaisie({ flights, items, setItems, onClose, onNoteVol }
     </div></Card>);
 }
 
-function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
+function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitVol, onSubmitMaint, onSubmitFin, onSubmitSafety, onReset, onRestore, onReport, onLogout, flights, crew, setCrew, maintData, finData, kpis, dismissed, safetyData, onImport, aircraft, onUpdateAircraft, melHist, setMelHist, alertHist, icao24, lastBackup, setLastBackup, canForm, profileLabel, profileId, clients, setClients, ndsArchive, setNdsArchive }) {
   const isAdmin = profileId === "rdoa";
   const defaultForm = profileId==="maint"?"maint":profileId==="fin"?"fin":profileId==="ops"?"vol":profileId==="eqp"?"secu":null;   // Équipage : arrive sur le compte rendu · SGS : sur la grille
   const [active,setActive]=useState(defaultForm);
@@ -7546,8 +7545,10 @@ function ScreenForms({ onManuel, com, sgs, satis, setSatis, onNoteVol, onSubmitV
       safetyData,
       clients,
       ndsArchive,
+      // 05/10/2026 : flotte (heures, cycles, MEL ouvertes), MEL résolues, historique des alertes, avion suivi dans Live
+      aircraft, melHist, alertHist, icao24,
       ...(com?{prospects:com.prospects,devis:com.devis,comParams:com.params,comImports:com.imports,demandes:com.demandes}:{}),
-      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,satisfaction:satis,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv}:{}),
+      ...(sgs?{sgsHazards:sgs.hazards,sgsActions:sgs.actions,sgsEvStatus:sgs.evStatus,sgsManual:sgs.manual,sgsMeetings:sgs.meetings,sgsResponsable:sgs.responsable,sgsRevues:sgs.reg.revues,sgsChanges:sgs.reg.changes,sgsAudits:sgs.reg.audits,sgsFormations:sgs.reg.formations,sgsFrat:sgs.reg.frat,satisfaction:satis,sgsItw:sgs.reg.itw,sgsReco:sgs.reg.reco,sgsPlan:sgs.reg.plan,sgsOsv:sgs.reg.osv,sgsSt:sgs.reg.st}:{}),
     };
     setProgress(p=>({...p,currentStep:1,pct:40}));
     try{
@@ -10646,7 +10647,6 @@ function buildReport(flights, kpis, now, finData, maintData, safetyData, aircraf
 // Le serveur tient seul les comptes, les clés et les verrous (protection s1) ; la page ne les lit plus.
 const NOMINATIVE_PROFILES=["ops","eqp","maint","fin","comm","dir","sgs","rdoa"];
 const userLabel=u=>u?((u.prenom||"")+" "+(u.nom||"")).trim():"";
-function randomToken(n,alpha){ const a=alpha||"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; const r=new Uint32Array(n); crypto.getRandomValues(r); return Array.from(r).map(x=>a[x%a.length]).join(""); }
 // Personne connectée pendant la session (null pour les profils encore à mot de passe partagé)
 function sgsCurrentUser(){ try{ return JSON.parse(sessionStorage.getItem(PFX+"active_user")||"null"); }catch(_e){ return null; } }
 // ── Connexion vérifiée par le serveur (lot S1) ──
@@ -13164,6 +13164,7 @@ function AppMain({ onLogout, profileId }) {
     if(data.comImports)setComImports(data.comImports);
     if(data.demandes)  setDemandes(data.demandes);
     if(data.alertHist) setAlertHist(data.alertHist);
+    if(data.icao24) setIcao24(data.icao24);
     if(data.melHist)   setMelHist(data.melHist);
     if(data.aircraft)  setAircraft(data.aircraft);
     if(data.ndsArchive)setNdsArchive(data.ndsArchive);
@@ -13339,7 +13340,7 @@ const [showRestoreModal,setShowRestoreModal] = useState(false);
           maintData={maintData} finData={finData} kpis={kpis} dismissed={dismissed} safetyData={safetyData}
           aircraft={aircraft} onUpdateAircraft={setAircraft}
           lastBackup={lastBackup} setLastBackup={setLastBackup}
-          melHist={melHist} setMelHist={setMelHist}
+          melHist={melHist} alertHist={alertHist} icao24={icao24} setMelHist={setMelHist}
           canForm={canForm} profileLabel={profile.label} profileId={profileId}
           clients={clients} setClients={setClients}
           ndsArchive={ndsArchive} setNdsArchive={setNdsArchive}
