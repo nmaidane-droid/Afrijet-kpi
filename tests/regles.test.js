@@ -575,5 +575,7 @@ console.log('\nDonnées de démonstration intégrées');
 test('Tous les vols de démonstration portent flightType (Commercial, Ferry, Positioning), plus « type »', ()=>attendu(
   T.INIT_FLIGHTS.length>0 && T.INIT_FLIGHTS.every(f=>["Commercial","Ferry","Positioning"].includes(f.flightType) && !('type' in f)), 'champ manquant'));
 
+test('Pastille des Alertes : même calcul que la liste (FRAT compris)', ()=>attendu(/const allAlerts  = computeAlerts\(kpis,flights,maintData,aircraft,crew,sgsRed,sgsFrat,notamAl\)/.test(code) && /const all=computeAlerts\(kpis,flights,maintData,aircraft,crew,sgsRed,frats,notamAl\)/.test(code), 'calculs différents'));
+
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
