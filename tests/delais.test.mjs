@@ -12,7 +12,7 @@ const mkRes = () => { const r = { code: 0, body: null, headers: {}, ecrit: "", h
   r.status = c => (r.code = c, r); r.json = b => (r.body = b, r.headersSent = true, r); r.send = b => (r.body = b, r.headersSent = true, r);
   r.setHeader = (k, v) => (r.headers[k] = v, r.headersSent = true, r); r.write = t => { r.ecrit += t; r.headersSent = true; }; r.end = () => { r.fini = true; }; return r; };
 
-// Minuteries accélérées : 8 s → 80 ms, 55 s → 550 ms, 4 s → 40 ms
+// Minuteries accélérées : 8 s → 80 ms, 290 s → 2,9 s, 4 s → 40 ms
 const vraiSetTimeout = global.setTimeout;
 global.setTimeout = (fn, ms, ...a) => vraiSetTimeout(fn, Math.max(1, (ms || 0) / 100), ...a);
 const attendre = ms => new Promise(r => vraiSetTimeout(r, ms));
@@ -29,7 +29,7 @@ let t0 = Date.now(), r = mkRes(); await fr24({ headers: {}, query: { registratio
 test("Flightradar24 muet : réponse 504 avec message, sans attendre la coupure", () => att(r.code === 504 && /pas répondu à temps/.test(r.body.error) && Date.now() - t0 < 1000));
 t0 = Date.now(); r = mkRes(); await wx({ headers: {}, query: { icao: "GMMN" } }, r);
 test("CheckWX muet : réponse 504 avec message", () => att(r.code === 504 && /pas répondu à temps/.test(r.body.error) && Date.now() - t0 < 1000));
-test("Délais choisis sous les limites des fonctions (8 s < 10 s, 55 s < 60 s, 4 s en parallèle < 10 s)", () => att(DELAI_MS === 55000 && DELAI_SOURCE_MS === 4000));
+test("Délais choisis sous les limites des fonctions (8 s < 10 s, 290 s < 300 s, 4 s en parallèle < 10 s)", () => att(DELAI_MS === 290000 && DELAI_SOURCE_MS === 4000));
 
 r = mkRes(); await generate({ method: "POST", body: { messages: [{ role: "user", content: "x" }], token: JETON } }, r);
 test("IA muette (sans flux) : 504, message clair lisible par la page", () => att(r.code === 504 && /trop longue/.test(r.body.error.message)));

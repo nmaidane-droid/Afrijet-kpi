@@ -597,5 +597,7 @@ test("Restore : avion suivi dans Live rechargé", ()=>attendu(/if\(data\.icao24\
 test("Code mort retiré (randomToken, satNote10)", ()=>attendu(!/function randomToken\(/.test(code) && !/const satNote10=/.test(code), 'code mort'));
 test("Générateur IA : le jeton de session est envoyé par les 4 appels", ()=>attendu((code.match(/fetch\("\/api\/generate"[\s\S]{0,160}?token:sessionToken\(\)/g)||[]).length===4, 'jeton absent'));
 
+test("Générateur IA : pas de seconde tentative après un flux interrompu au-delà de 15 s (2 endroits)", ()=>attendu((code.match(/if\(Date\.now\(\)-t0>15000\) throw/g)||[]).length===2, 'garde absente'));
+
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko?1:0);
